@@ -4,6 +4,7 @@ pub mod ddns_tls_api;
 pub mod logs;
 pub mod metrics;
 pub mod ota_api;
+pub mod rate_limit;
 pub mod terminal;
 
 use std::path::PathBuf;
@@ -21,7 +22,7 @@ use crabrouter_services::{DdnsManager, TlsCertManager};
 use rust_embed::RustEmbed;
 use tower_http::cors::CorsLayer;
 
-pub use crabdns_proxy::spawn_crabdns_ebpf_bridge;
+pub use crabdns_proxy::{spawn_crabdns_ebpf_bridge, spawn_crabdns_ebpf_bridge_with_shutdown};
 pub use logs::{LogEvent, LogHub};
 
 #[derive(RustEmbed, Clone)]

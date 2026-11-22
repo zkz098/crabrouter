@@ -5,7 +5,8 @@ Before=network.target
 Wants=network-pre.target
 
 [Service]
-Type=simple
+Type=notify
+WatchdogSec=30s
 ExecStart=/usr/local/bin/crabrouterd --config /var/lib/crabrouter/router.toml
 Restart=always
 RestartSec=2

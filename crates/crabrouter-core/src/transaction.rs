@@ -1,10 +1,10 @@
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 use std::time::Duration;
 
 use arc_swap::ArcSwap;
 use chrono::{DateTime, Utc};
 use crabrouter_model::{RouterConfig, WanRuntimeState};
-use crabrouter_net::{NetworkBackend, WanStateObserver};
+use crabrouter_net::{EbpfEngine, NetworkBackend, WanStateObserver};
 use crabrouter_services::{ServiceSupervisor, SystemdUnitStatus};
 use serde::{Deserialize, Serialize};
 use tokio::sync::Mutex;
@@ -49,6 +49,7 @@ pub struct RouterEngine {
     active: ArcSwap<RouterConfig>,
     net: Arc<dyn NetworkBackend>,
     services: Arc<dyn ServiceSupervisor>,
+    ebpf: OnceLock<EbpfEngine>,
     tx: Mutex<TxState>,
 }
 
@@ -90,6 +91,7 @@ impl RouterEngine {
             active: ArcSwap::from_pointee(initial.clone()),
             net,
             services,
+            ebpf: OnceLock::new(),
             tx: Mutex::new(TxState {
                 generation,
                 pending: None,
@@ -97,6 +99,10 @@ impl RouterEngine {
         });
         engine.apply_runtime(&initial).await?;
         Ok(engine)
+    }
+
+    pub fn attach_ebpf(&self, ebpf: EbpfEngine) {
+        let _ = self.ebpf.set(ebpf);
     }
 
     pub fn db(&self) -> &StateDb {
@@ -168,6 +174,18 @@ impl RouterEngine {
         })?;
 
         if let Err(err) = self.apply_runtime(&next).await {
+            tracing::warn!(
+                generation,
+                error = %err,
+                "apply_runtime failed during begin_commit; executing compensating rollback"
+            );
+            if let Err(rb_err) = self.apply_runtime(&previous).await {
+                tracing::error!(
+                    generation,
+                    error = %rb_err,
+                    "compensating rollback after failed apply_runtime also failed"
+                );
+            }
             let _ = self.db.clear_pending_marker();
             return Err(err);
         }
@@ -284,6 +302,11 @@ impl RouterEngine {
     async fn apply_runtime(&self, cfg: &RouterConfig) -> Result<()> {
         self.net.apply_network_and_firewall(cfg).await?;
         self.services.sync_services(cfg).await?;
+        if let Some(ebpf) = self.ebpf.get()
+            && let Err(err) = ebpf.sync_config(cfg).await
+        {
+            tracing::warn!(error = %err, "eBPF tc/tcx sync failed during apply_runtime");
+        }
         Ok(())
     }
 }
@@ -353,6 +376,89 @@ mod tests {
 
         engine.rollback_pending().await.unwrap();
         assert_eq!(engine.active_config().system.hostname, "crabrouter");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[tokio::test]
+    async fn begin_commit_partial_failure_compensates_previous_runtime() {
+        use std::sync::atomic::{AtomicBool, Ordering};
+
+        struct RecordingNet {
+            applied_hostnames: std::sync::Mutex<Vec<String>>,
+        }
+
+        impl NetworkBackend for RecordingNet {
+            fn apply_network_and_firewall<'a>(
+                &'a self,
+                cfg: &'a RouterConfig,
+            ) -> crabrouter_net::netlink::BoxFuture<'a, crabrouter_net::Result<()>> {
+                Box::pin(async move {
+                    self.applied_hostnames
+                        .lock()
+                        .unwrap()
+                        .push(cfg.system.hostname.clone());
+                    Ok(())
+                })
+            }
+        }
+
+        struct FailSecondSyncSupervisor {
+            fail_next: AtomicBool,
+        }
+
+        impl ServiceSupervisor for FailSecondSyncSupervisor {
+            fn sync_services<'a>(
+                &'a self,
+                _cfg: &'a RouterConfig,
+            ) -> crabrouter_services::supervisor::BoxFuture<'a, crabrouter_services::Result<()>>
+            {
+                Box::pin(async move {
+                    if self.fail_next.load(Ordering::SeqCst) {
+                        return Err(crabrouter_services::ServiceError::Render(
+                            "simulated sync failure".to_string(),
+                        ));
+                    }
+                    Ok(())
+                })
+            }
+
+            fn query_unit_statuses<'a>(
+                &'a self,
+                _cfg: &'a RouterConfig,
+            ) -> crabrouter_services::supervisor::BoxFuture<
+                'a,
+                crabrouter_services::Result<Vec<SystemdUnitStatus>>,
+            > {
+                Box::pin(async move { Ok(Vec::new()) })
+            }
+        }
+
+        let dir = std::env::temp_dir().join(format!("crabrouter-comp-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let store = ConfigStore::new(dir.join("router.toml"));
+        let net = Arc::new(RecordingNet {
+            applied_hostnames: std::sync::Mutex::new(Vec::new()),
+        });
+        let svc = Arc::new(FailSecondSyncSupervisor {
+            fail_next: AtomicBool::new(false),
+        });
+
+        let engine = RouterEngine::bootstrap(store, net.clone(), svc.clone())
+            .await
+            .unwrap();
+        svc.fail_next.store(true, Ordering::SeqCst);
+
+        let mut candidate_cfg = (*engine.active_config()).clone();
+        candidate_cfg.system.hostname = "broken-gw".to_string();
+        let err = engine.begin_commit(candidate_cfg).await.unwrap_err();
+        assert!(err.to_string().contains("simulated sync failure"));
+
+        // Allow compensating rollback to succeed on services as well; verify net sequence:
+        // bootstrap("crabrouter") -> begin_commit("broken-gw") -> compensating("crabrouter")
+        let recorded = net.applied_hostnames.lock().unwrap().clone();
+        assert_eq!(recorded, vec!["crabrouter", "broken-gw", "crabrouter"]);
+        assert_eq!(engine.active_config().system.hostname, "crabrouter");
+        assert!(engine.status().await.pending.is_none());
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

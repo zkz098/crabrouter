@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::sync::Arc;
+use std::time::Duration;
 
 use chrono::Utc;
 use crabrouter_model::{RouterConfig, WanProto, WanRuntimeState};
@@ -10,8 +11,9 @@ use rtnetlink::packet_route::address::AddressAttribute;
 use rtnetlink::packet_route::link::LinkAttribute;
 use rtnetlink::{MulticastGroup, new_multicast_connection};
 use tokio::process::Command;
-use tokio::sync::{RwLock, mpsc};
+use tokio::sync::{RwLock, mpsc, watch};
 
+use crate::cmd::run_status_with_timeout;
 use crate::conntrack::flush_conntrack_for_wan;
 use crate::dhcpcd::WanLeaseEvent;
 use crate::ipv6_pd::{apply_ipv6_pd_slices_netlink, slice_delegated_ipv6_prefix};
@@ -69,12 +71,22 @@ pub fn spawn_network_event_engine(
     observer: Arc<dyn WanStateObserver>,
     dry_run: bool,
 ) -> WanEventBus {
+    let (_tx, rx) = watch::channel(false);
+    spawn_network_event_engine_with_shutdown(observer, dry_run, rx)
+}
+
+/// Spawns the event-driven network state machine with an explicit graceful-shutdown signal.
+pub fn spawn_network_event_engine_with_shutdown(
+    observer: Arc<dyn WanStateObserver>,
+    dry_run: bool,
+    shutdown: watch::Receiver<bool>,
+) -> WanEventBus {
     let (tx, rx) = mpsc::channel::<WanLeaseEvent>(64);
     let bus = WanEventBus::new(tx.clone());
     let states = Arc::clone(&bus.states);
 
     tokio::spawn(async move {
-        run_event_loop(observer, states, rx, tx, dry_run).await;
+        run_event_loop(observer, states, rx, tx, dry_run, shutdown).await;
     });
 
     bus
@@ -86,12 +98,28 @@ async fn run_event_loop(
     mut hook_rx: mpsc::Receiver<WanLeaseEvent>,
     hook_tx: mpsc::Sender<WanLeaseEvent>,
     dry_run: bool,
+    mut shutdown: watch::Receiver<bool>,
 ) {
     if !dry_run {
-        spawn_netlink_multicast_listener(hook_tx);
+        spawn_netlink_multicast_listener(hook_tx, shutdown.clone());
     }
 
-    while let Some(ev) = hook_rx.recv().await {
+    loop {
+        let ev = tokio::select! {
+            _ = shutdown.changed() => {
+                if *shutdown.borrow() {
+                    tracing::info!("network event loop received shutdown signal");
+                    break;
+                }
+                continue;
+            }
+            maybe_ev = hook_rx.recv() => {
+                let Some(ev) = maybe_ev else {
+                    break;
+                };
+                ev
+            }
+        };
         let cfg = observer.current_config();
         let Some(wan) = cfg.wans.iter().find(|w| {
             w.name == ev.wan_name
@@ -230,107 +258,162 @@ fn build_updated_wan_state(
     }
 }
 
-fn spawn_netlink_multicast_listener(tx: mpsc::Sender<WanLeaseEvent>) {
-    let groups = [
-        MulticastGroup::Link,
-        MulticastGroup::Ipv4Ifaddr,
-        MulticastGroup::Ipv6Ifaddr,
-        MulticastGroup::Ipv4Route,
-    ];
-    let Ok((conn, _handle, mut messages)) = new_multicast_connection(&groups) else {
-        tracing::warn!(
-            "unable to open rtnetlink multicast socket; continuing with hook events only"
-        );
-        return;
-    };
-    tokio::spawn(conn);
-
+fn spawn_netlink_multicast_listener(
+    tx: mpsc::Sender<WanLeaseEvent>,
+    mut shutdown: watch::Receiver<bool>,
+) {
     tokio::spawn(async move {
-        let mut ifindex_to_name: HashMap<u32, String> = HashMap::new();
-        while let Some((msg, _)) = messages.next().await {
-            let NetlinkPayload::InnerMessage(inner) = msg.payload else {
+        let groups = [
+            MulticastGroup::Link,
+            MulticastGroup::Ipv4Ifaddr,
+            MulticastGroup::Ipv6Ifaddr,
+            MulticastGroup::Ipv4Route,
+        ];
+        let mut backoff_secs = 1_u64;
+
+        loop {
+            if *shutdown.borrow() {
+                break;
+            }
+            let Ok((conn, _handle, mut messages)) = new_multicast_connection(&groups) else {
+                tracing::warn!(
+                    backoff_secs,
+                    "unable to open rtnetlink multicast socket; retrying"
+                );
+                if wait_or_shutdown(&mut shutdown, Duration::from_secs(backoff_secs)).await {
+                    break;
+                }
+                backoff_secs = (backoff_secs * 2).min(30);
                 continue;
             };
-            match inner {
-                RouteNetlinkMessage::NewLink(link) => {
-                    let ifindex = link.header.index;
-                    let ifname = link.attributes.iter().find_map(|a| match a {
-                        LinkAttribute::IfName(n) => Some(n.clone()),
-                        _ => None,
-                    });
-                    if let Some(name) = ifname {
-                        ifindex_to_name.insert(ifindex, name.clone());
-                        let _ = tx
-                            .send(WanLeaseEvent {
-                                source: "netlink".to_string(),
-                                wan_name: name.clone(),
-                                device: name,
-                                event: "link_up".to_string(),
-                                ip: None,
-                                gateway: None,
-                                dns_servers: Vec::new(),
-                                ifindex: Some(ifindex),
-                                ipv6_addr: None,
-                                ipv6_pd_prefix: None,
-                            })
-                            .await;
+
+            backoff_secs = 1;
+            let conn_task = tokio::spawn(conn);
+            let mut ifindex_to_name: HashMap<u32, String> = HashMap::new();
+
+            loop {
+                tokio::select! {
+                    _ = shutdown.changed() => {
+                        if *shutdown.borrow() {
+                            conn_task.abort();
+                            return;
+                        }
                     }
-                }
-                RouteNetlinkMessage::DelLink(link) => {
-                    if let Some(name) = ifindex_to_name.remove(&link.header.index) {
-                        let _ = tx
-                            .send(WanLeaseEvent {
-                                source: "netlink".to_string(),
-                                wan_name: name.clone(),
-                                device: name,
-                                event: "link_down".to_string(),
-                                ip: None,
-                                gateway: None,
-                                dns_servers: Vec::new(),
-                                ifindex: Some(link.header.index),
-                                ipv6_addr: None,
-                                ipv6_pd_prefix: None,
-                            })
-                            .await;
-                    }
-                }
-                RouteNetlinkMessage::NewAddress(addr) => {
-                    if let Some(name) = ifindex_to_name.get(&addr.header.index).cloned() {
-                        let ip = addr.attributes.iter().find_map(|a| match a {
-                            AddressAttribute::Local(ip) | AddressAttribute::Address(ip) => {
-                                Some(ip.to_string())
-                            }
-                            _ => None,
-                        });
-                        if ip.is_some() {
-                            let _ = tx
-                                .send(WanLeaseEvent {
-                                    source: "netlink".to_string(),
-                                    wan_name: name.clone(),
-                                    device: name,
-                                    event: "addr_added".to_string(),
-                                    ip,
-                                    gateway: None,
-                                    dns_servers: Vec::new(),
-                                    ifindex: Some(addr.header.index),
-                                    ipv6_addr: None,
-                                    ipv6_pd_prefix: None,
-                                })
-                                .await;
+                    item = messages.next() => {
+                        let Some((msg, _)) = item else {
+                            tracing::warn!("rtnetlink multicast stream ended; reconnecting");
+                            break;
+                        };
+                        if let NetlinkPayload::InnerMessage(inner) = msg.payload {
+                            handle_netlink_message(inner, &mut ifindex_to_name, &tx).await;
                         }
                     }
                 }
-                _ => {}
             }
+
+            conn_task.abort();
+            if wait_or_shutdown(&mut shutdown, Duration::from_secs(backoff_secs)).await {
+                break;
+            }
+            backoff_secs = (backoff_secs * 2).min(30);
         }
     });
 }
 
+async fn wait_or_shutdown(shutdown: &mut watch::Receiver<bool>, duration: Duration) -> bool {
+    tokio::select! {
+        () = tokio::time::sleep(duration) => false,
+        _ = shutdown.changed() => *shutdown.borrow(),
+    }
+}
+
+async fn handle_netlink_message(
+    inner: RouteNetlinkMessage,
+    ifindex_to_name: &mut HashMap<u32, String>,
+    tx: &mpsc::Sender<WanLeaseEvent>,
+) {
+    match inner {
+        RouteNetlinkMessage::NewLink(link) => {
+            let ifindex = link.header.index;
+            let ifname = link.attributes.iter().find_map(|a| match a {
+                LinkAttribute::IfName(n) => Some(n.clone()),
+                _ => None,
+            });
+            if let Some(name) = ifname {
+                ifindex_to_name.insert(ifindex, name.clone());
+                let _ = tx
+                    .send(WanLeaseEvent {
+                        source: "netlink".to_string(),
+                        wan_name: name.clone(),
+                        device: name,
+                        event: "link_up".to_string(),
+                        ip: None,
+                        gateway: None,
+                        dns_servers: Vec::new(),
+                        ifindex: Some(ifindex),
+                        ipv6_addr: None,
+                        ipv6_pd_prefix: None,
+                    })
+                    .await;
+            }
+        }
+        RouteNetlinkMessage::DelLink(link) => {
+            if let Some(name) = ifindex_to_name.remove(&link.header.index) {
+                let _ = tx
+                    .send(WanLeaseEvent {
+                        source: "netlink".to_string(),
+                        wan_name: name.clone(),
+                        device: name,
+                        event: "link_down".to_string(),
+                        ip: None,
+                        gateway: None,
+                        dns_servers: Vec::new(),
+                        ifindex: Some(link.header.index),
+                        ipv6_addr: None,
+                        ipv6_pd_prefix: None,
+                    })
+                    .await;
+            }
+        }
+        RouteNetlinkMessage::NewAddress(addr) => {
+            let Some(name) = ifindex_to_name.get(&addr.header.index).cloned() else {
+                return;
+            };
+            let ip = addr.attributes.iter().find_map(|a| match a {
+                AddressAttribute::Local(ip) | AddressAttribute::Address(ip) => Some(ip.to_string()),
+                _ => None,
+            });
+            if ip.is_some() {
+                let _ = tx
+                    .send(WanLeaseEvent {
+                        source: "netlink".to_string(),
+                        wan_name: name.clone(),
+                        device: name,
+                        event: "addr_added".to_string(),
+                        ip,
+                        gateway: None,
+                        dns_servers: Vec::new(),
+                        ifindex: Some(addr.header.index),
+                        ipv6_addr: None,
+                        ipv6_pd_prefix: None,
+                    })
+                    .await;
+            }
+        }
+        _ => {}
+    }
+}
+
 async fn refresh_wireguard_if_present(wg_iface: &str) {
-    match Command::new("wg").args(["show", wg_iface]).status().await {
+    let mut cmd = Command::new("wg");
+    cmd.args(["show", wg_iface]);
+    match run_status_with_timeout(&mut cmd, Duration::from_secs(5), "wg show").await {
         Ok(s) if s.success() => {
             tracing::info!(wg_iface, "checked WireGuard interface after WAN change");
         }
-        _ => {}
+        Ok(_) => {}
+        Err(err) => {
+            tracing::warn!(wg_iface, error = %err, "wg show check failed or timed out");
+        }
     }
 }

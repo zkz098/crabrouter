@@ -132,7 +132,14 @@ pub fn build_certbot_args(cfg: &RouterConfig) -> Vec<String> {
 
 async fn run_acme_renew(cfg: &RouterConfig) -> Result<String> {
     let args = build_certbot_args(cfg);
-    let out = Command::new("certbot").args(&args).output().await?;
+    let mut cmd = Command::new("certbot");
+    cmd.args(&args);
+    let out = crate::cmd::run_output_with_timeout(
+        &mut cmd,
+        std::time::Duration::from_secs(120),
+        "certbot",
+    )
+    .await?;
     if !out.status.success() {
         let stderr = String::from_utf8_lossy(&out.stderr).trim().to_string();
         return Err(ServiceError::Orchestration(format!(
@@ -149,12 +156,15 @@ async fn read_cert_expiry(path: &Path) -> Option<String> {
     if !path.exists() {
         return None;
     }
-    let out = Command::new("openssl")
-        .args(["x509", "-enddate", "-noout", "-in"])
-        .arg(path)
-        .output()
-        .await
-        .ok()?;
+    let mut cmd = Command::new("openssl");
+    cmd.args(["x509", "-enddate", "-noout", "-in"]).arg(path);
+    let out = crate::cmd::run_output_with_timeout(
+        &mut cmd,
+        std::time::Duration::from_secs(5),
+        "openssl x509",
+    )
+    .await
+    .ok()?;
     if out.status.success() {
         let text = String::from_utf8_lossy(&out.stdout);
         return text

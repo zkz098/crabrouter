@@ -1,11 +1,15 @@
 use std::fs;
 use std::net::IpAddr;
 use std::path::Path;
+use std::time::Duration;
 
 use crabrouter_model::{ConntrackEntry, ConntrackKillRequest};
 use tokio::process::Command;
 
+use crate::cmd::run_output_with_timeout;
 use crate::{NetError, Result};
+
+const CONNTRACK_TIMEOUT: Duration = Duration::from_secs(10);
 
 /// Reads the live Linux kernel connection tracking table via Netlink (`conntrack -L -o extended`),
 /// falling back to `/proc/net/nf_conntrack` or `/proc/net/ip_conntrack`.
@@ -13,10 +17,9 @@ use crate::{NetError, Result};
 /// In `dry_run` mode, if the host does not expose `nf_conntrack` to unprivileged processes, returns
 /// representative synthetic entries so the `WebUI` can be previewed and filtered locally.
 pub async fn read_conntrack_table(dry_run: bool) -> Result<Vec<ConntrackEntry>> {
-    if let Ok(out) = Command::new("conntrack")
-        .args(["-L", "-o", "extended"])
-        .output()
-        .await
+    let mut cmd = Command::new("conntrack");
+    cmd.args(["-L", "-o", "extended"]);
+    if let Ok(out) = run_output_with_timeout(&mut cmd, CONNTRACK_TIMEOUT, "conntrack -L").await
         && out.status.success()
     {
         let text = String::from_utf8_lossy(&out.stdout);
@@ -113,7 +116,9 @@ pub async fn kill_conntrack_flow(req: &ConntrackKillRequest, dry_run: bool) -> R
     }
 
     let ref_args: Vec<&str> = args.iter().map(String::as_str).collect();
-    let out = Command::new("conntrack").args(&ref_args).output().await?;
+    let mut cmd = Command::new("conntrack");
+    cmd.args(&ref_args);
+    let out = run_output_with_timeout(&mut cmd, CONNTRACK_TIMEOUT, "conntrack -D").await?;
     if !out.status.success() {
         let stderr = String::from_utf8_lossy(&out.stderr).trim().to_string();
         return Err(NetError::Apply(format!("conntrack -D failed: {stderr}")));
@@ -136,11 +141,9 @@ pub async fn flush_conntrack_for_wan(wan_ip: Option<&str>, fwmark: Option<u32>, 
 
     if let Some(mark) = fwmark {
         let mark_str = mark.to_string();
-        match Command::new("conntrack")
-            .args(["-D", "-m", &mark_str])
-            .output()
-            .await
-        {
+        let mut cmd = Command::new("conntrack");
+        cmd.args(["-D", "-m", &mark_str]);
+        match run_output_with_timeout(&mut cmd, CONNTRACK_TIMEOUT, "conntrack -D -m").await {
             Ok(out) => {
                 tracing::info!(
                     fwmark = mark,
@@ -156,11 +159,9 @@ pub async fn flush_conntrack_for_wan(wan_ip: Option<&str>, fwmark: Option<u32>, 
 
     if let Some(ip) = wan_ip.map(str::trim).filter(|s| !s.is_empty()) {
         for flag in ["-r", "-d", "-s"] {
-            match Command::new("conntrack")
-                .args(["-D", flag, ip])
-                .output()
-                .await
-            {
+            let mut cmd = Command::new("conntrack");
+            cmd.args(["-D", flag, ip]);
+            match run_output_with_timeout(&mut cmd, CONNTRACK_TIMEOUT, "conntrack -D ip").await {
                 Ok(out) => {
                     tracing::info!(
                         wan_ip = ip,

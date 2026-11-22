@@ -12,7 +12,7 @@ use futures_util::future::join_all;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpSocket;
 use tokio::process::Command;
-use tokio::sync::RwLock;
+use tokio::sync::{RwLock, watch};
 
 use crate::conntrack::flush_conntrack_for_wan;
 use crate::events::{WanEventBus, WanStateObserver};
@@ -41,6 +41,17 @@ pub fn spawn_multi_wan_engine(
     wan_bus: WanEventBus,
     dry_run: bool,
 ) -> MultiWanManager {
+    let (_tx, rx) = watch::channel(false);
+    spawn_multi_wan_engine_with_shutdown(observer, wan_bus, dry_run, rx)
+}
+
+/// Spawns the Multi-WAN health probing engine with an explicit graceful-shutdown signal.
+pub fn spawn_multi_wan_engine_with_shutdown(
+    observer: Arc<dyn WanStateObserver>,
+    wan_bus: WanEventBus,
+    dry_run: bool,
+    shutdown: watch::Receiver<bool>,
+) -> MultiWanManager {
     let cfg = observer.current_config();
     let initial = MultiWanRuntimeStatus {
         enabled: cfg.multi_wan.enabled,
@@ -59,7 +70,7 @@ pub fn spawn_multi_wan_engine(
 
     let bg = manager.clone();
     tokio::spawn(async move {
-        bg.run_loop().await;
+        bg.run_loop(shutdown).await;
     });
 
     manager
@@ -70,8 +81,11 @@ impl MultiWanManager {
         self.status.read().await.clone()
     }
 
-    async fn run_loop(&self) {
+    async fn run_loop(&self, mut shutdown: watch::Receiver<bool>) {
         loop {
+            if *shutdown.borrow() {
+                break;
+            }
             let cfg = self.observer.current_config();
             let interval_secs = u64::from(cfg.multi_wan.probe_interval_secs.max(1));
             if cfg.multi_wan.enabled {
@@ -79,7 +93,15 @@ impl MultiWanManager {
             } else {
                 self.sync_disabled_state(&cfg).await;
             }
-            tokio::time::sleep(Duration::from_secs(interval_secs)).await;
+            tokio::select! {
+                () = tokio::time::sleep(Duration::from_secs(interval_secs)) => {}
+                _ = shutdown.changed() => {
+                    if *shutdown.borrow() {
+                        tracing::info!("multi-wan engine received shutdown signal");
+                        break;
+                    }
+                }
+            }
         }
     }
 

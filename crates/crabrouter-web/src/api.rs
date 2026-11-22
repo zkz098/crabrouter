@@ -282,10 +282,29 @@ pub async fn auth_login(
     State(state): State<AppState>,
     Json(req): Json<LoginRequest>,
 ) -> Result<Response, ApiError> {
-    let token = state
+    if let Err(retry_after) = crate::rate_limit::check_login_allowed(&req.username) {
+        return Ok((
+            StatusCode::TOO_MANY_REQUESTS,
+            Json(ErrorBody {
+                error: format!("too many failed login attempts; retry in {retry_after}s"),
+            }),
+        )
+            .into_response());
+    }
+    let token = match state
         .engine
         .db()
-        .verify_login_and_issue_token(&req.username, &req.password)?;
+        .verify_login_and_issue_token(&req.username, &req.password)
+    {
+        Ok(tok) => {
+            crate::rate_limit::clear_login_failures(&req.username);
+            tok
+        }
+        Err(err) => {
+            crate::rate_limit::record_login_failure(&req.username);
+            return Err(err.into());
+        }
+    };
     let body = AuthTokenResponse {
         token: token.clone(),
         username: req.username,
@@ -733,7 +752,9 @@ fn validate_diag_host(raw: &str) -> Result<String, ApiError> {
 }
 
 async fn run_diag_command(bin: &str, args: &[&str], display_cmd: &str) -> DiagCommandResult {
-    let fut = Command::new(bin).args(args).output();
+    let mut cmd = Command::new(bin);
+    cmd.args(args).kill_on_drop(true);
+    let fut = cmd.output();
     match tokio::time::timeout(Duration::from_secs(35), fut).await {
         Ok(Ok(out)) => {
             let stdout = String::from_utf8_lossy(&out.stdout);

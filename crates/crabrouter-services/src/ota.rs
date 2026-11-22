@@ -238,10 +238,14 @@ pub async fn query_ota_status(ota_dir: &Path, source_url: &str, dry_run: bool) -
 }
 
 async fn query_bless_boot_status() -> String {
-    match Command::new("systemd-bless-boot")
-        .arg("status")
-        .output()
-        .await
+    let mut cmd = Command::new("systemd-bless-boot");
+    cmd.arg("status");
+    match crate::cmd::run_output_with_timeout(
+        &mut cmd,
+        std::time::Duration::from_secs(5),
+        "systemd-bless-boot status",
+    )
+    .await
     {
         Ok(out) if out.status.success() => String::from_utf8_lossy(&out.stdout).trim().to_string(),
         Ok(out) => {
@@ -257,9 +261,9 @@ async fn query_bless_boot_status() -> String {
 }
 
 async fn which_exists(bin: &str) -> bool {
-    Command::new("which")
-        .arg(bin)
-        .output()
+    let mut cmd = Command::new("which");
+    cmd.arg(bin);
+    crate::cmd::run_output_with_timeout(&mut cmd, std::time::Duration::from_secs(3), "which")
         .await
         .is_ok_and(|o| o.status.success())
 }
@@ -289,10 +293,14 @@ pub async fn check_ota_updates(
         });
     }
 
-    let out = Command::new("systemd-sysupdate")
-        .arg("list")
-        .output()
-        .await?;
+    let mut cmd = Command::new("systemd-sysupdate");
+    cmd.arg("list");
+    let out = crate::cmd::run_output_with_timeout(
+        &mut cmd,
+        std::time::Duration::from_secs(30),
+        "systemd-sysupdate list",
+    )
+    .await?;
     let combined = format!(
         "{}\n{}",
         String::from_utf8_lossy(&out.stdout),
@@ -361,7 +369,12 @@ pub async fn apply_ota_update(
     if !verify_signature {
         cmd.arg("--verify=no");
     }
-    let out = cmd.output().await?;
+    let out = crate::cmd::run_output_with_timeout(
+        &mut cmd,
+        std::time::Duration::from_secs(600),
+        "systemd-sysupdate update",
+    )
+    .await?;
     let combined = format!(
         "{}\n{}",
         String::from_utf8_lossy(&out.stdout),
@@ -391,10 +404,14 @@ pub async fn bless_current_boot(dry_run: bool) -> Result<OtaCommandResult> {
             reboot_required: false,
         });
     }
-    let out = Command::new("systemd-bless-boot")
-        .arg("good")
-        .output()
-        .await?;
+    let mut cmd = Command::new("systemd-bless-boot");
+    cmd.arg("good");
+    let out = crate::cmd::run_output_with_timeout(
+        &mut cmd,
+        std::time::Duration::from_secs(10),
+        "systemd-bless-boot good",
+    )
+    .await?;
     let combined = format!(
         "{}\n{}",
         String::from_utf8_lossy(&out.stdout),
@@ -411,6 +428,24 @@ pub async fn bless_current_boot(dry_run: bool) -> Result<OtaCommandResult> {
         output: combined.trim().to_string(),
         reboot_required: false,
     })
+}
+
+/// Automatically marks the current boot slot as good if `systemd-bless-boot status`
+/// reports `indeterminate` (first boot after an A/B OTA update) and the daemon passed health checks.
+pub async fn auto_bless_if_tentative(dry_run: bool) -> Result<bool> {
+    if dry_run {
+        return Ok(false);
+    }
+    let status = query_bless_boot_status().await;
+    if status.eq_ignore_ascii_case("indeterminate") {
+        let res = bless_current_boot(false).await?;
+        if res.ok {
+            tracing::info!("auto-blessed tentative OTA boot slot as good");
+            return Ok(true);
+        }
+        tracing::warn!(output = %res.output, "auto-bless of tentative boot slot failed");
+    }
+    Ok(false)
 }
 
 pub async fn trigger_reboot_via_dbus(dry_run: bool) -> Result<OtaCommandResult> {

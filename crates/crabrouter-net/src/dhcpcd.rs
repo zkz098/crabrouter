@@ -158,7 +158,14 @@ pub fn sync_dhcpcd_files(
 
 /// Triggers `dhcpcd -n <iface>` to rebind or renew lease when needed.
 pub async fn notify_dhcpcd_rebind(device: &str) -> Result<()> {
-    let status = Command::new("dhcpcd").args(["-n", device]).status().await?;
+    let mut cmd = Command::new("dhcpcd");
+    cmd.args(["-n", device]);
+    let status = crate::cmd::run_status_with_timeout(
+        &mut cmd,
+        std::time::Duration::from_secs(10),
+        "dhcpcd -n",
+    )
+    .await?;
     if !status.success() {
         tracing::debug!(device, status = %status, "dhcpcd -n returned non-zero");
     }

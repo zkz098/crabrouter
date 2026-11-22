@@ -147,12 +147,26 @@ pub async fn proxy_crabdns(
 /// Spawns a background bridge that syncs `crabdns` resolved A/AAAA query logs and exact
 /// configured domain rules into `EbpfEngine`'s `DOMAIN_POLICY_LPM` map.
 pub fn spawn_crabdns_ebpf_bridge(engine: Arc<RouterEngine>, ebpf: EbpfEngine, dry_run: bool) {
+    let (_tx, rx) = tokio::sync::watch::channel(false);
+    spawn_crabdns_ebpf_bridge_with_shutdown(engine, ebpf, dry_run, rx);
+}
+
+/// Spawns the `crabdns` -> eBPF LPM bridge with an explicit graceful-shutdown signal.
+pub fn spawn_crabdns_ebpf_bridge_with_shutdown(
+    engine: Arc<RouterEngine>,
+    ebpf: EbpfEngine,
+    dry_run: bool,
+    mut shutdown: tokio::sync::watch::Receiver<bool>,
+) {
     tokio::spawn(async move {
         let client = http_client();
         let mut seen: HashSet<(String, Vec<String>)> = HashSet::new();
         let mut tick: u64 = 0;
 
         loop {
+            if *shutdown.borrow() {
+                break;
+            }
             let cfg = engine.active_config();
             if cfg.ebpf.enabled && !cfg.ebpf.domain_rules.is_empty() && !dry_run {
                 if let Ok(json_val) =
@@ -168,7 +182,15 @@ pub fn spawn_crabdns_ebpf_bridge(engine: Arc<RouterEngine>, ebpf: EbpfEngine, dr
                 seen.clear();
             }
             tick = tick.saturating_add(1);
-            tokio::time::sleep(Duration::from_secs(3)).await;
+            tokio::select! {
+                () = tokio::time::sleep(Duration::from_secs(3)) => {}
+                _ = shutdown.changed() => {
+                    if *shutdown.borrow() {
+                        tracing::info!("crabdns-ebpf bridge received shutdown signal");
+                        break;
+                    }
+                }
+            }
         }
     });
 }

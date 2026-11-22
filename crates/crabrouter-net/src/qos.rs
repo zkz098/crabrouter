@@ -251,14 +251,22 @@ async fn apply_ingress_rule(iface: &str, rule: &QosInterfaceConfig) {
         return;
     }
 
-    let _ = Command::new("ip")
-        .args(["link", "add", "name", &ifb, "type", "ifb"])
-        .output()
-        .await;
-    let _ = Command::new("ip")
-        .args(["link", "set", "dev", &ifb, "up"])
-        .output()
-        .await;
+    let mut add_ifb = Command::new("ip");
+    add_ifb.args(["link", "add", "name", &ifb, "type", "ifb"]);
+    let _ = crate::cmd::run_output_with_timeout(
+        &mut add_ifb,
+        std::time::Duration::from_secs(5),
+        "ip link add ifb",
+    )
+    .await;
+    let mut up_ifb = Command::new("ip");
+    up_ifb.args(["link", "set", "dev", &ifb, "up"]);
+    let _ = crate::cmd::run_output_with_timeout(
+        &mut up_ifb,
+        std::time::Duration::from_secs(5),
+        "ip link set ifb up",
+    )
+    .await;
 
     let _ = run_tc(&[
         "qdisc", "replace", "dev", iface, "handle", "ffff:", "ingress",
@@ -315,11 +323,12 @@ async fn apply_ingress_rule(iface: &str, rule: &QosInterfaceConfig) {
 }
 
 async fn run_tc(args: &[&str]) -> std::result::Result<(), String> {
-    let out = Command::new("tc")
-        .args(args)
-        .output()
-        .await
-        .map_err(|e| e.to_string())?;
+    let mut cmd = Command::new("tc");
+    cmd.args(args);
+    let out =
+        crate::cmd::run_output_with_timeout(&mut cmd, std::time::Duration::from_secs(10), "tc")
+            .await
+            .map_err(|e| e.to_string())?;
     if out.status.success() {
         Ok(())
     } else {

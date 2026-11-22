@@ -1,3 +1,4 @@
+pub mod cmd;
 pub mod conntrack;
 pub mod dhcpcd;
 pub mod ebpf;
@@ -29,7 +30,10 @@ pub use conntrack::{
 };
 pub use dhcpcd::{WanLeaseEvent, render_dhcpcd_conf, render_dhcpcd_hook_script, sync_dhcpcd_files};
 pub use ebpf::EbpfEngine;
-pub use events::{WanEventBus, WanStateObserver, spawn_network_event_engine};
+pub use events::{
+    WanEventBus, WanStateObserver, spawn_network_event_engine,
+    spawn_network_event_engine_with_shutdown,
+};
 pub use hardware::{
     collect_hardware_health, evaluate_hardware_alerts, parse_nvme_smart_log_json,
     parse_sensors_json, parse_smartctl_json,
@@ -38,7 +42,9 @@ pub use ipv6_pd::{
     DownstreamIpv6Target, apply_ipv6_pd_slices_netlink, resolve_downstream_ipv6_targets,
     slice_delegated_ipv6_prefix,
 };
-pub use multi_wan::{MultiWanManager, spawn_multi_wan_engine};
+pub use multi_wan::{
+    MultiWanManager, spawn_multi_wan_engine, spawn_multi_wan_engine_with_shutdown,
+};
 pub use netlink::{
     DryRunNetworkBackend, LinuxNetworkBackend, NetworkBackend, NetworkDiffPlan, NetworkPaths,
     apply_rtnetlink_diff_with_wans, compute_network_diff_plan, compute_network_diff_plan_with_wans,

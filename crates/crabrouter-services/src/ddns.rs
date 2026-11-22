@@ -6,7 +6,7 @@ use crabrouter_model::{
     DdnsConfig, DdnsProvider, DdnsRuntimeStatus, RouterConfig, WanRuntimeState,
 };
 use tokio::process::Command;
-use tokio::sync::RwLock;
+use tokio::sync::{RwLock, watch};
 
 use crate::{Result, ServiceError};
 
@@ -120,17 +120,44 @@ where
     F: Fn() -> RouterConfig + Send + Sync + 'static,
     W: Fn() -> Vec<WanRuntimeState> + Send + Sync + 'static,
 {
+    let (_tx, rx) = watch::channel(false);
+    spawn_ddns_engine_with_shutdown(cfg_fn, wan_fn, initial_cfg, dry_run, rx)
+}
+
+/// Spawns the periodic DDNS engine with an explicit graceful-shutdown signal.
+pub fn spawn_ddns_engine_with_shutdown<F, W>(
+    cfg_fn: F,
+    wan_fn: W,
+    initial_cfg: &RouterConfig,
+    dry_run: bool,
+    mut shutdown: watch::Receiver<bool>,
+) -> DdnsManager
+where
+    F: Fn() -> RouterConfig + Send + Sync + 'static,
+    W: Fn() -> Vec<WanRuntimeState> + Send + Sync + 'static,
+{
     let mgr = DdnsManager::new(initial_cfg, dry_run);
     let bg = mgr.clone();
     tokio::spawn(async move {
         loop {
+            if *shutdown.borrow() {
+                break;
+            }
             let cfg = cfg_fn();
             let interval = u64::from(cfg.ddns.interval_secs.max(30));
             if cfg.ddns.enabled {
                 let wans = wan_fn();
                 let _ = bg.sync_with_wans(&cfg, &wans, false).await;
             }
-            tokio::time::sleep(Duration::from_secs(interval)).await;
+            tokio::select! {
+                () = tokio::time::sleep(Duration::from_secs(interval)) => {}
+                _ = shutdown.changed() => {
+                    if *shutdown.borrow() {
+                        tracing::info!("DDNS engine received shutdown signal");
+                        break;
+                    }
+                }
+            }
         }
     });
     mgr
@@ -157,9 +184,9 @@ async fn resolve_ddns_ip(
     if dry_run {
         return Some("203.0.113.10".to_string());
     }
-    let out = Command::new("curl")
-        .args(["-fsS", "--max-time", "5", "https://api.ipify.org"])
-        .output()
+    let mut cmd = Command::new("curl");
+    cmd.args(["-fsS", "--max-time", "5", "https://api.ipify.org"]);
+    let out = crate::cmd::run_output_with_timeout(&mut cmd, Duration::from_secs(10), "curl ipify")
         .await
         .ok()?;
     if out.status.success() {
@@ -248,7 +275,9 @@ async fn dispatch_ddns_update(ddns: &DdnsConfig, ip: &str) -> Result<()> {
     }
     cmd.arg(&url);
 
-    let out = cmd.output().await?;
+    let out =
+        crate::cmd::run_output_with_timeout(&mut cmd, Duration::from_secs(15), "curl ddns update")
+            .await?;
     if !out.status.success() {
         let stderr = String::from_utf8_lossy(&out.stderr).trim().to_string();
         return Err(ServiceError::Orchestration(format!(

@@ -35,7 +35,11 @@ pub async fn collect_hardware_health(dry_run: bool) -> Result<HardwareHealthSnap
 }
 
 async fn collect_thermal_sensors() -> Vec<ThermalSensorReading> {
-    if let Ok(out) = Command::new("sensors").arg("-j").output().await
+    let mut cmd = Command::new("sensors");
+    cmd.arg("-j");
+    if let Ok(out) =
+        crate::cmd::run_output_with_timeout(&mut cmd, std::time::Duration::from_secs(5), "sensors")
+            .await
         && out.status.success()
     {
         let text = String::from_utf8_lossy(&out.stdout);
@@ -200,10 +204,14 @@ async fn collect_disk_health() -> Vec<DiskHealthReport> {
     let mut reports = Vec::new();
     for dev_name in devices {
         let dev_path = format!("/dev/{dev_name}");
-        if let Ok(out) = Command::new("smartctl")
-            .args(["-j", "-a", &dev_path])
-            .output()
-            .await
+        let mut smart_cmd = Command::new("smartctl");
+        smart_cmd.args(["-j", "-a", &dev_path]);
+        if let Ok(out) = crate::cmd::run_output_with_timeout(
+            &mut smart_cmd,
+            std::time::Duration::from_secs(5),
+            "smartctl",
+        )
+        .await
         {
             let text = String::from_utf8_lossy(&out.stdout);
             if let Some(report) = parse_smartctl_json(&dev_path, &text) {
@@ -212,11 +220,15 @@ async fn collect_disk_health() -> Vec<DiskHealthReport> {
             }
         }
 
+        let mut nvme_cmd = Command::new("nvme");
+        nvme_cmd.args(["smart-log", &dev_path, "-o", "json"]);
         if dev_name.starts_with("nvme")
-            && let Ok(out) = Command::new("nvme")
-                .args(["smart-log", &dev_path, "-o", "json"])
-                .output()
-                .await
+            && let Ok(out) = crate::cmd::run_output_with_timeout(
+                &mut nvme_cmd,
+                std::time::Duration::from_secs(5),
+                "nvme smart-log",
+            )
+            .await
             && out.status.success()
         {
             let model = fs::read_to_string(format!("/sys/block/{dev_name}/device/model"))

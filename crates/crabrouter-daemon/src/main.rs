@@ -10,12 +10,13 @@ use crabrouter_core::{ConfigStore, RouterEngine};
 use crabrouter_model::RouterConfig;
 use crabrouter_net::{
     DryRunNetworkBackend, EbpfEngine, LinuxNetworkBackend, NetworkBackend, WanStateObserver,
-    spawn_multi_wan_engine, spawn_network_event_engine,
+    spawn_multi_wan_engine_with_shutdown, spawn_network_event_engine_with_shutdown,
 };
 use crabrouter_services::{
-    DryRunSupervisor, ServiceSupervisor, SystemdSupervisor, TlsCertManager, spawn_ddns_engine,
+    DryRunSupervisor, ServiceSupervisor, SystemdSupervisor, TlsCertManager,
+    auto_bless_if_tentative, spawn_ddns_engine_with_shutdown,
 };
-use crabrouter_web::{AppState, LogHub, build_router, spawn_crabdns_ebpf_bridge};
+use crabrouter_web::{AppState, LogHub, build_router, spawn_crabdns_ebpf_bridge_with_shutdown};
 use ipnet::IpNet;
 use mimalloc::MiMalloc;
 use tokio::net::TcpListener;
@@ -111,28 +112,45 @@ async fn main() -> anyhow::Result<()> {
         Arc::new(SystemdSupervisor::default())
     };
 
+    let (shutdown_tx, shutdown_rx) = tokio::sync::watch::channel(false);
     let engine = RouterEngine::bootstrap(store, net, services).await?;
     let observer: Arc<dyn WanStateObserver> = Arc::clone(&engine) as Arc<dyn WanStateObserver>;
-    let wan_bus = spawn_network_event_engine(Arc::clone(&observer), cli.dry_run);
+    let wan_bus = spawn_network_event_engine_with_shutdown(
+        Arc::clone(&observer),
+        cli.dry_run,
+        shutdown_rx.clone(),
+    );
     if let Ok(saved_wans) = engine.db().list_wan_states() {
         wan_bus.seed_states(saved_wans).await;
     }
-    let multi_wan = spawn_multi_wan_engine(observer, wan_bus.clone(), cli.dry_run);
+    let multi_wan = spawn_multi_wan_engine_with_shutdown(
+        observer,
+        wan_bus.clone(),
+        cli.dry_run,
+        shutdown_rx.clone(),
+    );
     let cfg = engine.active_config();
     let ebpf = EbpfEngine::new(cli.dry_run);
+    engine.attach_ebpf(ebpf.clone());
     if let Err(err) = ebpf.sync_config(&cfg).await {
         tracing::warn!(error = %err, "initial eBPF tc/tcx sync failed");
     }
-    spawn_crabdns_ebpf_bridge(Arc::clone(&engine), ebpf.clone(), cli.dry_run);
+    spawn_crabdns_ebpf_bridge_with_shutdown(
+        Arc::clone(&engine),
+        ebpf.clone(),
+        cli.dry_run,
+        shutdown_rx.clone(),
+    );
 
     let ddns = {
         let eng_cfg = Arc::clone(&engine);
         let eng_wans = Arc::clone(&engine);
-        spawn_ddns_engine(
+        spawn_ddns_engine_with_shutdown(
             move || (*eng_cfg.active_config()).clone(),
             move || eng_wans.db().list_wan_states().unwrap_or_default(),
             &cfg,
             cli.dry_run,
+            shutdown_rx.clone(),
         )
     };
     let tls = TlsCertManager::new(&cfg, cli.dry_run);
@@ -158,6 +176,8 @@ async fn main() -> anyhow::Result<()> {
 
     let shutdown_handle = Handle::new();
     let server_tasks = spawn_web_listeners(&cfg, &cli, &app, &shutdown_handle).await?;
+    sd_notify("READY=1");
+    spawn_watchdog_and_autobless(cli.dry_run, shutdown_rx);
 
     tracing::info!(
         lan_only = cfg.system.web_lan_only,
@@ -167,6 +187,8 @@ async fn main() -> anyhow::Result<()> {
     );
 
     wait_for_shutdown_signal().await;
+    sd_notify("STOPPING=1");
+    let _ = shutdown_tx.send(true);
     shutdown_handle.graceful_shutdown(Some(std::time::Duration::from_secs(5)));
     for task in server_tasks {
         let _ = task.await;
@@ -174,6 +196,51 @@ async fn main() -> anyhow::Result<()> {
 
     tracing::info!("crabrouterd stopped");
     Ok(())
+}
+
+fn spawn_watchdog_and_autobless(dry_run: bool, mut shutdown: tokio::sync::watch::Receiver<bool>) {
+    tokio::spawn(async move {
+        let mut ticks: u32 = 0;
+        let mut blessed = false;
+        loop {
+            tokio::select! {
+                () = tokio::time::sleep(std::time::Duration::from_secs(10)) => {
+                    sd_notify("WATCHDOG=1");
+                    ticks = ticks.saturating_add(1);
+                    if !blessed && !dry_run && ticks >= 3 {
+                        blessed = true;
+                        if let Err(err) = auto_bless_if_tentative(false).await {
+                            tracing::warn!(error = %err, "auto-bless check failed");
+                        }
+                    }
+                }
+                _ = shutdown.changed() => {
+                    if *shutdown.borrow() {
+                        break;
+                    }
+                }
+            }
+        }
+    });
+}
+
+/// Sends a `systemd` `sd_notify` datagram over `NOTIFY_SOCKET` using safe Rust.
+fn sd_notify(state: &str) {
+    let Ok(socket_path) = std::env::var("NOTIFY_SOCKET") else {
+        return;
+    };
+    let Ok(sock) = std::os::unix::net::UnixDatagram::unbound() else {
+        return;
+    };
+    #[cfg(target_os = "linux")]
+    if let Some(abstract_name) = socket_path.strip_prefix('@') {
+        use std::os::linux::net::SocketAddrExt;
+        if let Ok(addr) = std::os::unix::net::SocketAddr::from_abstract_name(abstract_name) {
+            let _ = sock.send_to_addr(state.as_bytes(), &addr);
+        }
+        return;
+    }
+    let _ = sock.send_to(state.as_bytes(), socket_path);
 }
 
 async fn spawn_web_listeners(

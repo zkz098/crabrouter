@@ -2,6 +2,8 @@ use std::collections::HashSet;
 use std::fmt::Write;
 use std::net::IpAddr;
 use std::path::Path;
+use std::sync::OnceLock;
+use std::time::Duration;
 
 use crabrouter_model::{
     FirewallAction, FirewallRule, FirewallZone, MultiWanMode, RouterConfig, TransportProto,
@@ -97,11 +99,17 @@ pub async fn apply_nft_with_precheck(cfg: &RouterConfig) -> Result<()> {
     apply_nft_with_precheck_and_multi_wan(cfg, None).await
 }
 
+static NFT_APPLY_LOCK: OnceLock<tokio::sync::Mutex<()>> = OnceLock::new();
+
 /// Validates and applies `nftables` ruleset with explicit active Multi-WAN list.
 pub async fn apply_nft_with_precheck_and_multi_wan(
     cfg: &RouterConfig,
     active_wans: Option<&[String]>,
 ) -> Result<()> {
+    let _guard = NFT_APPLY_LOCK
+        .get_or_init(|| tokio::sync::Mutex::new(()))
+        .lock()
+        .await;
     let live_ifaces = read_live_iface_names();
     let candidate = render_nftables_ruleset_with_multi_wan(
         cfg,
@@ -132,18 +140,21 @@ pub async fn apply_nft_with_precheck_and_multi_wan(
 }
 
 async fn run_nft_stdin(args: &[&str], ruleset: &str) -> Result<()> {
-    let mut child = Command::new("nft")
-        .args(args)
+    let mut cmd = Command::new("nft");
+    cmd.args(args)
         .stdin(std::process::Stdio::piped())
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::piped())
-        .spawn()?;
+        .kill_on_drop(true);
 
+    let mut child = cmd.spawn()?;
     if let Some(mut stdin) = child.stdin.take() {
         stdin.write_all(ruleset.as_bytes()).await?;
     }
 
-    let output = child.wait_with_output().await?;
+    let output = tokio::time::timeout(Duration::from_secs(15), child.wait_with_output())
+        .await
+        .map_err(|_| NetError::Apply(format!("nft {} timed out after 15s", args.join(" "))))??;
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
         let mode = args.join(" ");
