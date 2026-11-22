@@ -16,7 +16,7 @@ mkdir -p "$EXTRA_BIN" "$REPART_DST"
 install -m 0755 "$REPO_ROOT/target/release/crabrouter-daemon" "$EXTRA_BIN/crabrouterd"
 install -m 0755 "$REPO_ROOT/target/release/crabrouter-cli" "$EXTRA_BIN/crabctl"
 cp "$IMAGE_DIR"/mkosi.repart/*.conf "$REPART_DST/"
-sed -i -E '/^(CopyFiles|ExcludeFiles)=/d' "$REPART_DST/"*.conf
+sed -i -E '/^(CopyFiles|ExcludeFiles)=|^Format=squashfs$/d' "$REPART_DST/"*.conf
 
 if [[ -d "${CRABDNS_DIR:-$HOME/projects/crabdns}" ]]; then
   bash "$IMAGE_DIR/scripts/bundle-crabdns.sh"
