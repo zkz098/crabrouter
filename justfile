@@ -35,3 +35,7 @@ bundle-crabdns:
 
 build-image: build bundle-crabdns
     cd image && mkosi --force
+
+# Build full appliance artifacts (raw + Hyper-V vhdx + UEFI live iso)
+build-hyperv:
+    bash image/scripts/build-image.sh

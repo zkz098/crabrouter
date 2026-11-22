@@ -1,0 +1,16 @@
+[Transfer]
+ProtectVersion=%A
+
+[Source]
+Type=url-file
+Path=https://updates.example.com/crabrouter
+MatchPattern=crabrouter_@v.efi
+
+[Target]
+Type=regular-file
+Path=/EFI/Linux
+PathRelativeTo=boot
+MatchPattern=crabrouter_@v+@t.efi
+TriesLeft=3
+TriesDone=0
+InstancesMax=2

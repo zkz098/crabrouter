@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+if [[ -n "${BUILDROOT:-}" ]]; then
+  systemctl --root="$BUILDROOT" enable crabrouterd.service || true
+  systemctl --root="$BUILDROOT" enable crabdns.service || true
+  systemctl --root="$BUILDROOT" enable dnsmasq.service || true
+  systemctl --root="$BUILDROOT" enable crabrouter-boot-bless.service || true
+  systemctl --root="$BUILDROOT" enable systemd-boot-check-no-failures.service || true
+  systemctl --root="$BUILDROOT" enable systemd-sysupdate.timer || true
+fi

@@ -28,3 +28,13 @@ cargo test --workspace
 # 3. Start daemon in local dry-run mode (WebUI on http://127.0.0.1:8080)
 cargo run -p crabrouter-daemon -- --dry-run
 ```
+
+## Image & Hyper-V Build
+
+On a Debian/Ubuntu host with `mkosi`, `qemu-utils`, `xorriso`, and `mtools` installed (or via GitHub Actions `.github/workflows/image.yml`):
+
+```bash
+bash image/scripts/build-image.sh
+```
+
+This produces `image/mkosi.output/crabrouter.raw`, Hyper-V Generation 2 `crabrouter.vhdx` (disable Secure Boot in Gen 2 VM settings), and UEFI Live/Installer `crabrouter-live.iso`.

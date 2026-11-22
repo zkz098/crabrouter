@@ -2,6 +2,10 @@
 /data
 /image/mkosi.output
 /image/mkosi.cache
+/image/mkosi.builddir
+/image/mkosi.workspace
+/image/mkosi.packages
+/image/mkosi.extra/usr/local/bin
 /webui/node_modules
 /webui/dist
 *.db

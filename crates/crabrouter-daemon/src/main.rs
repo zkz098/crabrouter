@@ -117,16 +117,52 @@ async fn main() -> anyhow::Result<()> {
     }
 
     let cfg = engine.active_config();
-    let app = build_router(Arc::clone(&engine), wan_bus, logs, cli.leases.clone());
+    let ota_dir = cli
+        .config
+        .parent()
+        .filter(|p| !p.as_os_str().is_empty())
+        .map_or_else(|| PathBuf::from("ota"), |p| p.join("ota"));
+    let app = build_router(
+        Arc::clone(&engine),
+        wan_bus,
+        logs,
+        cli.leases.clone(),
+        ota_dir,
+        cli.dry_run,
+    );
 
+    let shutdown_handle = Handle::new();
+    let server_tasks = spawn_web_listeners(&cfg, &cli, &app, &shutdown_handle).await?;
+
+    tracing::info!(
+        lan_only = cfg.system.web_lan_only,
+        https = cli.https || cfg.system.web_https_enabled,
+        config = %cli.config.display(),
+        "crabrouterd started"
+    );
+
+    wait_for_shutdown_signal().await;
+    shutdown_handle.graceful_shutdown(Some(std::time::Duration::from_secs(5)));
+    for task in server_tasks {
+        let _ = task.await;
+    }
+
+    tracing::info!("crabrouterd stopped");
+    Ok(())
+}
+
+async fn spawn_web_listeners(
+    cfg: &RouterConfig,
+    cli: &Cli,
+    app: &axum::Router,
+    shutdown_handle: &Handle<SocketAddr>,
+) -> anyhow::Result<Vec<tokio::task::JoinHandle<()>>> {
     let http_raw = cli
         .web_listen
         .as_deref()
         .unwrap_or(cfg.system.web_listen.as_str());
-    let http_addrs = resolve_listen_addrs(&cfg, http_raw, cli.web_listen.is_some());
-
+    let http_addrs = resolve_listen_addrs(cfg, http_raw, cli.web_listen.is_some());
     let mut server_tasks = Vec::new();
-    let shutdown_handle = Handle::new();
 
     for addr in &http_addrs {
         match TcpListener::bind(addr).await {
@@ -154,8 +190,8 @@ async fn main() -> anyhow::Result<()> {
     }
 
     if cli.https || cfg.system.web_https_enabled {
-        let tls_cfg = ensure_tls_config(&cfg, &cli.config).await?;
-        let tls_addrs = resolve_listen_addrs(&cfg, &cfg.system.web_https_listen, false);
+        let tls_cfg = ensure_tls_config(cfg, &cli.config).await?;
+        let tls_addrs = resolve_listen_addrs(cfg, &cfg.system.web_https_listen, false);
         for addr in tls_addrs {
             if std::net::TcpListener::bind(addr).is_err()
                 && cfg.system.web_lan_only
@@ -183,22 +219,7 @@ async fn main() -> anyhow::Result<()> {
     if server_tasks.is_empty() {
         anyhow::bail!("no WebUI listeners could be bound");
     }
-
-    tracing::info!(
-        lan_only = cfg.system.web_lan_only,
-        https = cli.https || cfg.system.web_https_enabled,
-        config = %cli.config.display(),
-        "crabrouterd started"
-    );
-
-    wait_for_shutdown_signal().await;
-    shutdown_handle.graceful_shutdown(Some(std::time::Duration::from_secs(5)));
-    for task in server_tasks {
-        let _ = task.await;
-    }
-
-    tracing::info!("crabrouterd stopped");
-    Ok(())
+    Ok(server_tasks)
 }
 
 fn resolve_listen_addrs(

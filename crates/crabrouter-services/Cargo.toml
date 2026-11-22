@@ -10,9 +10,12 @@ workspace = true
 
 [dependencies]
 base64.workspace = true
+chrono.workspace = true
 crabrouter-model.workspace = true
+hex.workspace = true
 ipnet.workspace = true
 serde.workspace = true
+sha2.workspace = true
 thiserror.workspace = true
 tokio.workspace = true
 toml.workspace = true

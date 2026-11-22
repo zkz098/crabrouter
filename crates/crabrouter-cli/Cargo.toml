@@ -14,4 +14,6 @@ clap.workspace = true
 crabrouter-core.workspace = true
 crabrouter-net.workspace = true
 crabrouter-services.workspace = true
+serde.workspace = true
 serde_json.workspace = true
+tokio.workspace = true

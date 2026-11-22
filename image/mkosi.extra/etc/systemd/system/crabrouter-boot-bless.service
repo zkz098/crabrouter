@@ -1,0 +1,13 @@
+[Unit]
+Description=Bless CrabRouter A/B Boot Slot after Control Plane Health Check
+After=crabrouterd.service crabdns.service dnsmasq.service
+Requires=crabrouterd.service
+
+[Service]
+Type=oneshot
+ExecStartPre=/bin/sleep 2
+ExecStart=/usr/local/bin/crabctl ota bless --health-addr 127.0.0.1:8080
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

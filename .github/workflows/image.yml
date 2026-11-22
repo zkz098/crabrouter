@@ -1,0 +1,74 @@
+name: Build Debian 13 Appliance Image
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: webui/pnpm-lock.yaml
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+      - name: Build & check WebUI
+        run: |
+          cd webui
+          pnpm install --frozen-lockfile
+          pnpm fmt:check
+          pnpm typecheck
+          pnpm lint
+          pnpm build
+      - name: Run Rust test, clippy, and fmt gates
+        run: |
+          cargo test --workspace
+          cargo clippy --workspace --all-targets -- -D warnings
+          cargo fmt --all -- --check
+
+  build-image:
+    needs: check
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: webui/pnpm-lock.yaml
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Install mkosi & Debian image dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            mkosi systemd-container systemd-ukify squashfs-tools \
+            dosfstools e2fsprogs ovmf qemu-system-x86 qemu-utils \
+            xorriso mtools arch-install-scripts debian-archive-keyring
+      - name: Build release appliance & mkosi UEFI image
+        run: |
+          chmod +x image/mkosi.postinst image/scripts/*.sh
+          bash image/scripts/build-image.sh
+      - name: Upload mkosi output artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: crabrouter-debian13-image
+          path: |
+            image/mkosi.output/*.raw
+            image/mkosi.output/*.vhdx
+            image/mkosi.output/*.iso
+            image/mkosi.output/*.efi
+            image/mkosi.output/SHA256SUMS
+          if-no-files-found: warn

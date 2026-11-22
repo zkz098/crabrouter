@@ -8,11 +8,15 @@ import type { HostInterfaceSnapshot } from "./types/HostInterfaceSnapshot";
 import type { Iperf3Request } from "./types/Iperf3Request";
 import type { LogEvent } from "./types/LogEvent";
 import type { LoginRequest } from "./types/LoginRequest";
+import type { OtaApplyRequest } from "./types/OtaApplyRequest";
+import type { OtaCommandResult } from "./types/OtaCommandResult";
+import type { OtaStatus } from "./types/OtaStatus";
 import type { PingRequest } from "./types/PingRequest";
 import type { RenderedConfigsPreview } from "./types/RenderedConfigsPreview";
 import type { RouterConfig } from "./types/RouterConfig";
 import type { SetupInitRequest } from "./types/SetupInitRequest";
 import type { SetupStatusResponse } from "./types/SetupStatusResponse";
+import type { StagedOtaImage } from "./types/StagedOtaImage";
 import type { SystemdUnitStatus } from "./types/SystemdUnitStatus";
 import type { TracerouteRequest } from "./types/TracerouteRequest";
 import type { WanRuntimeState } from "./types/WanRuntimeState";
@@ -165,4 +169,37 @@ export function openLogWebSocket(): WebSocket {
 export function openMetricsWebSocket(): WebSocket {
   const proto = window.location.protocol === "https:" ? "wss:" : "ws:";
   return new WebSocket(`${proto}//${window.location.host}/api/metrics/ws`);
+}
+
+export function getOtaStatus(): Promise<OtaStatus> {
+  return fetchJson<OtaStatus>("/api/ota/status");
+}
+
+export function checkOtaUpdates(): Promise<OtaCommandResult> {
+  return fetchJson<OtaCommandResult>("/api/ota/check", { method: "POST" });
+}
+
+export function uploadOtaImage(file: File): Promise<StagedOtaImage> {
+  const form = new FormData();
+  form.append("file", file);
+  return fetchJson<StagedOtaImage>("/api/ota/upload", {
+    method: "POST",
+    body: form,
+  });
+}
+
+export function applyOtaUpdate(req: OtaApplyRequest): Promise<OtaCommandResult> {
+  return fetchJson<OtaCommandResult>("/api/ota/apply", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(req),
+  });
+}
+
+export function blessOtaBoot(): Promise<OtaCommandResult> {
+  return fetchJson<OtaCommandResult>("/api/ota/bless", { method: "POST" });
+}
+
+export function rebootSystem(): Promise<OtaCommandResult> {
+  return fetchJson<OtaCommandResult>("/api/ota/reboot", { method: "POST" });
 }

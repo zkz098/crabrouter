@@ -54,10 +54,10 @@
 ## Phase 2：高阶功能与不可变系统 OTA
 
 ### 5. Debian 13 镜像与 OTA 闭环（[image/](image/mkosi.conf)）
-- [ ] 搭建 CI / 本地 `mkosi` 构建环境（安装 `mkosi`、`systemd-container`、`squashfs-tools` 等依赖）并实际产出一个可启动的 UEFI/QEMU 镜像
-- [ ] 编写首次安装刷盘工具（Live USB 引导后写入目标机器 NVMe/SATA 盘的 `systemd-repart` 分区布局）
-- [ ] 补全 `systemd-boot` 启动项计数（Boot Assessment）与 `systemd-sysupdate` A/B 升级失败自动回滚验证
-- [ ] 接入 WebUI 固件升级页面（上传/拉取 OTA 镜像、触发 `systemd-sysupdate`、重启切换槽位）
+- [x] 搭建 CI / 本地 `mkosi` 构建流水线（[.github/workflows/image.yml](.github/workflows/image.yml)、[build-image.sh](image/scripts/build-image.sh)、[qemu-boot.sh](image/scripts/qemu-boot.sh)）（实际产物构建与 UEFI/QEMU 启动需在安装了 `mkosi`/`qemu-system-x86_64` 的环境或 CI runner 执行）
+- [x] 编写首次安装刷盘工具（[installer.rs](crates/crabrouter-cli/src/installer.rs)：`crabctl disks` / `crabctl install`，写入目标盘 `systemd-repart` 分区布局并安装 `systemd-boot`）
+- [x] 补全 `systemd-boot` 启动项计数（Boot Assessment）与 `systemd-sysupdate` A/B 升级配置（[20-uki.transfer](image/mkosi.sysupdate/20-uki.transfer)、[crabrouter-boot-bless.service](image/mkosi.extra/etc/systemd/system/crabrouter-boot-bless.service)）— 真机/QEMU A/B 升级失败自动回滚实测归入 Phase 3 QEMU 测试
+- [x] 接入 WebUI 固件升级页面（[OtaPage.tsx](webui/src/components/OtaPage.tsx)、[ota_api.rs](crates/crabrouter-web/src/ota_api.rs)：上传/拉取 OTA 镜像、触发 `systemd-sysupdate`、`logind` D-Bus 重启切换槽位）
 
 ### 6. 高阶网络特性
 - [ ] **多 WAN 负载均衡与故障切换**

@@ -2,12 +2,14 @@ pub mod api;
 pub mod crabdns_proxy;
 pub mod logs;
 pub mod metrics;
+pub mod ota_api;
 
 use std::path::PathBuf;
 use std::sync::Arc;
 
 use axum::Router;
 use axum::body::Body;
+use axum::extract::DefaultBodyLimit;
 use axum::http::{StatusCode, Uri, header};
 use axum::response::{IntoResponse, Response};
 use axum::routing::{any, get, post};
@@ -28,6 +30,9 @@ pub struct AppState {
     pub wan_bus: WanEventBus,
     pub logs: LogHub,
     pub lease_path: PathBuf,
+    pub ota_dir: PathBuf,
+    pub sysupdate_dir: PathBuf,
+    pub dry_run: bool,
 }
 
 pub fn build_router(
@@ -35,12 +40,17 @@ pub fn build_router(
     wan_bus: WanEventBus,
     logs: LogHub,
     lease_path: PathBuf,
+    ota_dir: PathBuf,
+    dry_run: bool,
 ) -> Router {
     let state = AppState {
         engine,
         wan_bus,
         logs,
         lease_path,
+        ota_dir,
+        sysupdate_dir: PathBuf::from("/etc/sysupdate.d"),
+        dry_run,
     };
 
     Router::new()
@@ -76,6 +86,15 @@ pub fn build_router(
         .route("/api/diag/logs", get(api::diag_logs_snapshot))
         .route("/api/diag/logs/ws", get(api::diag_logs_ws))
         .route("/api/metrics/ws", get(metrics::metrics_ws))
+        .route("/api/ota/status", get(ota_api::ota_status))
+        .route("/api/ota/check", post(ota_api::ota_check))
+        .route(
+            "/api/ota/upload",
+            post(ota_api::ota_upload).layer(DefaultBodyLimit::disable()),
+        )
+        .route("/api/ota/apply", post(ota_api::ota_apply))
+        .route("/api/ota/bless", post(ota_api::ota_bless))
+        .route("/api/ota/reboot", post(ota_api::ota_reboot))
         .route("/crabdns", any(crabdns_proxy::proxy_crabdns))
         .route("/crabdns/{*path}", any(crabdns_proxy::proxy_crabdns))
         .with_state(state)

@@ -16,6 +16,7 @@ import {
   getConfigHistory,
   getDnsStatus,
   getInterfaces,
+  getOtaStatus,
   getPreview,
   getServiceStatuses,
   getSetupStatus,
@@ -32,18 +33,20 @@ import { DiagnosticsPage } from "./components/DiagnosticsPage";
 import { FirewallPage } from "./components/FirewallPage";
 import { LoginView } from "./components/LoginView";
 import { NetworkPage } from "./components/NetworkPage";
+import { OtaPage } from "./components/OtaPage";
 import { OverviewPage } from "./components/OverviewPage";
 import { SetupWizard } from "./components/SetupWizard";
 import type { RouterConfig } from "./types/RouterConfig";
 import type { SystemMetricsSnapshot } from "./types/SystemMetricsSnapshot";
 
-type PageTab = "overview" | "network" | "firewall" | "clients" | "diagnostics";
+type PageTab = "overview" | "network" | "firewall" | "clients" | "ota" | "diagnostics";
 
 const TABS: { id: PageTab; label: string; icon: string }[] = [
   { id: "overview", label: "总览与预览", icon: "i-ri-dashboard-line" },
   { id: "network", label: "接口 / WAN / VLAN", icon: "i-ri-node-tree" },
   { id: "firewall", label: "防火墙 / NAT", icon: "i-ri-shield-line" },
   { id: "clients", label: "终端 / DHCP / VPN", icon: "i-ri-device-line" },
+  { id: "ota", label: "固件升级 / OTA", icon: "i-ri-download-cloud-2-line" },
   { id: "diagnostics", label: "诊断工具箱", icon: "i-ri-terminal-box-line" },
 ];
 
@@ -64,6 +67,7 @@ export default function App() {
   const [dnsStatus, { refetch: refetchDnsStatus }] = createResource(isReady, getDnsStatus);
   const [clients, { refetch: refetchClients }] = createResource(isReady, getClients);
   const [history, { refetch: refetchHistory }] = createResource(isReady, getConfigHistory);
+  const [otaStatus, { refetch: refetchOta }] = createResource(isReady, getOtaStatus);
 
   const [metrics, setMetrics] = createSignal<SystemMetricsSnapshot | null>(null);
   const [tab, setTab] = createSignal<PageTab>("overview");
@@ -115,6 +119,7 @@ export default function App() {
       refetchDnsStatus(),
       refetchClients(),
       refetchHistory(),
+      refetchOta(),
     ]);
     const latest = config();
     if (latest) {
@@ -346,6 +351,14 @@ export default function App() {
                     clients={clients() ?? []}
                     onRefreshClients={() => void refetchClients()}
                     onChange={(next) => setDraft(next)}
+                  />
+                </Match>
+                <Match when={tab() === "ota"}>
+                  <OtaPage
+                    draft={activeDraft()}
+                    otaStatus={otaStatus()}
+                    onChange={(next) => setDraft(next)}
+                    onRefreshOta={() => void refetchOta()}
                   />
                 </Match>
                 <Match when={tab() === "diagnostics"}>

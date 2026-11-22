@@ -107,6 +107,8 @@ pub struct SystemConfig {
     pub web_tls_cert: Option<String>,
     #[serde(default)]
     pub web_tls_key: Option<String>,
+    #[serde(default = "default_ota_url")]
+    pub ota_update_url: String,
     #[serde(default = "default_commit_confirm_secs")]
     #[ts(type = "number")]
     pub commit_confirm_timeout_secs: u64,
@@ -123,6 +125,7 @@ impl Default for SystemConfig {
             web_https_listen: default_https_listen(),
             web_tls_cert: None,
             web_tls_key: None,
+            ota_update_url: default_ota_url(),
             commit_confirm_timeout_secs: default_commit_confirm_secs(),
         }
     }
@@ -575,6 +578,10 @@ fn default_web_listen() -> String {
 
 fn default_https_listen() -> String {
     "0.0.0.0:8443".to_string()
+}
+
+fn default_ota_url() -> String {
+    "https://updates.example.com/crabrouter".to_string()
 }
 
 const fn default_commit_confirm_secs() -> u64 {
