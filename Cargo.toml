@@ -61,3 +61,9 @@ argon2 = "0.5"
 x25519-dalek = { version = "3.0", features = ["static_secrets", "getrandom"] }
 base64 = "0.22"
 getrandom = "0.3"
+zbus = { version = "6", default-features = false, features = ["tokio", "proxy", "tracing"] }
+axum-server = { version = "0.9", features = ["tls-rustls-ring"] }
+rcgen = { version = "0.14", default-features = false, features = ["crypto", "pem", "ring"] }
+hyper = "1"
+hyper-util = { version = "0.1", features = ["client-legacy", "http1", "tokio"] }
+http-body-util = "0.1"

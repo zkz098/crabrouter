@@ -11,12 +11,16 @@ workspace = true
 [dependencies]
 anyhow.workspace = true
 axum.workspace = true
+axum-server.workspace = true
 clap.workspace = true
 crabrouter-core.workspace = true
+crabrouter-model.workspace = true
 crabrouter-net.workspace = true
 crabrouter-services.workspace = true
 crabrouter-web.workspace = true
+ipnet.workspace = true
 mimalloc.workspace = true
+rcgen.workspace = true
 tokio.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true

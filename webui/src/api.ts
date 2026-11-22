@@ -1,6 +1,7 @@
 import type { AuthTokenResponse } from "./types/AuthTokenResponse";
 import type { CommitStatus } from "./types/CommitStatus";
 import type { ConfigSnapshotSummary } from "./types/ConfigSnapshotSummary";
+import type { CrabDnsAggregateStatus } from "./types/CrabDnsAggregateStatus";
 import type { DhcpLeaseEntry } from "./types/DhcpLeaseEntry";
 import type { DiagCommandResult } from "./types/DiagCommandResult";
 import type { HostInterfaceSnapshot } from "./types/HostInterfaceSnapshot";
@@ -12,6 +13,7 @@ import type { RenderedConfigsPreview } from "./types/RenderedConfigsPreview";
 import type { RouterConfig } from "./types/RouterConfig";
 import type { SetupInitRequest } from "./types/SetupInitRequest";
 import type { SetupStatusResponse } from "./types/SetupStatusResponse";
+import type { SystemdUnitStatus } from "./types/SystemdUnitStatus";
 import type { TracerouteRequest } from "./types/TracerouteRequest";
 import type { WanRuntimeState } from "./types/WanRuntimeState";
 import type { WireGuardKeypairResponse } from "./types/WireGuardKeypairResponse";
@@ -65,6 +67,14 @@ export function logout(): Promise<void> {
 
 export function getStatus(): Promise<CommitStatus> {
   return fetchJson<CommitStatus>("/api/status");
+}
+
+export function getServiceStatuses(): Promise<SystemdUnitStatus[]> {
+  return fetchJson<SystemdUnitStatus[]>("/api/services/status");
+}
+
+export function getDnsStatus(): Promise<CrabDnsAggregateStatus> {
+  return fetchJson<CrabDnsAggregateStatus>("/api/dns/status");
 }
 
 export function getInterfaces(): Promise<HostInterfaceSnapshot[]> {
@@ -150,4 +160,9 @@ export function getLogSnapshot(): Promise<LogEvent[]> {
 export function openLogWebSocket(): WebSocket {
   const proto = window.location.protocol === "https:" ? "wss:" : "ws:";
   return new WebSocket(`${proto}//${window.location.host}/api/diag/logs/ws`);
+}
+
+export function openMetricsWebSocket(): WebSocket {
+  const proto = window.location.protocol === "https:" ? "wss:" : "ws:";
+  return new WebSocket(`${proto}//${window.location.host}/api/metrics/ws`);
 }

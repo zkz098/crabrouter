@@ -30,5 +30,8 @@ dev-ui:
     cd webui && pnpm dev
 
 # Build Debian 13 (Trixie) immutable appliance image via mkosi
-build-image: build
+bundle-crabdns:
+    bash image/scripts/bundle-crabdns.sh
+
+build-image: build bundle-crabdns
     cd image && mkosi --force

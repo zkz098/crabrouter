@@ -1,18 +1,33 @@
 import { For, Show, createSignal } from "solid-js";
 import type { ConfigSnapshotSummary } from "../types/ConfigSnapshotSummary";
+import type { CrabDnsAggregateStatus } from "../types/CrabDnsAggregateStatus";
 import type { HostInterfaceSnapshot } from "../types/HostInterfaceSnapshot";
 import type { RenderedConfigsPreview } from "../types/RenderedConfigsPreview";
 import type { RouterConfig } from "../types/RouterConfig";
+import type { SystemMetricsSnapshot } from "../types/SystemMetricsSnapshot";
+import type { SystemdUnitStatus } from "../types/SystemdUnitStatus";
 import type { WanRuntimeState } from "../types/WanRuntimeState";
 
-type PreviewTab = "nftables" | "crabdns" | "dnsmasq" | "dhcpcd" | "udev" | "systemd_link" | "pppd";
+type PreviewTab =
+  | "nftables"
+  | "crabdns"
+  | "dnsmasq"
+  | "wg_quick"
+  | "dhcpcd"
+  | "udev"
+  | "systemd_link"
+  | "pppd";
 
 interface Props {
   config: RouterConfig;
   interfaces: HostInterfaceSnapshot[];
   wanStates: WanRuntimeState[];
+  serviceStatuses: SystemdUnitStatus[];
+  dnsStatus: CrabDnsAggregateStatus | undefined;
+  metrics: SystemMetricsSnapshot | null;
   preview: RenderedConfigsPreview | undefined;
   history: ConfigSnapshotSummary[];
+  onChangeConfig: (next: RouterConfig) => void;
   onRestoreHistory: (gen: number) => void;
 }
 
@@ -45,6 +60,8 @@ export function OverviewPage(props: Props) {
         return p.crabdns;
       case "dnsmasq":
         return p.dnsmasq;
+      case "wg_quick":
+        return p.wg_quick;
       case "dhcpcd":
         return p.dhcpcd;
       case "udev":
@@ -60,33 +77,160 @@ export function OverviewPage(props: Props) {
     }
   };
 
+  const memUsedPct = () => {
+    const m = props.metrics;
+    if (!m || m.memory_total_bytes === 0) {
+      return 0;
+    }
+    return Math.round((m.memory_used_bytes / m.memory_total_bytes) * 100);
+  };
+
+  const rateFor = (name: string) => props.metrics?.interfaces.find((i) => i.name === name);
+
   return (
     <div class="space-y-6">
-      <section class="grid gap-4 md:grid-cols-3">
+      {/* Real-time WebSocket Telemetry Cards */}
+      <section class="grid gap-4 md:grid-cols-4">
+        <div class="rounded-xl border border-slate-800 bg-slate-900/60 p-4">
+          <div class="text-xs text-slate-400">CPU 实时使用率 (WS)</div>
+          <div class="mt-1 font-mono text-xl font-semibold text-orange-400">
+            {props.metrics ? `${props.metrics.cpu_usage_pct.toFixed(1)}%` : "-"}
+          </div>
+          <div class="mt-1 text-xs text-slate-400">
+            1m 负载: {props.metrics ? props.metrics.load_avg_1m.toFixed(2) : "-"}
+            {props.metrics?.temperature_celsius
+              ? ` · ${props.metrics.temperature_celsius.toFixed(1)}°C`
+              : ""}
+          </div>
+        </div>
+
+        <div class="rounded-xl border border-slate-800 bg-slate-900/60 p-4">
+          <div class="text-xs text-slate-400">内存占用</div>
+          <div class="mt-1 font-mono text-xl font-semibold text-sky-400">{memUsedPct()}%</div>
+          <div class="mt-1 text-xs text-slate-400">
+            {props.metrics
+              ? `${formatBytes(props.metrics.memory_used_bytes)} / ${formatBytes(props.metrics.memory_total_bytes)}`
+              : "等待遥测..."}
+          </div>
+        </div>
+
         <div class="rounded-xl border border-slate-800 bg-slate-900/60 p-4">
           <div class="text-xs text-slate-400">前台 DNS (CrabDNS)</div>
-          <div class="mt-1 font-mono text-xl font-semibold text-orange-400">
-            :{props.config.dns.crabdns_port}
+          <div class="mt-1 flex items-center justify-between">
+            <span class="font-mono text-xl font-semibold text-orange-400">
+              :{props.config.dns.crabdns_port}
+            </span>
+            <a
+              href="/crabdns/"
+              target="_blank"
+              rel="noreferrer"
+              class="rounded-md border border-orange-500/40 bg-orange-500/10 px-2 py-0.5 text-[11px] text-orange-300 hover:bg-orange-500/20"
+            >
+              打开面板代理 →
+            </a>
           </div>
-          <div class="mt-1 text-xs text-slate-400">负责客户端分流过滤、DoT/DoH、缓存与日志</div>
+          <div class="mt-1 text-xs text-slate-400">
+            {props.dnsStatus?.reachable
+              ? `状态正常 (127.0.0.1:${props.dnsStatus.web_port})`
+              : `后端 :${props.config.dns.crabdns_web_port} 未运行（干跑/未启动）`}
+          </div>
         </div>
 
         <div class="rounded-xl border border-slate-800 bg-slate-900/60 p-4">
           <div class="text-xs text-slate-400">DHCP & 内网解析 (dnsmasq)</div>
-          <div class="mt-1 font-mono text-xl font-semibold text-sky-400">
+          <div class="mt-1 font-mono text-xl font-semibold text-emerald-400">
             127.0.0.1:{props.config.dns.dnsmasq_dns_port}
           </div>
           <div class="mt-1 text-xs text-slate-400">
-            cache-size=0，专职 DHCP 租约与 .lan / 私网 PTR
+            cache-size=0 · 防失联超时 {props.config.system.commit_confirm_timeout_secs}s
+          </div>
+        </div>
+      </section>
+
+      {/* Systemd D-Bus Service Status & CrabDNS Aggregation */}
+      <section class="grid gap-4 md:grid-cols-2">
+        <div class="rounded-xl border border-slate-800 bg-slate-900/60 p-4">
+          <h2 class="mb-3 text-sm font-semibold text-slate-200">
+            系统服务状态 (systemd D-Bus / zbus)
+          </h2>
+          <div class="grid gap-2 sm:grid-cols-2">
+            <For each={props.serviceStatuses}>
+              {(unit) => (
+                <div class="flex items-center justify-between rounded-lg border border-slate-800 bg-slate-950/60 px-3 py-2 text-xs">
+                  <span class="font-mono text-slate-200">{unit.unit}</span>
+                  <span
+                    class={
+                      unit.active_state === "active"
+                        ? "rounded bg-emerald-500/20 px-2 py-0.5 text-emerald-300"
+                        : "rounded bg-slate-700 px-2 py-0.5 text-slate-300"
+                    }
+                  >
+                    {unit.active_state} ({unit.sub_state})
+                  </span>
+                </div>
+              )}
+            </For>
           </div>
         </div>
 
         <div class="rounded-xl border border-slate-800 bg-slate-900/60 p-4">
-          <div class="text-xs text-slate-400">防失联超时</div>
-          <div class="mt-1 font-mono text-xl font-semibold text-emerald-400">
-            {props.config.system.commit_confirm_timeout_secs}s
+          <h2 class="mb-3 text-sm font-semibold text-slate-200">管理面安全与 HTTPS 设置</h2>
+          <div class="grid gap-3 text-xs sm:grid-cols-2">
+            <label class="flex items-center gap-2 text-slate-300">
+              <input
+                type="checkbox"
+                checked={props.config.system.web_lan_only}
+                onChange={(e) => {
+                  const next = structuredClone(props.config);
+                  next.system.web_lan_only = e.currentTarget.checked;
+                  props.onChangeConfig(next);
+                }}
+              />
+              仅监听 LAN 管理网段与回环
+            </label>
+            <label class="flex items-center gap-2 text-slate-300">
+              <input
+                type="checkbox"
+                checked={props.config.system.web_https_enabled}
+                onChange={(e) => {
+                  const next = structuredClone(props.config);
+                  next.system.web_https_enabled = e.currentTarget.checked;
+                  props.onChangeConfig(next);
+                }}
+              />
+              启用 HTTPS (rustls 自签/自定义证书)
+            </label>
+            <label class="block">
+              <span class="text-slate-400">HTTPS 监听地址</span>
+              <input
+                type="text"
+                value={props.config.system.web_https_listen}
+                onInput={(e) => {
+                  const next = structuredClone(props.config);
+                  next.system.web_https_listen = e.currentTarget.value;
+                  props.onChangeConfig(next);
+                }}
+                class="mt-1 w-full rounded border border-slate-700 bg-slate-950 px-2 py-1 font-mono"
+              />
+            </label>
+            <label class="block">
+              <span class="text-slate-400">Commit-Confirm 超时 (秒)</span>
+              <input
+                type="number"
+                min={5}
+                value={props.config.system.commit_confirm_timeout_secs}
+                onInput={(e) => {
+                  const next = structuredClone(props.config);
+                  next.system.commit_confirm_timeout_secs = Math.max(
+                    5,
+                    Number(e.currentTarget.value) || 60,
+                  );
+                  props.onChangeConfig(next);
+                }}
+                class="mt-1 w-full rounded border border-slate-700 bg-slate-950 px-2 py-1 font-mono"
+              />
+            </label>
           </div>
-          <div class="mt-1 text-xs text-slate-400">Commit-Confirm 自动回滚保护窗口</div>
         </div>
       </section>
 
@@ -117,7 +261,7 @@ export function OverviewPage(props: Props) {
       </Show>
 
       <section class="rounded-xl border border-slate-800 bg-slate-900/60 p-4">
-        <h2 class="mb-3 text-sm font-semibold text-slate-200">主机网络接口</h2>
+        <h2 class="mb-3 text-sm font-semibold text-slate-200">主机网络接口与实时速率</h2>
         <div class="overflow-x-auto">
           <table class="w-full text-left text-xs">
             <thead class="border-b border-slate-800 text-slate-400">
@@ -126,38 +270,47 @@ export function OverviewPage(props: Props) {
                 <th class="py-2 pr-4">状态</th>
                 <th class="py-2 pr-4">MAC</th>
                 <th class="py-2 pr-4">速率</th>
-                <th class="py-2 pr-4">MTU</th>
-                <th class="py-2 pr-4">RX</th>
-                <th class="py-2">TX</th>
+                <th class="py-2 pr-4">RX 实时 / 累计</th>
+                <th class="py-2">TX 实时 / 累计</th>
               </tr>
             </thead>
             <tbody class="divide-y divide-slate-800/70">
               <For each={props.interfaces}>
-                {(iface) => (
-                  <tr>
-                    <td class="py-2 pr-4 font-mono font-medium text-slate-100">{iface.name}</td>
-                    <td class="py-2 pr-4">
-                      <span
-                        class={
-                          iface.oper_state === "up"
-                            ? "rounded bg-emerald-500/20 px-2 py-0.5 text-emerald-300"
-                            : "rounded bg-slate-700 px-2 py-0.5 text-slate-300"
-                        }
-                      >
-                        {iface.oper_state}
-                      </span>
-                    </td>
-                    <td class="py-2 pr-4 font-mono text-slate-400">{iface.mac ?? "-"}</td>
-                    <td class="py-2 pr-4 text-slate-300">
-                      {iface.speed_mbps ? `${iface.speed_mbps} Mbps` : "-"}
-                    </td>
-                    <td class="py-2 pr-4 font-mono text-slate-300">{iface.mtu}</td>
-                    <td class="py-2 pr-4 font-mono text-slate-300">
-                      {formatBytes(iface.rx_bytes)}
-                    </td>
-                    <td class="py-2 font-mono text-slate-300">{formatBytes(iface.tx_bytes)}</td>
-                  </tr>
-                )}
+                {(iface) => {
+                  const rate = () => rateFor(iface.name);
+                  return (
+                    <tr>
+                      <td class="py-2 pr-4 font-mono font-medium text-slate-100">{iface.name}</td>
+                      <td class="py-2 pr-4">
+                        <span
+                          class={
+                            iface.oper_state === "up"
+                              ? "rounded bg-emerald-500/20 px-2 py-0.5 text-emerald-300"
+                              : "rounded bg-slate-700 px-2 py-0.5 text-slate-300"
+                          }
+                        >
+                          {iface.oper_state}
+                        </span>
+                      </td>
+                      <td class="py-2 pr-4 font-mono text-slate-400">{iface.mac ?? "-"}</td>
+                      <td class="py-2 pr-4 text-slate-300">
+                        {iface.speed_mbps ? `${iface.speed_mbps} Mbps` : "-"}
+                      </td>
+                      <td class="py-2 pr-4 font-mono text-slate-300">
+                        <span class="text-sky-300">
+                          {rate() ? `${formatBytes(rate()!.rx_bytes_per_sec)}/s` : "-"}
+                        </span>{" "}
+                        <span class="text-slate-500">({formatBytes(iface.rx_bytes)})</span>
+                      </td>
+                      <td class="py-2 font-mono text-slate-300">
+                        <span class="text-orange-300">
+                          {rate() ? `${formatBytes(rate()!.tx_bytes_per_sec)}/s` : "-"}
+                        </span>{" "}
+                        <span class="text-slate-500">({formatBytes(iface.tx_bytes)})</span>
+                      </td>
+                    </tr>
+                  );
+                }}
               </For>
             </tbody>
           </table>
@@ -174,6 +327,7 @@ export function OverviewPage(props: Props) {
                   "nftables",
                   "crabdns",
                   "dnsmasq",
+                  "wg_quick",
                   "dhcpcd",
                   "udev",
                   "systemd_link",

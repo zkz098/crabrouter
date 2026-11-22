@@ -5,7 +5,7 @@ use arc_swap::ArcSwap;
 use chrono::{DateTime, Utc};
 use crabrouter_model::{RouterConfig, WanRuntimeState};
 use crabrouter_net::{NetworkBackend, WanStateObserver};
-use crabrouter_services::ServiceSupervisor;
+use crabrouter_services::{ServiceSupervisor, SystemdUnitStatus};
 use serde::{Deserialize, Serialize};
 use tokio::sync::Mutex;
 use tokio::task::JoinHandle;
@@ -120,6 +120,11 @@ impl RouterEngine {
 
     pub fn list_history(&self) -> Result<Vec<ConfigSnapshotSummary>> {
         self.db.list_history_summaries()
+    }
+
+    pub async fn service_statuses(&self) -> Result<Vec<SystemdUnitStatus>> {
+        let cfg = self.active.load_full();
+        Ok(self.services.query_unit_statuses(&cfg).await?)
     }
 
     pub async fn restore_snapshot(self: &Arc<Self>, generation: u64) -> Result<CommitStatus> {

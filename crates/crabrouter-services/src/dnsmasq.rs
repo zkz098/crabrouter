@@ -25,7 +25,9 @@ pub fn render_dnsmasq_conf(cfg: &RouterConfig) -> Result<String> {
          no-resolv\n\
          domain-needed\n\
          bogus-priv\n\
+         expand-hosts\n\
          dhcp-authoritative\n\
+         dhcp-leasefile=/var/lib/misc/dnsmasq.leases\n\
          leasefile-ro=false\n",
         cfg.dns.dnsmasq_dns_port
     );

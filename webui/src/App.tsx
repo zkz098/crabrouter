@@ -1,16 +1,28 @@
-import { For, Match, Show, Switch, createEffect, createResource, createSignal } from "solid-js";
+import {
+  For,
+  Match,
+  Show,
+  Switch,
+  createEffect,
+  createResource,
+  createSignal,
+  onCleanup,
+} from "solid-js";
 import {
   beginCommit,
   confirmCommit,
   getClients,
   getConfig,
   getConfigHistory,
+  getDnsStatus,
   getInterfaces,
   getPreview,
+  getServiceStatuses,
   getSetupStatus,
   getStatus,
   getWanStatus,
   logout,
+  openMetricsWebSocket,
   restoreConfigSnapshot,
   rollbackCommit,
 } from "./api";
@@ -23,6 +35,7 @@ import { NetworkPage } from "./components/NetworkPage";
 import { OverviewPage } from "./components/OverviewPage";
 import { SetupWizard } from "./components/SetupWizard";
 import type { RouterConfig } from "./types/RouterConfig";
+import type { SystemMetricsSnapshot } from "./types/SystemMetricsSnapshot";
 
 type PageTab = "overview" | "network" | "firewall" | "clients" | "diagnostics";
 
@@ -44,13 +57,36 @@ export default function App() {
   const [config, { refetch: refetchConfig }] = createResource(isReady, getConfig);
   const [preview, { refetch: refetchPreview }] = createResource(isReady, getPreview);
   const [wanStates, { refetch: refetchWanStates }] = createResource(isReady, getWanStatus);
+  const [serviceStatuses, { refetch: refetchServices }] = createResource(
+    isReady,
+    getServiceStatuses,
+  );
+  const [dnsStatus, { refetch: refetchDnsStatus }] = createResource(isReady, getDnsStatus);
   const [clients, { refetch: refetchClients }] = createResource(isReady, getClients);
   const [history, { refetch: refetchHistory }] = createResource(isReady, getConfigHistory);
 
+  const [metrics, setMetrics] = createSignal<SystemMetricsSnapshot | null>(null);
   const [tab, setTab] = createSignal<PageTab>("overview");
   const [draft, setDraft] = createSignal<RouterConfig | null>(null);
   const [busy, setBusy] = createSignal(false);
   const [errorMsg, setErrorMsg] = createSignal<string | null>(null);
+
+  createEffect(() => {
+    if (!isReady()) {
+      setMetrics(null);
+      return;
+    }
+    const ws = openMetricsWebSocket();
+    ws.onmessage = (evt) => {
+      try {
+        const snap = JSON.parse(String(evt.data)) as SystemMetricsSnapshot;
+        setMetrics(snap);
+      } catch {
+        // ignore malformed telemetry frames
+      }
+    };
+    onCleanup(() => ws.close());
+  });
 
   createEffect(() => {
     const cfg = config();
@@ -75,6 +111,8 @@ export default function App() {
       refetchConfig(),
       refetchPreview(),
       refetchWanStates(),
+      refetchServices(),
+      refetchDnsStatus(),
       refetchClients(),
       refetchHistory(),
     ]);
@@ -282,8 +320,12 @@ export default function App() {
                     config={activeDraft()}
                     interfaces={interfaces() ?? []}
                     wanStates={wanStates() ?? []}
+                    serviceStatuses={serviceStatuses() ?? []}
+                    dnsStatus={dnsStatus()}
+                    metrics={metrics()}
                     preview={preview()}
                     history={history() ?? []}
+                    onChangeConfig={(next) => setDraft(next)}
                     onRestoreHistory={(gen) => void handleRestoreHistory(gen)}
                   />
                 </Match>

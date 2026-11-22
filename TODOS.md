@@ -22,23 +22,23 @@
   - [x] 处理动态接口（如 `ppp0` 未上线时 `flowtable` 设备的安全加载或回退逻辑）
 
 ### 2. `crabrouter-services` — 服务编排与 `crabdns` / `dnsmasq` 联动
-- [ ] **用 `zbus` 替换 `systemctl` 子进程调用**（[supervisor.rs](crates/crabrouter-services/src/supervisor.rs)）
-  - [ ] 通过 `org.freedesktop.systemd1` D-Bus 接口启动、重载、查询 `crabdns.service`、`dnsmasq.service`、`chrony.service`、`wg-quick@*`
-- [ ] **完善 `crabdns` 集成**（[crabdns.rs](crates/crabrouter-services/src/crabdns.rs)）
-  - [ ] 将 `~/projects/crabdns` 打包为 `.deb` 或直接构建进 `mkosi.extra`，补齐 `crabdns.service` systemd 单元
-  - [ ] 配置 `crabdns` 与 `dnsmasq` 租约主机名同步（开启 `dnsmasq` hosts/租约回调或让 `crabdns` `private_ptr_upstreams` 稳定反解 `127.0.0.1:5354`）
-  - [ ] 在 `crabrouter-web` 中增加 `crabdns` 核心状态聚合或反向代理入口（无需暴露两个管理端口）
-- [ ] **WireGuard 服务端配置下发**
-  - [ ] 实现密钥对生成/导入、`wg` Netlink 或配置生成与接口生命周期管理
+- [x] **用 `zbus` 替换 `systemctl` 子进程调用**（[supervisor.rs](crates/crabrouter-services/src/supervisor.rs)）
+  - [x] 通过 `org.freedesktop.systemd1` D-Bus 接口启动、重载、查询 `crabdns.service`、`dnsmasq.service`、`chrony.service`、`wg-quick@*`
+- [x] **完善 `crabdns` 集成**（[crabdns.rs](crates/crabrouter-services/src/crabdns.rs)）
+  - [x] 将 `~/projects/crabdns` 打包为 `.deb` 或直接构建进 `mkosi.extra`，补齐 `crabdns.service` systemd 单元（[bundle-crabdns.sh](image/scripts/bundle-crabdns.sh)）
+  - [x] 配置 `crabdns` 与 `dnsmasq` 租约主机名同步（开启 `dnsmasq` `expand-hosts`/`dhcp-leasefile` 并让 `crabdns` `split_dns` 与 `private_ptr_upstreams` 稳定反解 `127.0.0.1:5354`）
+  - [x] 在 `crabrouter-web` 中增加 `crabdns` 核心状态聚合（`/api/dns/status`）与反向代理入口（`/crabdns/*`，无需暴露两个管理端口）
+- [x] **WireGuard 服务端配置下发**（[wireguard.rs](crates/crabrouter-services/src/wireguard.rs)）
+  - [x] 实现纯 Rust `x25519-dalek` 密钥对生成/导入、`/etc/wireguard/<iface>.conf` 生成与 `wg-quick@.service` 生命周期管理
 
 ### 3. `crabrouter-core` & `crabrouter-daemon` — 可靠性与鉴权
 - [x] **启动恢复与异常兜底**（[transaction.rs](crates/crabrouter-core/src/transaction.rs)、[db.rs](crates/crabrouter-core/src/db.rs)）
   - [x] 记录未确认的 pending 状态标记（纯 Rust `redb`），若在 Commit-Confirm 期间设备意外断电重启，开机优先从已确认的 `last-good` 配置启动
   - [x] 支持配置历史版本快照与一键恢复（保存最近 20 份已确认的 `router.toml`）
-- [ ] **Web 鉴权与安全加固**（[crabrouter-web](crates/crabrouter-web/src/lib.rs)）
+- [x] **Web 鉴权与安全加固**（[crabrouter-web](crates/crabrouter-web/src/lib.rs)、[main.rs](crates/crabrouter-daemon/src/main.rs)）
   - [x] 实现用户登录认证（`Argon2` 密码哈希存储于 `redb`、HttpOnly Cookie / Bearer Token 会话）
-  - [ ] 仅监听 LAN 接口 / HTTPS 支持
-  - [ ] 增加基于 `WebSocket` 的实时指标推送（每秒网口 RX/TX 速率、CPU/内存/温度、Commit-Confirm 倒计时）
+  - [x] 仅监听 LAN 接口（`web_lan_only`）与 HTTPS 支持（`axum-server` + `rustls` + `rcgen` 自签/自定义证书）
+  - [x] 增加基于 `WebSocket` 的实时指标推送（`/api/metrics/ws`：每秒网口 RX/TX 速率、CPU/内存/温度、Commit-Confirm 状态）
 
 ### 4. `webui` — 核心配置页面补全
 - [x] 接入 `crabrouter-model` 导出的 `ts-rs` 类型，完善表单编辑与 `begin_commit` -> 倒计时确认弹窗交互

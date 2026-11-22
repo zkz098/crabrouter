@@ -6,8 +6,6 @@ use axum::extract::ws::{Message, WebSocket};
 use axum::extract::{Path as AxumPath, State, WebSocketUpgrade};
 use axum::http::{HeaderMap, StatusCode, header};
 use axum::response::{IntoResponse, Response};
-use base64::Engine;
-use base64::engine::general_purpose::STANDARD;
 use crabrouter_core::{CommitStatus, ConfigSnapshotSummary, CoreError};
 use crabrouter_model::{
     DhcpLeaseEntry, HostInterfaceSnapshot, LanConfig, RouterConfig, WanConfig, WanRuntimeState,
@@ -16,11 +14,13 @@ use crabrouter_net::{
     WanLeaseEvent, read_host_interfaces, render_dhcpcd_conf, render_nftables_ruleset,
     render_pppd_peer, render_systemd_link_files, render_udev_net_rules,
 };
-use crabrouter_services::{read_online_clients, render_crabdns_toml, render_dnsmasq_conf};
+use crabrouter_services::{
+    SystemdUnitStatus, generate_wireguard_keypair as svc_gen_wg_keypair, read_online_clients,
+    render_crabdns_toml, render_dnsmasq_conf, render_wg_quick_conf,
+};
 use serde::{Deserialize, Serialize};
 use tokio::process::Command;
 use ts_rs::TS;
-use x25519_dalek::{PublicKey, StaticSecret};
 
 use crate::AppState;
 use crate::logs::LogEvent;
@@ -47,6 +47,7 @@ pub struct RenderedConfigsPreview {
     pub crabdns: String,
     pub dhcpcd: String,
     pub udev_rules: String,
+    pub wg_quick: String,
     pub systemd_links: Vec<RenderedFilePreview>,
     pub pppd_peers: Vec<RenderedFilePreview>,
 }
@@ -126,7 +127,7 @@ pub struct ErrorBody {
     error: String,
 }
 
-pub struct ApiError(CoreError);
+pub struct ApiError(pub CoreError);
 
 impl From<CoreError> for ApiError {
     fn from(err: CoreError) -> Self {
@@ -188,7 +189,7 @@ fn extract_token(headers: &HeaderMap) -> Option<String> {
     None
 }
 
-fn require_auth_if_initialized(state: &AppState, headers: &HeaderMap) -> Result<(), ApiError> {
+pub fn require_auth_if_initialized(state: &AppState, headers: &HeaderMap) -> Result<(), ApiError> {
     let initialized = state.engine.db().is_initialized()?;
     if !initialized {
         return Ok(());
@@ -385,12 +386,22 @@ pub async fn preview_rendered(
         })
         .collect();
 
+    let wg_quick = render_wg_quick_conf(
+        &cfg,
+        cfg.wireguard
+            .private_key
+            .as_deref()
+            .filter(|s| !s.trim().is_empty())
+            .unwrap_or("<SERVER_PRIVATE_KEY>"),
+    )?;
+
     Ok(Json(RenderedConfigsPreview {
         nftables: render_nftables_ruleset(&cfg),
         dnsmasq: render_dnsmasq_conf(&cfg)?,
         crabdns: render_crabdns_toml(&cfg)?,
         dhcpcd: render_dhcpcd_conf(&cfg),
         udev_rules: render_udev_net_rules(&cfg.interface_pins),
+        wg_quick,
         systemd_links,
         pppd_peers,
     }))
@@ -461,12 +472,19 @@ pub async fn generate_wireguard_keypair(
     headers: HeaderMap,
 ) -> Result<Json<WireGuardKeypairResponse>, ApiError> {
     require_auth_if_initialized(&state, &headers)?;
-    let secret = StaticSecret::random();
-    let public = PublicKey::from(&secret);
+    let pair = svc_gen_wg_keypair();
     Ok(Json(WireGuardKeypairResponse {
-        private_key: STANDARD.encode(secret.to_bytes()),
-        public_key: STANDARD.encode(public.as_bytes()),
+        private_key: pair.private_key,
+        public_key: pair.public_key,
     }))
+}
+
+pub async fn service_statuses(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> Result<Json<Vec<SystemdUnitStatus>>, ApiError> {
+    require_auth_if_initialized(&state, &headers)?;
+    Ok(Json(state.engine.service_statuses().await?))
 }
 
 pub async fn diag_ping(

@@ -41,14 +41,17 @@ export function ClientsWgPage(props: Props) {
     setBusyKey(true);
     try {
       const peerKeys = await generateWireGuardKeypair();
+      const next = structuredClone(props.draft);
       let srvPub = serverPubKey();
       if (!srvPub) {
         const srvKeys = await generateWireGuardKeypair();
         srvPub = srvKeys.public_key;
         setServerPubKey(srvPub);
+        if (!next.wireguard.private_key) {
+          next.wireguard.private_key = srvKeys.private_key;
+        }
       }
 
-      const next = structuredClone(props.draft);
       const idx = next.wireguard.peers.length + 1;
       const clientIp = `10.10.0.${idx + 1}/32`;
       const peerName = `peer-${idx}`;

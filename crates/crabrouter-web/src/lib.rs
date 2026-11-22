@@ -1,5 +1,7 @@
 pub mod api;
+pub mod crabdns_proxy;
 pub mod logs;
+pub mod metrics;
 
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -8,7 +10,7 @@ use axum::Router;
 use axum::body::Body;
 use axum::http::{StatusCode, Uri, header};
 use axum::response::{IntoResponse, Response};
-use axum::routing::{get, post};
+use axum::routing::{any, get, post};
 use crabrouter_core::RouterEngine;
 use crabrouter_net::WanEventBus;
 use rust_embed::RustEmbed;
@@ -48,6 +50,8 @@ pub fn build_router(
         .route("/api/auth/login", post(api::auth_login))
         .route("/api/auth/logout", post(api::auth_logout))
         .route("/api/status", get(api::status))
+        .route("/api/services/status", get(api::service_statuses))
+        .route("/api/dns/status", get(crabdns_proxy::dns_aggregate_status))
         .route("/api/interfaces", get(api::interfaces))
         .route("/api/wans/status", get(api::wan_status))
         .route("/api/net/wan-event", post(api::ingest_wan_event))
@@ -71,6 +75,9 @@ pub fn build_router(
         .route("/api/diag/iperf3", post(api::diag_iperf3))
         .route("/api/diag/logs", get(api::diag_logs_snapshot))
         .route("/api/diag/logs/ws", get(api::diag_logs_ws))
+        .route("/api/metrics/ws", get(metrics::metrics_ws))
+        .route("/crabdns", any(crabdns_proxy::proxy_crabdns))
+        .route("/crabdns/{*path}", any(crabdns_proxy::proxy_crabdns))
         .with_state(state)
         .layer(CorsLayer::permissive())
         .fallback(static_handler)

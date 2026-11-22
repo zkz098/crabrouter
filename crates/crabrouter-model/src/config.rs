@@ -67,6 +67,10 @@ pub struct WireGuardConfig {
     #[serde(default = "default_wg_cidr")]
     pub address_cidr: String,
     #[serde(default)]
+    pub private_key: Option<String>,
+    #[serde(default)]
+    pub mtu: Option<u16>,
+    #[serde(default)]
     pub peers: Vec<WireGuardPeer>,
 }
 
@@ -77,6 +81,8 @@ impl Default for WireGuardConfig {
             interface: default_wg_interface(),
             listen_port: default_wg_port(),
             address_cidr: default_wg_cidr(),
+            private_key: None,
+            mtu: None,
             peers: Vec::new(),
         }
     }
@@ -91,6 +97,16 @@ pub struct SystemConfig {
     pub timezone: String,
     #[serde(default = "default_web_listen")]
     pub web_listen: String,
+    #[serde(default)]
+    pub web_lan_only: bool,
+    #[serde(default)]
+    pub web_https_enabled: bool,
+    #[serde(default = "default_https_listen")]
+    pub web_https_listen: String,
+    #[serde(default)]
+    pub web_tls_cert: Option<String>,
+    #[serde(default)]
+    pub web_tls_key: Option<String>,
     #[serde(default = "default_commit_confirm_secs")]
     #[ts(type = "number")]
     pub commit_confirm_timeout_secs: u64,
@@ -102,6 +118,11 @@ impl Default for SystemConfig {
             hostname: default_hostname(),
             timezone: default_timezone(),
             web_listen: default_web_listen(),
+            web_lan_only: false,
+            web_https_enabled: false,
+            web_https_listen: default_https_listen(),
+            web_tls_cert: None,
+            web_tls_key: None,
             commit_confirm_timeout_secs: default_commit_confirm_secs(),
         }
     }
@@ -172,6 +193,7 @@ impl RouterConfig {
         self.validate_interface_pins()?;
         self.validate_routing()?;
         self.validate_firewall()?;
+        self.validate_wireguard()?;
         Ok(())
     }
 
@@ -431,6 +453,20 @@ impl RouterConfig {
         }
         Ok(())
     }
+
+    fn validate_wireguard(&self) -> Result<()> {
+        if self.wireguard.enabled {
+            if self.wireguard.interface.trim().is_empty() {
+                return Err(ModelError::Validation(
+                    "wireguard.interface cannot be empty when enabled".to_string(),
+                ));
+            }
+            self.wireguard.address_cidr.parse::<IpNet>().map_err(|e| {
+                ModelError::Validation(format!("wireguard invalid address_cidr: {e}"))
+            })?;
+        }
+        Ok(())
+    }
 }
 
 fn validate_opt_ip_or_net(val: Option<&str>, rule_name: &str, field: &str) -> Result<()> {
@@ -535,6 +571,10 @@ fn default_timezone() -> String {
 
 fn default_web_listen() -> String {
     "0.0.0.0:8080".to_string()
+}
+
+fn default_https_listen() -> String {
+    "0.0.0.0:8443".to_string()
 }
 
 const fn default_commit_confirm_secs() -> u64 {
