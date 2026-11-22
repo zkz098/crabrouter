@@ -6,7 +6,7 @@ use std::net::IpAddr;
 use std::path::PathBuf;
 use std::pin::Pin;
 
-use crabrouter_model::{RouterConfig, WanProto};
+use crabrouter_model::{RouterConfig, WanProto, WanRuntimeState, wan_fwmark, wan_table_id};
 use ipnet::IpNet;
 use rtnetlink::packet_route::AddressFamily;
 use rtnetlink::packet_route::route::RouteProtocol;
@@ -18,7 +18,7 @@ use crate::pins::sync_interface_pin_files;
 use crate::pppoe::{PppdManager, render_pppd_peer};
 use crate::qos::{apply_tc_qos, render_tc_qos_script};
 
-pub use apply::apply_rtnetlink_diff;
+pub use apply::{apply_rtnetlink_diff, apply_rtnetlink_diff_with_wans};
 
 pub type BoxFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
 
@@ -182,6 +182,7 @@ pub struct DesiredRule {
     pub src: Option<IpNet>,
     pub dst: Option<IpNet>,
     pub iif: Option<String>,
+    pub fwmark: Option<u32>,
     pub table_id: u32,
 }
 
@@ -192,6 +193,7 @@ pub struct ObservedRule {
     pub src: Option<IpNet>,
     pub dst: Option<IpNet>,
     pub iif: Option<String>,
+    pub fwmark: Option<u32>,
     pub table_id: u32,
 }
 
@@ -238,6 +240,19 @@ pub fn compute_network_diff_plan(
     routes: &[ObservedRoute],
     rules: &[ObservedRule],
 ) -> NetworkDiffPlan {
+    compute_network_diff_plan_with_wans(cfg, links, addrs, routes, rules, &[], &[])
+}
+
+/// Computes incremental Netlink diff including dynamic Multi-WAN routing tables and `fwmark` rules.
+pub fn compute_network_diff_plan_with_wans(
+    cfg: &RouterConfig,
+    links: &[ObservedLink],
+    addrs: &[ObservedAddr],
+    routes: &[ObservedRoute],
+    rules: &[ObservedRule],
+    wan_states: &[WanRuntimeState],
+    active_wans: &[String],
+) -> NetworkDiffPlan {
     let mut plan = NetworkDiffPlan::default();
     let link_by_name: HashMap<&str, &ObservedLink> =
         links.iter().map(|l| (l.name.as_str(), l)).collect();
@@ -246,8 +261,15 @@ pub fn compute_network_diff_plan(
     plan_bridges_and_ports(cfg, links, &link_by_name, &mut plan);
     plan_vlans(cfg, links, &link_by_name, &link_by_index, &mut plan);
     plan_addresses(cfg, &link_by_name, &link_by_index, addrs, &mut plan);
-    plan_routes(cfg, &link_by_index, routes, &mut plan);
-    plan_policy_rules(cfg, rules, &mut plan);
+    plan_routes(
+        cfg,
+        &link_by_index,
+        routes,
+        wan_states,
+        active_wans,
+        &mut plan,
+    );
+    plan_policy_rules(cfg, rules, wan_states, &mut plan);
 
     for wan in &cfg.wans {
         plan.links_to_up_mtu
@@ -455,26 +477,51 @@ fn plan_routes(
     cfg: &RouterConfig,
     link_by_index: &HashMap<u32, &ObservedLink>,
     routes: &[ObservedRoute],
+    wan_states: &[WanRuntimeState],
+    active_wans: &[String],
     plan: &mut NetworkDiffPlan,
 ) {
     let mut desired: Vec<DesiredRoute> = Vec::new();
     let mut managed_tables: HashSet<u32> = HashSet::new();
 
-    for wan in &cfg.wans {
+    for (idx, wan) in cfg.wans.iter().enumerate() {
+        let rt = wan_states.iter().find(|s| s.wan_name == wan.name);
+        let gw_opt = wan
+            .gateway
+            .as_deref()
+            .or_else(|| rt.and_then(|s| s.gateway.as_deref()))
+            .and_then(|s| s.parse::<IpAddr>().ok());
+        let dev = rt.map_or_else(|| wan.device.clone(), |s| s.device.clone());
+
         if wan.proto == WanProto::Static
-            && let Some(gw_str) = wan.gateway.as_deref()
-            && let Ok(gw) = gw_str.parse::<IpAddr>()
+            && let Some(gw) = gw_opt
         {
-            let dest = match gw {
-                IpAddr::V4(_) => "0.0.0.0/0".parse().expect("valid v4 default"),
-                IpAddr::V6(_) => "::/0".parse().expect("valid v6 default"),
-            };
-            managed_tables.insert(254);
+            let dest = default_route_prefix(gw);
+            let is_active = !cfg.multi_wan.enabled
+                || active_wans.is_empty()
+                || active_wans.iter().any(|n| n == &wan.name);
+            if is_active {
+                managed_tables.insert(254);
+                desired.push(DesiredRoute {
+                    table_id: 254,
+                    destination: dest,
+                    gateway: Some(gw),
+                    device: Some(dev.clone()),
+                    metric: Some(wan.metric),
+                });
+            }
+        }
+
+        if cfg.multi_wan.enabled
+            && let Some(gw) = gw_opt
+        {
+            let table_id = wan_table_id(idx, wan);
+            managed_tables.insert(table_id);
             desired.push(DesiredRoute {
-                table_id: 254,
-                destination: dest,
+                table_id,
+                destination: default_route_prefix(gw),
                 gateway: Some(gw),
-                device: Some(wan.device.clone()),
+                device: Some(dev),
                 metric: Some(wan.metric),
             });
         }
@@ -544,7 +591,19 @@ fn route_matches(
     true
 }
 
-fn plan_policy_rules(cfg: &RouterConfig, rules: &[ObservedRule], plan: &mut NetworkDiffPlan) {
+fn default_route_prefix(gw: IpAddr) -> IpNet {
+    match gw {
+        IpAddr::V4(_) => "0.0.0.0/0".parse().expect("valid v4 default"),
+        IpAddr::V6(_) => "::/0".parse().expect("valid v6 default"),
+    }
+}
+
+fn plan_policy_rules(
+    cfg: &RouterConfig,
+    rules: &[ObservedRule],
+    wan_states: &[WanRuntimeState],
+    plan: &mut NetworkDiffPlan,
+) {
     let mut desired: Vec<DesiredRule> = Vec::new();
     for rule in &cfg.policy_rules {
         desired.push(DesiredRule {
@@ -552,8 +611,36 @@ fn plan_policy_rules(cfg: &RouterConfig, rules: &[ObservedRule], plan: &mut Netw
             src: rule.src.as_deref().and_then(|s| s.parse().ok()),
             dst: rule.dst.as_deref().and_then(|s| s.parse().ok()),
             iif: rule.iif.clone(),
+            fwmark: None,
             table_id: rule.table_id,
         });
+    }
+
+    if cfg.multi_wan.enabled {
+        for (idx, wan) in cfg.wans.iter().enumerate() {
+            let table_id = wan_table_id(idx, wan);
+            desired.push(DesiredRule {
+                priority: 1000 + idx as u32,
+                src: None,
+                dst: None,
+                iif: None,
+                fwmark: Some(wan_fwmark(table_id)),
+                table_id,
+            });
+            if let Some(rt) = wan_states.iter().find(|s| s.wan_name == wan.name)
+                && let Some(ip_str) = rt.ip.as_deref()
+                && let Ok(ip) = ip_str.parse::<IpAddr>()
+            {
+                desired.push(DesiredRule {
+                    priority: 1100 + idx as u32,
+                    src: Some(IpNet::from(ip)),
+                    dst: None,
+                    iif: None,
+                    fwmark: None,
+                    table_id,
+                });
+            }
+        }
     }
 
     for want in &desired {
@@ -581,6 +668,7 @@ fn rule_matches(obs: &ObservedRule, want: &DesiredRule) -> bool {
         && obs.src == want.src
         && obs.dst == want.dst
         && obs.iif == want.iif
+        && obs.fwmark == want.fwmark
 }
 
 fn is_link_local_or_loopback(net: &IpNet) -> bool {
@@ -665,5 +753,44 @@ mod tests {
         assert_eq!(plan.addrs_to_add.len(), 2);
         assert_eq!(plan.routes_to_add.len(), 1);
         assert_eq!(plan.rules_to_add.len(), 1);
+    }
+
+    #[test]
+    fn computes_multi_wan_per_table_routes_and_fwmark_rules() {
+        let mut cfg = RouterConfig::default();
+        cfg.wans[0].proto = WanProto::Static;
+        cfg.wans[0].static_cidr = Some("10.0.0.2/24".to_string());
+        cfg.wans[0].gateway = Some("10.0.0.1".to_string());
+
+        let mut wan2 = cfg.wans[0].clone();
+        wan2.name = "wan2".to_string();
+        wan2.device = "eth4".to_string();
+        wan2.gateway = Some("10.0.1.1".to_string());
+        wan2.static_cidr = Some("10.0.1.2/24".to_string());
+        wan2.metric = 200;
+        cfg.wans.push(wan2);
+        cfg.multi_wan.enabled = true;
+
+        let plan = compute_network_diff_plan_with_wans(
+            &cfg,
+            &[],
+            &[],
+            &[],
+            &[],
+            &[],
+            &["wan".to_string(), "wan2".to_string()],
+        );
+        assert!(plan.routes_to_add.iter().any(|r| r.table_id == 101));
+        assert!(plan.routes_to_add.iter().any(|r| r.table_id == 102));
+        assert!(
+            plan.rules_to_add
+                .iter()
+                .any(|r| r.table_id == 101 && r.fwmark == Some(wan_fwmark(101)))
+        );
+        assert!(
+            plan.rules_to_add
+                .iter()
+                .any(|r| r.table_id == 102 && r.fwmark == Some(wan_fwmark(102)))
+        );
     }
 }

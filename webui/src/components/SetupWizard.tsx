@@ -85,6 +85,10 @@ export function SetupWizard(props: Props) {
       ipv6_pd: true,
       ipv6_pd_prefix_len: 60,
       metric: 100,
+      weight: 1,
+      table_id: null,
+      health_check_enabled: true,
+      probe_targets: [],
     };
 
     const lan: LanConfig = {

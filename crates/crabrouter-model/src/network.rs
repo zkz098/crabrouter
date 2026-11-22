@@ -43,6 +43,14 @@ pub struct WanConfig {
     pub ipv6_pd_prefix_len: u8,
     #[serde(default = "default_metric")]
     pub metric: u32,
+    #[serde(default = "default_wan_weight")]
+    pub weight: u32,
+    #[serde(default)]
+    pub table_id: Option<u32>,
+    #[serde(default = "default_true")]
+    pub health_check_enabled: bool,
+    #[serde(default)]
+    pub probe_targets: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
@@ -342,6 +350,145 @@ pub struct HardwareHealthSnapshot {
     pub sensors: Vec<ThermalSensorReading>,
     pub disks: Vec<DiskHealthReport>,
     pub alerts: Vec<HardwareAlert>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default, TS)]
+#[serde(rename_all = "snake_case")]
+#[ts(export)]
+pub enum MultiWanMode {
+    #[default]
+    Failover,
+    LoadBalance,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default, TS)]
+#[serde(rename_all = "snake_case")]
+#[ts(export)]
+pub enum ProbeProtocol {
+    #[default]
+    Icmp,
+    Http,
+    IcmpAndHttp,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct MultiWanConfig {
+    #[serde(default)]
+    pub enabled: bool,
+    #[serde(default)]
+    pub mode: MultiWanMode,
+    #[serde(default)]
+    pub probe_protocol: ProbeProtocol,
+    #[serde(default = "default_probe_targets")]
+    pub probe_targets: Vec<String>,
+    #[serde(default = "default_probe_interval_secs")]
+    pub probe_interval_secs: u32,
+    #[serde(default = "default_probe_timeout_ms")]
+    pub probe_timeout_ms: u32,
+    #[serde(default = "default_fail_threshold")]
+    pub fail_threshold: u8,
+    #[serde(default = "default_recover_threshold")]
+    pub recover_threshold: u8,
+    #[serde(default = "default_true")]
+    pub sticky_sessions: bool,
+    #[serde(default = "default_true")]
+    pub flush_conntrack_on_failover: bool,
+}
+
+impl Default for MultiWanConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            mode: MultiWanMode::default(),
+            probe_protocol: ProbeProtocol::default(),
+            probe_targets: default_probe_targets(),
+            probe_interval_secs: default_probe_interval_secs(),
+            probe_timeout_ms: default_probe_timeout_ms(),
+            fail_threshold: default_fail_threshold(),
+            recover_threshold: default_recover_threshold(),
+            sticky_sessions: true,
+            flush_conntrack_on_failover: true,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default, TS)]
+#[serde(rename_all = "snake_case")]
+#[ts(export)]
+pub enum WanHealthState {
+    #[default]
+    Unknown,
+    Healthy,
+    Degraded,
+    Down,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct WanProbeResult {
+    pub wan_name: String,
+    pub device: String,
+    pub table_id: u32,
+    pub fwmark: u32,
+    pub weight: u32,
+    pub metric: u32,
+    pub health: WanHealthState,
+    pub active: bool,
+    pub effective_weight: u32,
+    pub rtt_ms: Option<f64>,
+    pub packet_loss_pct: u8,
+    pub consecutive_failures: u8,
+    pub consecutive_successes: u8,
+    pub last_target: Option<String>,
+    pub last_error: Option<String>,
+    pub last_checked_at: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct MultiWanRuntimeStatus {
+    pub enabled: bool,
+    pub mode: MultiWanMode,
+    pub active_wans: Vec<String>,
+    pub wans: Vec<WanProbeResult>,
+    pub last_failover_at: Option<String>,
+    #[ts(type = "number")]
+    pub failover_count: u64,
+}
+
+const fn default_wan_weight() -> u32 {
+    1
+}
+
+/// Returns the deterministic routing table ID for a WAN interface.
+pub fn wan_table_id(idx: usize, wan: &WanConfig) -> u32 {
+    wan.table_id.unwrap_or(101 + idx as u32)
+}
+
+/// Returns the `fwmark` value associated with a WAN routing table ID.
+pub const fn wan_fwmark(table_id: u32) -> u32 {
+    0x1000 + table_id
+}
+
+fn default_probe_targets() -> Vec<String> {
+    vec!["1.1.1.1".to_string(), "8.8.8.8".to_string()]
+}
+
+const fn default_probe_interval_secs() -> u32 {
+    5
+}
+
+const fn default_probe_timeout_ms() -> u32 {
+    2000
+}
+
+const fn default_fail_threshold() -> u8 {
+    3
+}
+
+const fn default_recover_threshold() -> u8 {
+    2
 }
 
 const fn default_overhead_bytes() -> i16 {

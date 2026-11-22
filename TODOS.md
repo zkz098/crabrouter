@@ -60,9 +60,9 @@
 - [x] 接入 WebUI 固件升级页面（[OtaPage.tsx](webui/src/components/OtaPage.tsx)、[ota_api.rs](crates/crabrouter-web/src/ota_api.rs)：上传/拉取 OTA 镜像、触发 `systemd-sysupdate`、`logind` D-Bus 重启切换槽位）
 
 ### 6. 高阶网络特性
-- [ ] **多 WAN 负载均衡与故障切换**
-  - [ ] 基于策略路由 + 多路由表 + ICMP/HTTP 健康探测实现主备切换与按权重分流
-  - [ ] WAN 切换时精确清理受影响的 `conntrack` 条目
+- [x] **多 WAN 负载均衡与故障切换**
+  - [x] 基于策略路由 + 多路由表 + ICMP/HTTP 健康探测实现主备切换与按权重分流（[multi_wan.rs](crates/crabrouter-net/src/multi_wan.rs)、[nftables.rs](crates/crabrouter-net/src/nftables.rs)、[netlink/mod.rs](crates/crabrouter-net/src/netlink/mod.rs)）
+  - [x] WAN 切换时精确清理受影响的 `conntrack` 条目（[conntrack.rs](crates/crabrouter-net/src/conntrack.rs)）
 - [x] **完整 IPv6-PD 支持**
   - [x] 从上游 `dhcpcd` / `pppd` 获取动态 `/56` 或 `/60` 前缀并自动向多个 LAN/VLAN 下发 `/64` RA（`dnsmasq` 或 `radvd`）（[ipv6_pd.rs](crates/crabrouter-net/src/ipv6_pd.rs)、[dhcpcd.rs](crates/crabrouter-net/src/dhcpcd.rs)、[pppoe.rs](crates/crabrouter-net/src/pppoe.rs)、[dnsmasq.rs](crates/crabrouter-services/src/dnsmasq.rs)）
 - [x] **连接追踪与 QoS**

@@ -15,7 +15,7 @@ use axum::http::{StatusCode, Uri, header};
 use axum::response::{IntoResponse, Response};
 use axum::routing::{any, get, post};
 use crabrouter_core::RouterEngine;
-use crabrouter_net::WanEventBus;
+use crabrouter_net::{MultiWanManager, WanEventBus};
 use rust_embed::RustEmbed;
 use tower_http::cors::CorsLayer;
 
@@ -29,6 +29,7 @@ struct WebAssets;
 pub struct AppState {
     pub engine: Arc<RouterEngine>,
     pub wan_bus: WanEventBus,
+    pub multi_wan: MultiWanManager,
     pub logs: LogHub,
     pub lease_path: PathBuf,
     pub ota_dir: PathBuf,
@@ -39,6 +40,7 @@ pub struct AppState {
 pub fn build_router(
     engine: Arc<RouterEngine>,
     wan_bus: WanEventBus,
+    multi_wan: MultiWanManager,
     logs: LogHub,
     lease_path: PathBuf,
     ota_dir: PathBuf,
@@ -47,6 +49,7 @@ pub fn build_router(
     let state = AppState {
         engine,
         wan_bus,
+        multi_wan,
         logs,
         lease_path,
         ota_dir,
@@ -65,6 +68,8 @@ pub fn build_router(
         .route("/api/dns/status", get(crabdns_proxy::dns_aggregate_status))
         .route("/api/interfaces", get(api::interfaces))
         .route("/api/wans/status", get(api::wan_status))
+        .route("/api/wans/multi-wan/status", get(api::multi_wan_status))
+        .route("/api/wans/multi-wan/probe", post(api::multi_wan_probe_now))
         .route("/api/net/wan-event", post(api::ingest_wan_event))
         .route("/api/clients", get(api::online_clients))
         .route("/api/conntrack", get(api::list_conntrack))

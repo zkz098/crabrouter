@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 
-use crabrouter_model::RouterConfig;
+use crabrouter_model::{RouterConfig, WanRuntimeState};
 use futures_util::stream::TryStreamExt;
 use ipnet::IpNet;
 use rtnetlink::packet_route::AddressFamily;
@@ -16,28 +16,50 @@ use rtnetlink::{
 
 use super::{
     DesiredRoute, DesiredRule, NetworkDiffPlan, ObservedAddr, ObservedLink, ObservedRoute,
-    ObservedRule, compute_network_diff_plan,
+    ObservedRule, compute_network_diff_plan_with_wans,
 };
 use crate::{NetError, Result};
 
 /// Applies the incremental Netlink diff plan to the live Linux kernel via `rtnetlink`.
 pub async fn apply_rtnetlink_diff(cfg: &RouterConfig) -> Result<()> {
+    apply_rtnetlink_diff_with_wans(cfg, &[], &[]).await
+}
+
+/// Applies the incremental Netlink diff plan including dynamic Multi-WAN routing tables and rules.
+pub async fn apply_rtnetlink_diff_with_wans(
+    cfg: &RouterConfig,
+    wan_states: &[WanRuntimeState],
+    active_wans: &[String],
+) -> Result<()> {
     let (connection, handle, _) =
         new_connection().map_err(|e| NetError::Apply(format!("rtnetlink socket error: {e}")))?;
     let conn_task = tokio::spawn(connection);
 
-    let result = apply_rtnetlink_with_handle(&handle, cfg).await;
+    let result = apply_rtnetlink_with_handle(&handle, cfg, wan_states, active_wans).await;
     conn_task.abort();
     result
 }
 
-async fn apply_rtnetlink_with_handle(handle: &Handle, cfg: &RouterConfig) -> Result<()> {
+async fn apply_rtnetlink_with_handle(
+    handle: &Handle,
+    cfg: &RouterConfig,
+    wan_states: &[WanRuntimeState],
+    active_wans: &[String],
+) -> Result<()> {
     let links = dump_links(handle).await?;
     let addrs = dump_addresses(handle).await?;
     let routes = dump_routes(handle).await?;
     let rules = dump_rules(handle).await?;
 
-    let plan = compute_network_diff_plan(cfg, &links, &addrs, &routes, &rules);
+    let plan = compute_network_diff_plan_with_wans(
+        cfg,
+        &links,
+        &addrs,
+        &routes,
+        &rules,
+        wan_states,
+        active_wans,
+    );
     let name_to_index = apply_link_diff(handle, &plan).await?;
     apply_addr_diff(handle, &plan, &name_to_index).await?;
     apply_route_and_rule_diff(handle, &plan, &name_to_index).await?;
@@ -384,6 +406,7 @@ async fn dump_rules(handle: &Handle) -> Result<Vec<ObservedRule>> {
             let mut src_ip = None;
             let mut dst_ip = None;
             let mut iif = None;
+            let mut fwmark = None;
 
             for attr in msg.attributes {
                 match attr {
@@ -392,6 +415,7 @@ async fn dump_rules(handle: &Handle) -> Result<Vec<ObservedRule>> {
                     RuleAttribute::Source(ip) => src_ip = Some(ip),
                     RuleAttribute::Destination(ip) => dst_ip = Some(ip),
                     RuleAttribute::Iifname(name) => iif = Some(name),
+                    RuleAttribute::FwMark(m) => fwmark = Some(m),
                     _ => {}
                 }
             }
@@ -404,6 +428,7 @@ async fn dump_rules(handle: &Handle) -> Result<Vec<ObservedRule>> {
                 src,
                 dst,
                 iif,
+                fwmark,
                 table_id,
             });
         }
@@ -524,6 +549,9 @@ async fn add_rule(handle: &Handle, rule: &DesiredRule) -> Result<()> {
         if let Some(ref iif) = rule.iif {
             req = req.input_interface(iif);
         }
+        if let Some(mark) = rule.fwmark {
+            req = req.fw_mark(mark);
+        }
         req.execute()
             .await
             .map_err(|e| NetError::Apply(format!("add v6 rule prio {} failed: {e}", rule.priority)))
@@ -542,6 +570,9 @@ async fn add_rule(handle: &Handle, rule: &DesiredRule) -> Result<()> {
         }
         if let Some(ref iif) = rule.iif {
             req = req.input_interface(iif);
+        }
+        if let Some(mark) = rule.fwmark {
+            req = req.fw_mark(mark);
         }
         req.execute()
             .await
@@ -565,6 +596,9 @@ async fn del_rule(handle: &Handle, rule: &ObservedRule) -> Result<()> {
     }
     if let Some(ref iif) = rule.iif {
         msg.attributes.push(RuleAttribute::Iifname(iif.clone()));
+    }
+    if let Some(mark) = rule.fwmark {
+        msg.attributes.push(RuleAttribute::FwMark(mark));
     }
     handle
         .rule()

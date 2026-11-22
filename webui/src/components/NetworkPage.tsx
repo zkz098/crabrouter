@@ -1,9 +1,14 @@
-import { For, Show, createSignal } from "solid-js";
+import { For, Show, createResource, createSignal } from "solid-js";
+import { getMultiWanStatus, triggerMultiWanProbe } from "../api";
 import type { HostInterfaceSnapshot } from "../types/HostInterfaceSnapshot";
 import type { InterfaceRole } from "../types/InterfaceRole";
 import type { LanConfig } from "../types/LanConfig";
+import type { MultiWanConfig } from "../types/MultiWanConfig";
+import type { MultiWanMode } from "../types/MultiWanMode";
+import type { ProbeProtocol } from "../types/ProbeProtocol";
 import type { RouterConfig } from "../types/RouterConfig";
 import type { WanConfig } from "../types/WanConfig";
+import type { WanHealthState } from "../types/WanHealthState";
 import type { WanProto } from "../types/WanProto";
 import type { WanRuntimeState } from "../types/WanRuntimeState";
 
@@ -16,6 +21,38 @@ interface Props {
 
 export function NetworkPage(props: Props) {
   const [draggedIface, setDraggedIface] = createSignal<string | null>(null);
+  const [multiWanStatus, { mutate: setMultiWanStatus, refetch: refetchMultiWan }] =
+    createResource(getMultiWanStatus);
+  const [probing, setProbing] = createSignal(false);
+
+  async function runProbeNow() {
+    setProbing(true);
+    try {
+      const res = await triggerMultiWanProbe();
+      setMultiWanStatus(res);
+    } finally {
+      setProbing(false);
+    }
+  }
+
+  function updateMultiWan(patch: Partial<MultiWanConfig>) {
+    const next = structuredClone(props.draft);
+    next.multi_wan = { ...next.multi_wan, ...patch };
+    props.onChange(next);
+  }
+
+  function healthBadgeClass(h: WanHealthState): string {
+    switch (h) {
+      case "healthy":
+        return "bg-emerald-500/20 text-emerald-300";
+      case "degraded":
+        return "bg-amber-500/20 text-amber-300";
+      case "down":
+        return "bg-rose-500/20 text-rose-300";
+      default:
+        return "bg-slate-700 text-slate-300";
+    }
+  }
 
   const primaryLan = (): LanConfig | undefined => props.draft.lans[0];
 
@@ -103,6 +140,10 @@ export function NetworkPage(props: Props) {
       ipv6_pd: true,
       ipv6_pd_prefix_len: 60,
       metric: 100 + next.wans.length * 10,
+      weight: 1,
+      table_id: null,
+      health_check_enabled: true,
+      probe_targets: [],
     });
     props.onChange(next);
   }
@@ -365,7 +406,44 @@ export function NetworkPage(props: Props) {
                         class="mt-1 w-full rounded-lg border border-slate-700 bg-slate-900 px-2.5 py-1.5 font-mono text-xs"
                       />
                     </label>
+                    <label class="block text-xs">
+                      <span class="text-slate-400">分流权重 (Weight)</span>
+                      <input
+                        type="number"
+                        min="1"
+                        value={wan.weight}
+                        onInput={(e) =>
+                          updateWan(idx(), {
+                            weight: Math.max(1, Number(e.currentTarget.value) || 1),
+                          })
+                        }
+                        class="mt-1 w-full rounded-lg border border-slate-700 bg-slate-900 px-2.5 py-1.5 font-mono text-xs"
+                      />
+                    </label>
+                    <label class="block text-xs">
+                      <span class="text-slate-400">路由表 ID (可选)</span>
+                      <input
+                        type="number"
+                        value={wan.table_id ?? ""}
+                        placeholder={`自动 (${101 + idx()})`}
+                        onInput={(e) => {
+                          const raw = e.currentTarget.value.trim();
+                          updateWan(idx(), { table_id: raw ? Number(raw) : null });
+                        }}
+                        class="mt-1 w-full rounded-lg border border-slate-700 bg-slate-900 px-2.5 py-1.5 font-mono text-xs"
+                      />
+                    </label>
                     <div class="flex flex-wrap items-center gap-3 pt-5 text-xs text-slate-300">
+                      <label class="flex items-center gap-2">
+                        <input
+                          type="checkbox"
+                          checked={wan.health_check_enabled}
+                          onChange={(e) =>
+                            updateWan(idx(), { health_check_enabled: e.currentTarget.checked })
+                          }
+                        />
+                        健康探测
+                      </label>
                       <label class="flex items-center gap-2">
                         <input
                           type="checkbox"
@@ -476,6 +554,224 @@ export function NetworkPage(props: Props) {
             }}
           </For>
         </div>
+      </section>
+
+      {/* Multi-WAN Load Balancing & Failover */}
+      <section class="rounded-xl border border-slate-800 bg-slate-900/60 p-4">
+        <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <h2 class="text-sm font-semibold text-slate-200">多 WAN 负载均衡与故障切换</h2>
+            <p class="mt-0.5 text-xs text-slate-400">
+              基于独立路由表、nftables ct mark 策略路由与 ICMP/HTTP
+              健康探测，支持主备切换、按权重分流及故障切换精确清理 conntrack。
+            </p>
+          </div>
+          <div class="flex items-center gap-3">
+            <label class="flex items-center gap-2 text-xs text-slate-300">
+              <input
+                type="checkbox"
+                checked={props.draft.multi_wan.enabled}
+                onChange={(e) => updateMultiWan({ enabled: e.currentTarget.checked })}
+              />
+              启用多 WAN 调度
+            </label>
+            <button
+              type="button"
+              disabled={probing()}
+              onClick={() => void runProbeNow()}
+              class="rounded-lg border border-sky-500/40 bg-sky-500/15 px-3 py-1.5 text-xs font-medium text-sky-300 hover:bg-sky-500/25 disabled:opacity-50"
+            >
+              {probing() ? "探测中..." : "立即探测"}
+            </button>
+            <button
+              type="button"
+              onClick={() => void refetchMultiWan()}
+              class="rounded-lg border border-slate-700 bg-slate-800 px-2.5 py-1.5 text-xs text-slate-300 hover:bg-slate-700"
+            >
+              刷新
+            </button>
+          </div>
+        </div>
+
+        <div class="grid gap-3 sm:grid-cols-4">
+          <label class="block text-xs">
+            <span class="text-slate-400">调度模式</span>
+            <select
+              value={props.draft.multi_wan.mode}
+              onChange={(e) => updateMultiWan({ mode: e.currentTarget.value as MultiWanMode })}
+              class="mt-1 w-full rounded-lg border border-slate-700 bg-slate-900 px-2.5 py-1.5 text-xs"
+            >
+              <option value="failover">主备故障切换 (Failover)</option>
+              <option value="load_balance">按权重负载均衡 (Load Balance)</option>
+            </select>
+          </label>
+          <label class="block text-xs">
+            <span class="text-slate-400">探测协议</span>
+            <select
+              value={props.draft.multi_wan.probe_protocol}
+              onChange={(e) =>
+                updateMultiWan({ probe_protocol: e.currentTarget.value as ProbeProtocol })
+              }
+              class="mt-1 w-full rounded-lg border border-slate-700 bg-slate-900 px-2.5 py-1.5 text-xs"
+            >
+              <option value="icmp">ICMP (Ping)</option>
+              <option value="http">HTTP (TCP/HEAD)</option>
+              <option value="icmp_and_http">ICMP + HTTP 混合</option>
+            </select>
+          </label>
+          <label class="block text-xs">
+            <span class="text-slate-400">探测间隔 (秒)</span>
+            <input
+              type="number"
+              min="1"
+              value={props.draft.multi_wan.probe_interval_secs}
+              onInput={(e) =>
+                updateMultiWan({
+                  probe_interval_secs: Math.max(1, Number(e.currentTarget.value) || 5),
+                })
+              }
+              class="mt-1 w-full rounded-lg border border-slate-700 bg-slate-900 px-2.5 py-1.5 font-mono text-xs"
+            />
+          </label>
+          <label class="block text-xs">
+            <span class="text-slate-400">探测超时 (ms)</span>
+            <input
+              type="number"
+              min="200"
+              value={props.draft.multi_wan.probe_timeout_ms}
+              onInput={(e) =>
+                updateMultiWan({
+                  probe_timeout_ms: Math.max(200, Number(e.currentTarget.value) || 2000),
+                })
+              }
+              class="mt-1 w-full rounded-lg border border-slate-700 bg-slate-900 px-2.5 py-1.5 font-mono text-xs"
+            />
+          </label>
+          <label class="block text-xs sm:col-span-2">
+            <span class="text-slate-400">全局探测目标 (逗号分隔 IP 或 URL)</span>
+            <input
+              type="text"
+              value={props.draft.multi_wan.probe_targets.join(", ")}
+              onInput={(e) =>
+                updateMultiWan({
+                  probe_targets: e.currentTarget.value
+                    .split(",")
+                    .map((s) => s.trim())
+                    .filter(Boolean),
+                })
+              }
+              class="mt-1 w-full rounded-lg border border-slate-700 bg-slate-900 px-2.5 py-1.5 font-mono text-xs"
+            />
+          </label>
+          <label class="block text-xs">
+            <span class="text-slate-400">离线/恢复阈值 (次)</span>
+            <div class="mt-1 flex gap-2">
+              <input
+                type="number"
+                min="1"
+                value={props.draft.multi_wan.fail_threshold}
+                onInput={(e) =>
+                  updateMultiWan({
+                    fail_threshold: Math.max(1, Number(e.currentTarget.value) || 3),
+                  })
+                }
+                title="连续失败次数判定离线"
+                class="w-1/2 rounded-lg border border-slate-700 bg-slate-900 px-2 py-1.5 font-mono text-xs"
+              />
+              <input
+                type="number"
+                min="1"
+                value={props.draft.multi_wan.recover_threshold}
+                onInput={(e) =>
+                  updateMultiWan({
+                    recover_threshold: Math.max(1, Number(e.currentTarget.value) || 2),
+                  })
+                }
+                title="连续成功次数判定恢复"
+                class="w-1/2 rounded-lg border border-slate-700 bg-slate-900 px-2 py-1.5 font-mono text-xs"
+              />
+            </div>
+          </label>
+          <div class="flex flex-col justify-end gap-1.5 text-xs text-slate-300">
+            <label class="flex items-center gap-2">
+              <input
+                type="checkbox"
+                checked={props.draft.multi_wan.sticky_sessions}
+                onChange={(e) => updateMultiWan({ sticky_sessions: e.currentTarget.checked })}
+              />
+              源 IP 会话粘滞 (Sticky)
+            </label>
+            <label class="flex items-center gap-2">
+              <input
+                type="checkbox"
+                checked={props.draft.multi_wan.flush_conntrack_on_failover}
+                onChange={(e) =>
+                  updateMultiWan({ flush_conntrack_on_failover: e.currentTarget.checked })
+                }
+              />
+              切换时精确清理 conntrack
+            </label>
+          </div>
+        </div>
+
+        <Show when={multiWanStatus()}>
+          {(mw) => (
+            <div class="mt-4 rounded-xl border border-slate-800 bg-slate-950/60 p-3 text-xs">
+              <div class="mb-2 flex flex-wrap items-center justify-between gap-2 text-slate-400">
+                <span>
+                  当前活跃上行:{" "}
+                  <span class="font-mono text-emerald-300">
+                    {mw().active_wans.length > 0
+                      ? mw().active_wans.join(", ")
+                      : "未启用 / 等待探测"}
+                  </span>
+                </span>
+                <span class="font-mono">
+                  切换次数: {mw().failover_count}
+                  {mw().last_failover_at ? ` (最近: ${mw().last_failover_at})` : ""}
+                </span>
+              </div>
+              <Show when={mw().wans.length > 0}>
+                <div class="grid gap-2 sm:grid-cols-2">
+                  <For each={mw().wans}>
+                    {(item) => (
+                      <div class="flex items-center justify-between rounded-lg border border-slate-800 bg-slate-900/70 px-3 py-2">
+                        <div>
+                          <div class="flex items-center gap-2">
+                            <span class="font-mono font-semibold text-slate-200">
+                              {item.wan_name}
+                            </span>
+                            <span
+                              class={`rounded-full px-2 py-0.5 text-[10px] font-medium ${healthBadgeClass(item.health)}`}
+                            >
+                              {item.health}
+                            </span>
+                            <Show when={item.active}>
+                              <span class="rounded bg-sky-500/20 px-1.5 py-0.5 text-[10px] text-sky-300">
+                                active
+                              </span>
+                            </Show>
+                          </div>
+                          <div class="mt-0.5 font-mono text-[11px] text-slate-400">
+                            {item.device} · table {item.table_id} · mark 0x
+                            {item.fwmark.toString(16)} · eff_weight {item.effective_weight}/
+                            {item.weight}
+                          </div>
+                        </div>
+                        <div class="text-right font-mono text-[11px] text-slate-300">
+                          <div>
+                            {typeof item.rtt_ms === "number" ? `${item.rtt_ms.toFixed(1)} ms` : "-"}
+                          </div>
+                          <div class="text-slate-500">loss {item.packet_loss_pct}%</div>
+                        </div>
+                      </div>
+                    )}
+                  </For>
+                </div>
+              </Show>
+            </div>
+          )}
+        </Show>
       </section>
 
       {/* LAN Bridge Parameters */}

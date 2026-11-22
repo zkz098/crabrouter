@@ -122,6 +122,62 @@ pub async fn kill_conntrack_flow(req: &ConntrackKillRequest, dry_run: bool) -> R
     Ok(1)
 }
 
+/// Precisely flushes kernel `conntrack` entries associated with a specific WAN (by `fwmark`
+/// and/or WAN IP address) without disturbing flows on other healthy WANs.
+pub async fn flush_conntrack_for_wan(wan_ip: Option<&str>, fwmark: Option<u32>, dry_run: bool) {
+    if dry_run {
+        tracing::info!(
+            wan_ip = ?wan_ip,
+            fwmark = ?fwmark,
+            "dry-run: simulated targeted conntrack flush for WAN failover"
+        );
+        return;
+    }
+
+    if let Some(mark) = fwmark {
+        let mark_str = mark.to_string();
+        match Command::new("conntrack")
+            .args(["-D", "-m", &mark_str])
+            .output()
+            .await
+        {
+            Ok(out) => {
+                tracing::info!(
+                    fwmark = mark,
+                    status = %out.status,
+                    "targeted conntrack -D -m flush executed"
+                );
+            }
+            Err(err) => {
+                tracing::debug!(fwmark = mark, error = %err, "conntrack -D -m unavailable");
+            }
+        }
+    }
+
+    if let Some(ip) = wan_ip.map(str::trim).filter(|s| !s.is_empty()) {
+        for flag in ["-r", "-d", "-s"] {
+            match Command::new("conntrack")
+                .args(["-D", flag, ip])
+                .output()
+                .await
+            {
+                Ok(out) => {
+                    tracing::info!(
+                        wan_ip = ip,
+                        flag,
+                        status = %out.status,
+                        "targeted conntrack IP flush executed"
+                    );
+                }
+                Err(err) => {
+                    tracing::debug!(wan_ip = ip, flag, error = %err, "conntrack command unavailable");
+                    break;
+                }
+            }
+        }
+    }
+}
+
 /// Parses extended netfilter conntrack lines from `conntrack -L -o extended` or `/proc/net/nf_conntrack`.
 pub fn parse_conntrack_table(raw: &str) -> Vec<ConntrackEntry> {
     let mut entries: Vec<ConntrackEntry> = raw.lines().filter_map(parse_conntrack_line).collect();

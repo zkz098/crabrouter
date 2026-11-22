@@ -311,6 +311,10 @@ mod tests {
             ipv6_pd: true,
             ipv6_pd_prefix_len: 60,
             metric: 100,
+            weight: 1,
+            table_id: None,
+            health_check_enabled: true,
+            probe_targets: Vec::new(),
         };
         let peer = render_pppd_peer(&wan);
         assert!(peer.contains("plugin rp-pppoe.so"));

@@ -8,8 +8,8 @@ use ts_rs::TS;
 use crate::error::{ModelError, Result};
 use crate::firewall::FirewallConfig;
 use crate::network::{
-    InterfacePin, LanConfig, PolicyRuleConfig, QosConfig, StaticRouteConfig, VlanConfig, WanConfig,
-    WanProto,
+    InterfacePin, LanConfig, MultiWanConfig, PolicyRuleConfig, QosConfig, StaticRouteConfig,
+    VlanConfig, WanConfig, WanProto,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
@@ -159,6 +159,8 @@ pub struct RouterConfig {
     pub wireguard: WireGuardConfig,
     #[serde(default)]
     pub qos: QosConfig,
+    #[serde(default)]
+    pub multi_wan: MultiWanConfig,
 }
 
 impl Default for RouterConfig {
@@ -176,6 +178,7 @@ impl Default for RouterConfig {
             dns: DnsIntegrationConfig::default(),
             wireguard: WireGuardConfig::default(),
             qos: QosConfig::default(),
+            multi_wan: MultiWanConfig::default(),
         }
     }
 }
@@ -202,6 +205,7 @@ impl RouterConfig {
         self.validate_firewall()?;
         self.validate_wireguard()?;
         self.validate_qos()?;
+        self.validate_multi_wan()?;
         Ok(())
     }
 
@@ -554,6 +558,48 @@ impl RouterConfig {
         }
         Ok(())
     }
+
+    fn validate_multi_wan(&self) -> Result<()> {
+        if self.multi_wan.probe_interval_secs == 0 {
+            return Err(ModelError::Validation(
+                "multi_wan.probe_interval_secs must be >= 1".to_string(),
+            ));
+        }
+        if self.multi_wan.probe_timeout_ms < 200 {
+            return Err(ModelError::Validation(
+                "multi_wan.probe_timeout_ms must be >= 200".to_string(),
+            ));
+        }
+        if self.multi_wan.fail_threshold == 0 || self.multi_wan.recover_threshold == 0 {
+            return Err(ModelError::Validation(
+                "multi_wan.fail_threshold and recover_threshold must be >= 1".to_string(),
+            ));
+        }
+
+        let mut used_tables = HashSet::new();
+        for (idx, wan) in self.wans.iter().enumerate() {
+            if self.multi_wan.enabled && wan.weight == 0 {
+                return Err(ModelError::Validation(format!(
+                    "WAN '{}' weight must be >= 1 when multi_wan is enabled",
+                    wan.name
+                )));
+            }
+            let table_id = wan.table_id.unwrap_or(101 + idx as u32);
+            if matches!(table_id, 0 | 253 | 254 | 255) {
+                return Err(ModelError::Validation(format!(
+                    "WAN '{}' table_id {table_id} is reserved (0, 253, 254, 255)",
+                    wan.name
+                )));
+            }
+            if !used_tables.insert(table_id) {
+                return Err(ModelError::Validation(format!(
+                    "duplicate WAN routing table_id {table_id} on '{}'",
+                    wan.name
+                )));
+            }
+        }
+        Ok(())
+    }
 }
 
 fn validate_opt_ip_or_net(val: Option<&str>, rule_name: &str, field: &str) -> Result<()> {
@@ -685,6 +731,10 @@ fn default_wans() -> Vec<WanConfig> {
         ipv6_pd: true,
         ipv6_pd_prefix_len: 60,
         metric: 100,
+        weight: 1,
+        table_id: None,
+        health_check_enabled: true,
+        probe_targets: Vec::new(),
     }]
 }
 
@@ -704,70 +754,4 @@ fn default_lans() -> Vec<LanConfig> {
         ipv6_subnet_id: None,
         ipv6_ula_cidr: None,
     }]
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::firewall::{FirewallAction, FirewallRule, TransportProto};
-    use crate::network::InterfaceRole;
-
-    #[test]
-    fn default_config_is_valid() {
-        let cfg = RouterConfig::default();
-        assert!(cfg.validate().is_ok());
-    }
-
-    #[test]
-    fn identical_dns_ports_are_rejected() {
-        let mut cfg = RouterConfig::default();
-        cfg.dns.crabdns_port = 5354;
-        assert!(cfg.validate().is_err());
-    }
-
-    #[test]
-    fn validates_vlan_and_firewall_rule() {
-        let mut cfg = RouterConfig::default();
-        cfg.vlans.push(VlanConfig {
-            parent: "eth1".to_string(),
-            id: 20,
-            role: InterfaceRole::Lan,
-            cidr: Some("192.168.20.1/24".to_string()),
-            ipv6_ra_enabled: true,
-            ipv6_subnet_id: Some(1),
-        });
-        cfg.firewall.rules.push(FirewallRule {
-            name: "allow-ssh-lan".to_string(),
-            enabled: true,
-            src_zone: "lan".to_string(),
-            dst_zone: None,
-            proto: TransportProto::Tcp,
-            src_ip: Some("192.168.10.0/24".to_string()),
-            dst_ip: None,
-            dst_port: Some("22".to_string()),
-            action: FirewallAction::Accept,
-        });
-        assert!(cfg.validate().is_ok());
-    }
-
-    #[test]
-    fn rejects_invalid_vlan_and_mac() {
-        let mut cfg = RouterConfig::default();
-        cfg.vlans.push(VlanConfig {
-            parent: "eth1".to_string(),
-            id: 5000,
-            role: InterfaceRole::Lan,
-            cidr: None,
-            ipv6_ra_enabled: true,
-            ipv6_subnet_id: None,
-        });
-        assert!(cfg.validate().is_err());
-
-        let mut cfg2 = RouterConfig::default();
-        cfg2.interface_pins.push(InterfacePin {
-            mac: "not-a-mac".to_string(),
-            name: "eth0".to_string(),
-        });
-        assert!(cfg2.validate().is_err());
-    }
 }

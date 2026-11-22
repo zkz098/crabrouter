@@ -10,7 +10,7 @@ use crabrouter_core::{ConfigStore, RouterEngine};
 use crabrouter_model::RouterConfig;
 use crabrouter_net::{
     DryRunNetworkBackend, LinuxNetworkBackend, NetworkBackend, WanStateObserver,
-    spawn_network_event_engine,
+    spawn_multi_wan_engine, spawn_network_event_engine,
 };
 use crabrouter_services::{DryRunSupervisor, ServiceSupervisor, SystemdSupervisor};
 use crabrouter_web::{LogHub, build_router};
@@ -111,10 +111,11 @@ async fn main() -> anyhow::Result<()> {
 
     let engine = RouterEngine::bootstrap(store, net, services).await?;
     let observer: Arc<dyn WanStateObserver> = Arc::clone(&engine) as Arc<dyn WanStateObserver>;
-    let wan_bus = spawn_network_event_engine(observer, cli.dry_run);
+    let wan_bus = spawn_network_event_engine(Arc::clone(&observer), cli.dry_run);
     if let Ok(saved_wans) = engine.db().list_wan_states() {
         wan_bus.seed_states(saved_wans).await;
     }
+    let multi_wan = spawn_multi_wan_engine(observer, wan_bus.clone(), cli.dry_run);
 
     let cfg = engine.active_config();
     let ota_dir = cli
@@ -125,6 +126,7 @@ async fn main() -> anyhow::Result<()> {
     let app = build_router(
         Arc::clone(&engine),
         wan_bus,
+        multi_wan,
         logs,
         cli.leases.clone(),
         ota_dir,

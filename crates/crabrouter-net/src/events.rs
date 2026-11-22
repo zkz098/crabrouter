@@ -12,6 +12,7 @@ use rtnetlink::{MulticastGroup, new_multicast_connection};
 use tokio::process::Command;
 use tokio::sync::{RwLock, mpsc};
 
+use crate::conntrack::flush_conntrack_for_wan;
 use crate::dhcpcd::WanLeaseEvent;
 use crate::ipv6_pd::{apply_ipv6_pd_slices_netlink, slice_delegated_ipv6_prefix};
 use crate::nftables::apply_nft_with_precheck;
@@ -142,7 +143,7 @@ async fn run_event_loop(
             if let Some(old_ip) = prev_ip.as_deref()
                 && ip_changed
             {
-                flush_conntrack_for_ip(old_ip).await;
+                flush_conntrack_for_wan(Some(old_ip), None, dry_run).await;
             }
             if let Err(err) = apply_nft_with_precheck(&cfg).await {
                 tracing::error!(wan = %wan_name, error = %err, "event-driven nftables refresh failed");
@@ -323,24 +324,6 @@ fn spawn_netlink_multicast_listener(tx: mpsc::Sender<WanLeaseEvent>) {
             }
         }
     });
-}
-
-async fn flush_conntrack_for_ip(old_ip: &str) {
-    for flag in ["-r", "-d", "-s"] {
-        match Command::new("conntrack")
-            .args(["-D", flag, old_ip])
-            .status()
-            .await
-        {
-            Ok(status) => {
-                tracing::info!(old_ip, flag, status = %status, "conntrack flush executed");
-            }
-            Err(err) => {
-                tracing::debug!(old_ip, flag, error = %err, "conntrack command unavailable");
-                break;
-            }
-        }
-    }
 }
 
 async fn refresh_wireguard_if_present(wg_iface: &str) {

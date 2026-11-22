@@ -9,7 +9,8 @@ use axum::response::{IntoResponse, Response};
 use crabrouter_core::{CommitStatus, ConfigSnapshotSummary, CoreError};
 use crabrouter_model::{
     ConntrackEntry, ConntrackKillRequest, DhcpLeaseEntry, HardwareHealthSnapshot,
-    HostInterfaceSnapshot, LanConfig, RouterConfig, WanConfig, WanRuntimeState,
+    HostInterfaceSnapshot, LanConfig, MultiWanRuntimeStatus, RouterConfig, WanConfig,
+    WanRuntimeState,
 };
 use crabrouter_net::{
     WanLeaseEvent, collect_hardware_health, kill_conntrack_flow, read_conntrack_table,
@@ -351,6 +352,22 @@ pub async fn wan_status(
         live = state.engine.db().list_wan_states()?;
     }
     Ok(Json(live))
+}
+
+pub async fn multi_wan_status(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> Result<Json<MultiWanRuntimeStatus>, ApiError> {
+    require_auth_if_initialized(&state, &headers)?;
+    Ok(Json(state.multi_wan.snapshot().await))
+}
+
+pub async fn multi_wan_probe_now(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> Result<Json<MultiWanRuntimeStatus>, ApiError> {
+    require_auth_if_initialized(&state, &headers)?;
+    Ok(Json(state.multi_wan.run_probe_cycle().await))
 }
 
 pub async fn ingest_wan_event(

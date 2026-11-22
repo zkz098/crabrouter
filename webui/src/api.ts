@@ -12,6 +12,7 @@ import type { HostInterfaceSnapshot } from "./types/HostInterfaceSnapshot";
 import type { Iperf3Request } from "./types/Iperf3Request";
 import type { LogEvent } from "./types/LogEvent";
 import type { LoginRequest } from "./types/LoginRequest";
+import type { MultiWanRuntimeStatus } from "./types/MultiWanRuntimeStatus";
 import type { OtaApplyRequest } from "./types/OtaApplyRequest";
 import type { OtaCommandResult } from "./types/OtaCommandResult";
 import type { OtaStatus } from "./types/OtaStatus";
@@ -91,6 +92,16 @@ export function getInterfaces(): Promise<HostInterfaceSnapshot[]> {
 
 export function getWanStatus(): Promise<WanRuntimeState[]> {
   return fetchJson<WanRuntimeState[]>("/api/wans/status");
+}
+
+export function getMultiWanStatus(): Promise<MultiWanRuntimeStatus> {
+  return fetchJson<MultiWanRuntimeStatus>("/api/wans/multi-wan/status");
+}
+
+export function triggerMultiWanProbe(): Promise<MultiWanRuntimeStatus> {
+  return fetchJson<MultiWanRuntimeStatus>("/api/wans/multi-wan/probe", {
+    method: "POST",
+  });
 }
 
 export function getClients(): Promise<DhcpLeaseEntry[]> {

@@ -3,7 +3,10 @@ use std::fmt::Write;
 use std::net::IpAddr;
 use std::path::Path;
 
-use crabrouter_model::{FirewallAction, FirewallRule, FirewallZone, RouterConfig, TransportProto};
+use crabrouter_model::{
+    FirewallAction, FirewallRule, FirewallZone, MultiWanMode, RouterConfig, TransportProto,
+    wan_fwmark, wan_table_id,
+};
 use ipnet::IpNet;
 use tokio::io::AsyncWriteExt;
 use tokio::process::Command;
@@ -28,6 +31,17 @@ pub fn render_nftables_ruleset_with_options<S: std::hash::BuildHasher>(
     cfg: &RouterConfig,
     live_ifaces: Option<&HashSet<String, S>>,
     enable_flowtable: bool,
+) -> String {
+    render_nftables_ruleset_with_multi_wan(cfg, live_ifaces, enable_flowtable, None)
+}
+
+/// Renders an `nftables` ruleset with optional live-interface filtering and explicit active
+/// Multi-WAN list (used by the health-probe failover engine).
+pub fn render_nftables_ruleset_with_multi_wan<S: std::hash::BuildHasher>(
+    cfg: &RouterConfig,
+    live_ifaces: Option<&HashSet<String, S>>,
+    enable_flowtable: bool,
+    active_wans: Option<&[String]>,
 ) -> String {
     let mut out = String::from(
         "#!/usr/sbin/nft -f\n\
@@ -64,6 +78,7 @@ pub fn render_nftables_ruleset_with_options<S: std::hash::BuildHasher>(
     let has_flowtable = !flowtable_devices.is_empty();
     write_input_chain(&mut out, cfg);
     write_forward_chain(&mut out, cfg, has_flowtable);
+    write_mangle_prerouting_chain(&mut out, cfg, active_wans);
     write_prerouting_chain(&mut out, cfg);
     write_postrouting_chain(&mut out, cfg);
 
@@ -79,17 +94,27 @@ pub async fn check_nft_syntax(ruleset: &str) -> Result<()> {
 /// Validates with `nft -c -f -` (falling back safely if dynamic flowtable interfaces are absent)
 /// and applies the ruleset atomically via `nft -f -`.
 pub async fn apply_nft_with_precheck(cfg: &RouterConfig) -> Result<()> {
+    apply_nft_with_precheck_and_multi_wan(cfg, None).await
+}
+
+/// Validates and applies `nftables` ruleset with explicit active Multi-WAN list.
+pub async fn apply_nft_with_precheck_and_multi_wan(
+    cfg: &RouterConfig,
+    active_wans: Option<&[String]>,
+) -> Result<()> {
     let live_ifaces = read_live_iface_names();
-    let candidate = render_nftables_ruleset_with_options(
+    let candidate = render_nftables_ruleset_with_multi_wan(
         cfg,
         Some(&live_ifaces),
         cfg.firewall.flowtable_offload,
+        active_wans,
     );
 
     let final_ruleset = match check_nft_syntax(&candidate).await {
         Ok(()) => candidate,
         Err(first_err) if cfg.firewall.flowtable_offload => {
-            let fallback = render_nftables_ruleset_with_options(cfg, Some(&live_ifaces), false);
+            let fallback =
+                render_nftables_ruleset_with_multi_wan(cfg, Some(&live_ifaces), false, active_wans);
             if check_nft_syntax(&fallback).await.is_ok() {
                 tracing::warn!(
                     error = %first_err,
@@ -303,6 +328,109 @@ fn format_ip_match(raw: Option<&str>, dir: &str) -> Option<String> {
     None
 }
 
+fn write_mangle_prerouting_chain(
+    out: &mut String,
+    cfg: &RouterConfig,
+    active_wans: Option<&[String]>,
+) {
+    if !cfg.multi_wan.enabled || cfg.wans.is_empty() {
+        return;
+    }
+
+    let candidates: Vec<(u32, u32)> = cfg
+        .wans
+        .iter()
+        .enumerate()
+        .filter(|(_, w)| {
+            active_wans.is_none_or(|list| list.is_empty() || list.iter().any(|n| n == &w.name))
+        })
+        .map(|(idx, w)| (wan_fwmark(wan_table_id(idx, w)), w.weight.max(1)))
+        .collect();
+
+    if candidates.is_empty() || cfg.lans.is_empty() {
+        return;
+    }
+
+    let lan_ifaces: Vec<String> = cfg.lans.iter().map(|l| l.bridge.clone()).collect();
+    let lan_set = format_iface_set(&lan_ifaces);
+
+    out.push_str(
+        "    chain mangle_prerouting {\n\
+         \x20       type filter hook prerouting priority mangle; policy accept;\n\
+         \x20       ct mark != 0 meta mark set ct mark return\n",
+    );
+    let _ = writeln!(out, "        iifname != {lan_set} return");
+    out.push_str("        fib daddr type local return\n");
+    for lan in &cfg.lans {
+        if let Ok(net @ IpNet::V4(_)) = lan.cidr.parse::<IpNet>() {
+            let _ = writeln!(out, "        ip daddr {net} return");
+        }
+    }
+
+    if cfg.multi_wan.mode == MultiWanMode::Failover || candidates.len() == 1 {
+        let mark = candidates[0].0;
+        let _ = writeln!(
+            out,
+            "        ct state new meta mark set 0x{mark:x} ct mark set meta mark"
+        );
+    } else {
+        let slots = build_weighted_mark_slots(&candidates);
+        let total = slots.len();
+        let map_entries = slots
+            .iter()
+            .enumerate()
+            .map(|(i, m)| format!("{i} : 0x{m:x}"))
+            .collect::<Vec<_>>()
+            .join(", ");
+        let selector = if cfg.multi_wan.sticky_sessions {
+            format!("jhash ip saddr mod {total}")
+        } else {
+            format!("numgen random mod {total}")
+        };
+        let _ = writeln!(
+            out,
+            "        ct state new meta mark set {selector} map {{ {map_entries} }}"
+        );
+        out.push_str("        ct state new ct mark set meta mark\n");
+    }
+
+    out.push_str("    }\n\n");
+}
+
+fn build_weighted_mark_slots(candidates: &[(u32, u32)]) -> Vec<u32> {
+    let mut g = 0u32;
+    for &(_, w) in candidates {
+        g = gcd_u32(g, w);
+    }
+    let g = g.max(1);
+    let mut scaled: Vec<(u32, u32)> = candidates
+        .iter()
+        .map(|&(m, w)| (m, (w / g).max(1)))
+        .collect();
+    let sum: u32 = scaled.iter().map(|(_, w)| *w).sum();
+    if sum > 32 {
+        for (_, w) in &mut scaled {
+            *w = ((*w * 32) / sum).max(1);
+        }
+    }
+    let mut slots = Vec::new();
+    for (mark, count) in scaled {
+        for _ in 0..count {
+            slots.push(mark);
+        }
+    }
+    slots
+}
+
+const fn gcd_u32(mut a: u32, mut b: u32) -> u32 {
+    while b != 0 {
+        let t = a % b;
+        a = b;
+        b = t;
+    }
+    a
+}
+
 fn write_prerouting_chain(out: &mut String, cfg: &RouterConfig) {
     out.push_str(
         "    chain prerouting {\n\
@@ -396,6 +524,27 @@ mod tests {
         assert!(nft.contains("oifname { \"eth0\", \"ppp0\" } masquerade"));
         assert!(nft.contains("tcp flags syn tcp option maxseg size set rt mtu"));
         assert!(nft.contains("meter syn_flood_input"));
+    }
+
+    #[test]
+    fn renders_multi_wan_weighted_mangle_rules() {
+        let mut cfg = RouterConfig::default();
+        let mut wan2 = cfg.wans[0].clone();
+        wan2.name = "wan2".to_string();
+        wan2.device = "eth4".to_string();
+        wan2.weight = 3;
+        cfg.wans[0].weight = 1;
+        cfg.wans.push(wan2);
+        cfg.multi_wan.enabled = true;
+        cfg.multi_wan.mode = MultiWanMode::LoadBalance;
+
+        let nft = render_nftables_ruleset(&cfg);
+        assert!(nft.contains("chain mangle_prerouting"));
+        assert!(nft.contains("ct mark != 0 meta mark set ct mark return"));
+        assert!(nft.contains(
+            "jhash ip saddr mod 4 map { 0 : 0x1065, 1 : 0x1066, 2 : 0x1066, 3 : 0x1066 }"
+        ));
+        assert!(nft.contains("ct state new ct mark set meta mark"));
     }
 
     #[test]
