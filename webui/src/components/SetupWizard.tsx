@@ -83,6 +83,7 @@ export function SetupWizard(props: Props) {
       pppoe_password: wanProto() === "pppoe" ? pppoePass() : null,
       mtu: wanProto() === "pppoe" ? 1492 : 1500,
       ipv6_pd: true,
+      ipv6_pd_prefix_len: 60,
       metric: 100,
     };
 
@@ -97,6 +98,9 @@ export function SetupWizard(props: Props) {
       dhcp_limit: 150,
       dhcp_lease_secs: 43200,
       static_leases: [],
+      ipv6_ra_enabled: true,
+      ipv6_subnet_id: null,
+      ipv6_ula_cidr: null,
     };
 
     setSubmitting(true);

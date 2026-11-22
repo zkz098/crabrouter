@@ -4,7 +4,7 @@ use std::fs;
 use std::net::Ipv4Addr;
 use std::path::Path;
 
-use crabrouter_model::{DhcpLeaseEntry, RouterConfig};
+use crabrouter_model::{DhcpLeaseEntry, InterfaceRole, RouterConfig};
 use ipnet::IpNet;
 
 use crate::{Result, ServiceError};
@@ -13,6 +13,7 @@ use crate::{Result, ServiceError};
 /// - Listens on `127.0.0.1:<dnsmasq_dns_port>` (default 5354) for `.lan` & private PTR lookups
 /// - Disables local DNS caching (`cache-size=0`), leaving caching/DoT/DoH/filtering to `crabdns`
 /// - Serves `DHCPv4` (and DHCP option 6 pointing clients to `crabdns:53`), including static `dhcp-host` bindings
+/// - Serves `IPv6 RA` + stateless `DHCPv6` / `SLAAC` (`/64` `constructor:<iface>`) across LAN bridges and LAN VLANs
 pub fn render_dnsmasq_conf(cfg: &RouterConfig) -> Result<String> {
     let mut out = String::new();
     let _ = writeln!(
@@ -32,6 +33,20 @@ pub fn render_dnsmasq_conf(cfg: &RouterConfig) -> Result<String> {
         cfg.dns.dnsmasq_dns_port
     );
 
+    let any_ra_enabled = cfg.lans.iter().any(|l| l.ipv6_ra_enabled)
+        || cfg
+            .vlans
+            .iter()
+            .any(|v| v.role == InterfaceRole::Lan && v.ipv6_ra_enabled);
+    if any_ra_enabled {
+        let _ = writeln!(
+            out,
+            "# IPv6 Router Advertisement & /64 Prefix Delegation (SLAAC + RDNSS)\n\
+             enable-ra\n\
+             ra-param=*,high,60,1800\n"
+        );
+    }
+
     for lan in &cfg.lans {
         let net: IpNet = lan
             .cidr
@@ -45,6 +60,7 @@ pub fn render_dnsmasq_conf(cfg: &RouterConfig) -> Result<String> {
         let _ = writeln!(out, "local=/{}/", lan.domain);
         let _ = writeln!(out, "domain={}", lan.domain);
 
+        let mut iface_emitted = false;
         if lan.dhcp_enabled {
             let base = u32::from(v4_net.network());
             let broadcast = u32::from(v4_net.broadcast());
@@ -57,6 +73,7 @@ pub fn render_dnsmasq_conf(cfg: &RouterConfig) -> Result<String> {
                 let start_ip = Ipv4Addr::from(start_u32);
                 let end_ip = Ipv4Addr::from(end_u32);
                 let router_ip = v4_net.addr();
+                iface_emitted = true;
                 let _ = writeln!(
                     out,
                     "interface={}\n\
@@ -84,11 +101,59 @@ pub fn render_dnsmasq_conf(cfg: &RouterConfig) -> Result<String> {
                     let _ = writeln!(out, "dhcp-host={},{}", lease.mac, lease.ip);
                 }
             }
-            out.push('\n');
         }
+
+        if lan.ipv6_ra_enabled {
+            write_lan_ipv6_ra(
+                &mut out,
+                &lan.name,
+                &lan.bridge,
+                lan.dhcp_lease_secs,
+                iface_emitted,
+            );
+        }
+        out.push('\n');
     }
 
+    write_vlan_ipv6_ra(&mut out, cfg);
+
     Ok(out)
+}
+
+fn write_lan_ipv6_ra(
+    out: &mut String,
+    lan_name: &str,
+    bridge: &str,
+    lease_secs: u32,
+    iface_emitted: bool,
+) {
+    if !iface_emitted {
+        let _ = writeln!(out, "interface={bridge}");
+    }
+    let v6_tag = format!("{lan_name}-v6");
+    let _ = writeln!(
+        out,
+        "dhcp-range=set:{v6_tag},::1,::ffff:ffff:ffff:ffff,constructor:{bridge},ra-names,slaac,64,{}s\n\
+         dhcp-option=tag:{v6_tag},option6:dns-server,[fe80::]",
+        lease_secs.max(3600)
+    );
+}
+
+fn write_vlan_ipv6_ra(out: &mut String, cfg: &RouterConfig) {
+    for vlan in &cfg.vlans {
+        if vlan.role != InterfaceRole::Lan || !vlan.ipv6_ra_enabled {
+            continue;
+        }
+        let ifname = format!("{}.{}", vlan.parent, vlan.id);
+        let v6_tag = format!("vlan{}-v6", vlan.id);
+        let _ = writeln!(
+            out,
+            "# VLAN '{ifname}' IPv6-PD /64 RA\n\
+             interface={ifname}\n\
+             dhcp-range=set:{v6_tag},::1,::ffff:ffff:ffff:ffff,constructor:{ifname},ra-names,slaac,64,43200s\n\
+             dhcp-option=tag:{v6_tag},option6:dns-server,[fe80::]\n"
+        );
+    }
 }
 
 /// Reads active DHCP leases from `dnsmasq.leases` merged with `/proc/net/arp` neighbours
@@ -191,7 +256,7 @@ pub fn read_online_clients(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crabrouter_model::DhcpStaticLease;
+    use crabrouter_model::{DhcpStaticLease, VlanConfig};
 
     #[test]
     fn renders_dnsmasq_on_5354_with_zero_cache_and_static_leases() {
@@ -202,13 +267,28 @@ mod tests {
             ip: "192.168.10.50".to_string(),
             hostname: Some("nas".to_string()),
         });
+        cfg.vlans.push(VlanConfig {
+            parent: "eth1".to_string(),
+            id: 20,
+            role: InterfaceRole::Lan,
+            cidr: Some("192.168.20.1/24".to_string()),
+            ipv6_ra_enabled: true,
+            ipv6_subnet_id: Some(1),
+        });
         let conf = render_dnsmasq_conf(&cfg).unwrap();
         assert!(conf.contains("port=5354"));
         assert!(conf.contains("cache-size=0"));
         assert!(conf.contains("local=/lan/"));
+        assert!(conf.contains("enable-ra"));
         assert!(
             conf.contains("dhcp-range=set:lan,192.168.10.100,192.168.10.249,255.255.255.0,43200s")
         );
+        assert!(conf.contains(
+            "dhcp-range=set:lan-v6,::1,::ffff:ffff:ffff:ffff,constructor:br-lan,ra-names,slaac,64,43200s"
+        ));
+        assert!(conf.contains(
+            "dhcp-range=set:vlan20-v6,::1,::ffff:ffff:ffff:ffff,constructor:eth1.20,ra-names,slaac,64,43200s"
+        ));
         assert!(conf.contains("dhcp-host=aa:bb:cc:11:22:33,192.168.10.50,nas"));
     }
 }

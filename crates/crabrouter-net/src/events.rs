@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use chrono::Utc;
-use crabrouter_model::{RouterConfig, WanRuntimeState};
+use crabrouter_model::{RouterConfig, WanProto, WanRuntimeState};
 use futures_util::stream::StreamExt;
 use rtnetlink::packet_core::NetlinkPayload;
 use rtnetlink::packet_route::RouteNetlinkMessage;
@@ -13,6 +13,7 @@ use tokio::process::Command;
 use tokio::sync::{RwLock, mpsc};
 
 use crate::dhcpcd::WanLeaseEvent;
+use crate::ipv6_pd::{apply_ipv6_pd_slices_netlink, slice_delegated_ipv6_prefix};
 use crate::nftables::apply_nft_with_precheck;
 
 /// Callback trait allowing `crabrouter-net` event engine to fetch active config and persist
@@ -91,37 +92,26 @@ async fn run_event_loop(
 
     while let Some(ev) = hook_rx.recv().await {
         let cfg = observer.current_config();
-        let Some(wan) = cfg
-            .wans
-            .iter()
-            .find(|w| w.name == ev.wan_name || w.device == ev.device)
-        else {
+        let Some(wan) = cfg.wans.iter().find(|w| {
+            w.name == ev.wan_name
+                || w.device == ev.device
+                || (w.proto == WanProto::Pppoe && ev.device.starts_with("ppp"))
+        }) else {
             tracing::debug!(wan = %ev.wan_name, dev = %ev.device, "ignoring event for non-WAN interface");
             continue;
         };
 
         let wan_name = wan.name.clone();
-        let new_ip = ev.ip.clone().filter(|s| !s.is_empty());
-        let new_gw = ev.gateway.clone().filter(|s| !s.is_empty());
+        let prev = states.read().await.get(&wan_name).cloned();
+        let prev_ip = prev.as_ref().and_then(|s| s.ip.clone());
+        let prev_ifindex = prev.as_ref().and_then(|s| s.ifindex);
+        let prev_slices = prev
+            .as_ref()
+            .map_or_else(Vec::new, |s| s.ipv6_slices.clone());
 
-        let (prev_ip, prev_ifindex) = {
-            let guard = states.read().await;
-            guard
-                .get(&wan_name)
-                .map_or((None, None), |s| (s.ip.clone(), s.ifindex))
-        };
-
-        let updated = WanRuntimeState {
-            wan_name: wan_name.clone(),
-            device: ev.device.clone(),
-            proto: wan.proto,
-            state: ev.event.clone(),
-            ip: new_ip.clone(),
-            gateway: new_gw.clone(),
-            dns_servers: ev.dns_servers.clone(),
-            ifindex: ev.ifindex.or(prev_ifindex),
-            updated_at: Utc::now().to_rfc3339(),
-        };
+        let updated = build_updated_wan_state(&cfg, wan, prev.as_ref(), &ev);
+        let new_ip = updated.ip.clone();
+        let new_slices = updated.ipv6_slices.clone();
 
         states
             .write()
@@ -129,11 +119,26 @@ async fn run_event_loop(
             .insert(wan_name.clone(), updated.clone());
         observer.on_wan_state_updated(updated);
 
+        if !dry_run
+            && prev_slices != new_slices
+            && let Err(err) = apply_ipv6_pd_slices_netlink(&prev_slices, &new_slices).await
+        {
+            tracing::warn!(
+                wan = %wan_name,
+                error = %err,
+                "failed to apply IPv6-PD /64 slices to downstream interfaces"
+            );
+        }
+
         let ip_changed = prev_ip.is_some() && prev_ip != new_ip;
         let ifindex_changed =
             prev_ifindex.is_some() && ev.ifindex.is_some() && prev_ifindex != ev.ifindex;
 
-        if !dry_run && (ip_changed || ifindex_changed || ev.event == "up" || ev.event == "BOUND") {
+        if !dry_run
+            && (ip_changed
+                || ifindex_changed
+                || matches!(ev.event.as_str(), "up" | "ipv6_up" | "BOUND" | "BOUND6"))
+        {
             if let Some(old_ip) = prev_ip.as_deref()
                 && ip_changed
             {
@@ -146,6 +151,81 @@ async fn run_event_loop(
                 refresh_wireguard_if_present(&cfg.wireguard.interface).await;
             }
         }
+    }
+}
+
+fn build_updated_wan_state(
+    cfg: &RouterConfig,
+    wan: &crabrouter_model::WanConfig,
+    prev: Option<&WanRuntimeState>,
+    ev: &WanLeaseEvent,
+) -> WanRuntimeState {
+    let prev_ip = prev.and_then(|s| s.ip.clone());
+    let prev_gw = prev.and_then(|s| s.gateway.clone());
+    let prev_ifindex = prev.and_then(|s| s.ifindex);
+    let prev_ipv6_addr = prev.and_then(|s| s.ipv6_addr.clone());
+    let prev_ipv6_pd = prev.and_then(|s| s.ipv6_pd_prefix.clone());
+
+    let is_v4_clear = matches!(
+        ev.event.as_str(),
+        "down" | "link_down" | "EXPIRE" | "RELEASE" | "STOP" | "NOCARRIER"
+    );
+    let is_v6_clear = matches!(
+        ev.event.as_str(),
+        "down" | "link_down" | "ipv6_down" | "EXPIRE6" | "RELEASE6" | "STOP" | "NOCARRIER"
+    );
+
+    let new_ip = if is_v4_clear {
+        None
+    } else {
+        ev.ip.clone().filter(|s| !s.is_empty()).or(prev_ip)
+    };
+    let new_gw = if is_v4_clear {
+        None
+    } else {
+        ev.gateway.clone().filter(|s| !s.is_empty()).or(prev_gw)
+    };
+    let new_ipv6_addr = if is_v6_clear {
+        None
+    } else {
+        ev.ipv6_addr
+            .clone()
+            .filter(|s| !s.is_empty())
+            .or(prev_ipv6_addr)
+    };
+    let new_ipv6_pd = if is_v6_clear || !wan.ipv6_pd {
+        None
+    } else {
+        ev.ipv6_pd_prefix
+            .clone()
+            .filter(|s| !s.is_empty())
+            .or(prev_ipv6_pd)
+    };
+
+    let new_slices = match new_ipv6_pd.as_deref() {
+        Some(prefix) => match slice_delegated_ipv6_prefix(prefix, cfg) {
+            Ok(slices) => slices,
+            Err(err) => {
+                tracing::warn!(wan = %wan.name, prefix, error = %err, "failed to slice delegated IPv6-PD prefix");
+                Vec::new()
+            }
+        },
+        None => Vec::new(),
+    };
+
+    WanRuntimeState {
+        wan_name: wan.name.clone(),
+        device: ev.device.clone(),
+        proto: wan.proto,
+        state: ev.event.clone(),
+        ip: new_ip,
+        gateway: new_gw,
+        dns_servers: ev.dns_servers.clone(),
+        ifindex: ev.ifindex.or(prev_ifindex),
+        ipv6_addr: new_ipv6_addr,
+        ipv6_pd_prefix: new_ipv6_pd,
+        ipv6_slices: new_slices,
+        updated_at: Utc::now().to_rfc3339(),
     }
 }
 
@@ -189,6 +269,8 @@ fn spawn_netlink_multicast_listener(tx: mpsc::Sender<WanLeaseEvent>) {
                                 gateway: None,
                                 dns_servers: Vec::new(),
                                 ifindex: Some(ifindex),
+                                ipv6_addr: None,
+                                ipv6_pd_prefix: None,
                             })
                             .await;
                     }
@@ -205,6 +287,8 @@ fn spawn_netlink_multicast_listener(tx: mpsc::Sender<WanLeaseEvent>) {
                                 gateway: None,
                                 dns_servers: Vec::new(),
                                 ifindex: Some(link.header.index),
+                                ipv6_addr: None,
+                                ipv6_pd_prefix: None,
                             })
                             .await;
                     }
@@ -228,6 +312,8 @@ fn spawn_netlink_multicast_listener(tx: mpsc::Sender<WanLeaseEvent>) {
                                     gateway: None,
                                     dns_servers: Vec::new(),
                                     ifindex: Some(addr.header.index),
+                                    ipv6_addr: None,
+                                    ipv6_pd_prefix: None,
                                 })
                                 .await;
                         }

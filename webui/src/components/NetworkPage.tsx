@@ -101,6 +101,7 @@ export function NetworkPage(props: Props) {
       pppoe_password: null,
       mtu: 1500,
       ipv6_pd: true,
+      ipv6_pd_prefix_len: 60,
       metric: 100 + next.wans.length * 10,
     });
     props.onChange(next);
@@ -129,6 +130,8 @@ export function NetworkPage(props: Props) {
       id: 20,
       role: "lan",
       cidr: "192.168.20.1/24",
+      ipv6_ra_enabled: true,
+      ipv6_subnet_id: null,
     });
     props.onChange(next);
   }
@@ -362,15 +365,60 @@ export function NetworkPage(props: Props) {
                         class="mt-1 w-full rounded-lg border border-slate-700 bg-slate-900 px-2.5 py-1.5 font-mono text-xs"
                       />
                     </label>
-                    <label class="flex items-center gap-2 pt-5 text-xs text-slate-300">
-                      <input
-                        type="checkbox"
-                        checked={wan.ipv6_pd}
-                        onChange={(e) => updateWan(idx(), { ipv6_pd: e.currentTarget.checked })}
-                      />
-                      启用 IPv6-PD 前缀请求
-                    </label>
+                    <div class="flex flex-wrap items-center gap-3 pt-5 text-xs text-slate-300">
+                      <label class="flex items-center gap-2">
+                        <input
+                          type="checkbox"
+                          checked={wan.ipv6_pd}
+                          onChange={(e) => updateWan(idx(), { ipv6_pd: e.currentTarget.checked })}
+                        />
+                        启用 IPv6-PD
+                      </label>
+                      <Show when={wan.ipv6_pd}>
+                        <select
+                          value={wan.ipv6_pd_prefix_len}
+                          onChange={(e) =>
+                            updateWan(idx(), {
+                              ipv6_pd_prefix_len: Number(e.currentTarget.value) || 60,
+                            })
+                          }
+                          class="rounded-lg border border-slate-700 bg-slate-900 px-2 py-1 font-mono text-xs"
+                          title="申请的 IPv6-PD 前缀长度提示"
+                        >
+                          <option value={56}>/56 (256 个 /64 子网)</option>
+                          <option value={60}>/60 (16 个 /64 子网)</option>
+                          <option value={64}>/64 (单子网)</option>
+                          <option value={48}>/48 (企业级)</option>
+                        </select>
+                      </Show>
+                    </div>
                   </div>
+
+                  <Show when={runtime()?.ipv6_pd_prefix}>
+                    {(pd) => (
+                      <div class="mt-3 rounded-lg border border-sky-500/30 bg-sky-950/20 p-2.5 text-xs">
+                        <div class="flex flex-wrap items-center justify-between gap-2">
+                          <span class="font-mono text-sky-300">
+                            已获取 IPv6-PD 委派前缀: {pd()}
+                          </span>
+                          <span class="font-mono text-slate-400">
+                            WAN IPv6: {runtime()?.ipv6_addr ?? "-"}
+                          </span>
+                        </div>
+                        <Show when={(runtime()?.ipv6_slices.length ?? 0) > 0}>
+                          <div class="mt-2 flex flex-wrap gap-1.5">
+                            <For each={runtime()?.ipv6_slices}>
+                              {(sl) => (
+                                <span class="rounded border border-sky-500/40 bg-sky-500/10 px-2 py-0.5 font-mono text-[11px] text-sky-200">
+                                  {sl.interface} (#{sl.subnet_id}) → {sl.prefix_cidr}
+                                </span>
+                              )}
+                            </For>
+                          </div>
+                        </Show>
+                      </div>
+                    )}
+                  </Show>
 
                   <Show when={wan.proto === "static"}>
                     <div class="mt-3 grid gap-3 sm:grid-cols-2">
@@ -494,7 +542,46 @@ export function NetworkPage(props: Props) {
                     checked={lan.dhcp_enabled}
                     onChange={(e) => updateLan(idx(), { dhcp_enabled: e.currentTarget.checked })}
                   />
-                  启用 dnsmasq DHCP 服务
+                  启用 dnsmasq DHCPv4 服务
+                </label>
+                <label class="flex items-center gap-2 pt-5 text-xs text-slate-300">
+                  <input
+                    type="checkbox"
+                    checked={lan.ipv6_ra_enabled}
+                    onChange={(e) =>
+                      updateLan(idx(), { ipv6_ra_enabled: e.currentTarget.checked })
+                    }
+                  />
+                  启用 IPv6 RA + /64 SLAAC 下发
+                </label>
+                <label class="block text-xs">
+                  <span class="text-slate-400">IPv6-PD /64 子网序号 (可选 SLA ID)</span>
+                  <input
+                    type="number"
+                    min={0}
+                    max={255}
+                    placeholder="自动分配 (0, 1...)"
+                    value={lan.ipv6_subnet_id ?? ""}
+                    onInput={(e) => {
+                      const val = e.currentTarget.value.trim();
+                      updateLan(idx(), {
+                        ipv6_subnet_id: val === "" ? null : Number(val),
+                      });
+                    }}
+                    class="mt-1 w-full rounded-lg border border-slate-700 bg-slate-900 px-2.5 py-1.5 font-mono text-xs"
+                  />
+                </label>
+                <label class="block text-xs">
+                  <span class="text-slate-400">IPv6 ULA 静态前缀 (可选, 如 fd00:10::1/64)</span>
+                  <input
+                    type="text"
+                    placeholder="留空仅使用 WAN PD 前缀"
+                    value={lan.ipv6_ula_cidr ?? ""}
+                    onInput={(e) =>
+                      updateLan(idx(), { ipv6_ula_cidr: e.currentTarget.value.trim() || null })
+                    }
+                    class="mt-1 w-full rounded-lg border border-slate-700 bg-slate-900 px-2.5 py-1.5 font-mono text-xs"
+                  />
                 </label>
               </div>
             )}
@@ -517,7 +604,7 @@ export function NetworkPage(props: Props) {
         <div class="space-y-2">
           <For each={props.draft.vlans}>
             {(vlan, idx) => (
-              <div class="grid items-center gap-2 rounded-lg border border-slate-800 bg-slate-950/60 p-3 sm:grid-cols-5">
+              <div class="grid items-center gap-2 rounded-lg border border-slate-800 bg-slate-950/60 p-3 sm:grid-cols-7">
                 <input
                   type="text"
                   value={vlan.parent}
@@ -557,10 +644,36 @@ export function NetworkPage(props: Props) {
                 <input
                   type="text"
                   value={vlan.cidr ?? ""}
-                  placeholder="可选 CIDR"
+                  placeholder="可选 IPv4 CIDR"
                   onInput={(e) => {
                     const next = structuredClone(props.draft);
                     next.vlans[idx()].cidr = e.currentTarget.value || null;
+                    props.onChange(next);
+                  }}
+                  class="rounded border border-slate-700 bg-slate-900 px-2 py-1 font-mono text-xs"
+                />
+                <label class="flex items-center gap-1.5 text-xs text-slate-300">
+                  <input
+                    type="checkbox"
+                    checked={vlan.ipv6_ra_enabled}
+                    onChange={(e) => {
+                      const next = structuredClone(props.draft);
+                      next.vlans[idx()].ipv6_ra_enabled = e.currentTarget.checked;
+                      props.onChange(next);
+                    }}
+                  />
+                  <span>IPv6 /64 RA</span>
+                </label>
+                <input
+                  type="number"
+                  min={0}
+                  max={255}
+                  value={vlan.ipv6_subnet_id ?? ""}
+                  placeholder="IPv6 子网号"
+                  onInput={(e) => {
+                    const next = structuredClone(props.draft);
+                    const val = e.currentTarget.value.trim();
+                    next.vlans[idx()].ipv6_subnet_id = val === "" ? null : Number(val);
                     props.onChange(next);
                   }}
                   class="rounded border border-slate-700 bg-slate-900 px-2 py-1 font-mono text-xs"

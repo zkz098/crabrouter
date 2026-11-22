@@ -358,6 +358,18 @@ fn plan_addresses(
                 .or_default()
                 .insert(net);
         }
+        if let Some(ula) = lan
+            .ipv6_ula_cidr
+            .as_deref()
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            && let Ok(net) = ula.parse::<IpNet>()
+        {
+            desired_by_iface
+                .entry(lan.bridge.clone())
+                .or_default()
+                .insert(net);
+        }
     }
     for wan in &cfg.wans {
         if wan.proto == WanProto::Static
@@ -404,6 +416,10 @@ fn plan_addresses(
         }
         if let Some(existing_nets) = existing {
             for &net in existing_nets {
+                // Preserve dynamic global unicast IPv6 addresses (2000::/3) assigned via DHCPv6-PD
+                if is_dynamic_gua_ipv6(&net) {
+                    continue;
+                }
                 if !desired_nets.contains(&net) && link_by_name.contains_key(iface.as_str()) {
                     plan.addrs_to_del.push(InterfaceAddrSpec {
                         iface: iface.clone(),
@@ -412,6 +428,13 @@ fn plan_addresses(
                 }
             }
         }
+    }
+}
+
+fn is_dynamic_gua_ipv6(net: &IpNet) -> bool {
+    match net.addr() {
+        IpAddr::V6(v6) => (v6.segments()[0] & 0xe000) == 0x2000,
+        IpAddr::V4(_) => false,
     }
 }
 
@@ -1104,6 +1127,8 @@ mod tests {
             id: 20,
             role: InterfaceRole::Lan,
             cidr: Some("192.168.20.1/24".to_string()),
+            ipv6_ra_enabled: true,
+            ipv6_subnet_id: None,
         });
         cfg.routes.push(StaticRouteConfig {
             table_id: 100,

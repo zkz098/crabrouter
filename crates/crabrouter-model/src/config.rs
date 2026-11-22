@@ -220,6 +220,12 @@ impl RouterConfig {
                     wan.name, wan.mtu
                 )));
             }
+            if wan.ipv6_pd && !(48..=64).contains(&wan.ipv6_pd_prefix_len) {
+                return Err(ModelError::Validation(format!(
+                    "WAN '{}' ipv6_pd_prefix_len {} must be between 48 and 64",
+                    wan.name, wan.ipv6_pd_prefix_len
+                )));
+            }
             match wan.proto {
                 WanProto::Static => {
                     let cidr = wan.static_cidr.as_deref().ok_or_else(|| {
@@ -303,6 +309,54 @@ impl RouterConfig {
                         lan.name, lease.name, lease.ip
                     ))
                 })?;
+            }
+            if let Some(ula) = lan
+                .ipv6_ula_cidr
+                .as_deref()
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+            {
+                let ula_net: ipnet::Ipv6Net = ula.parse().map_err(|e| {
+                    ModelError::Validation(format!(
+                        "LAN '{}' invalid ipv6_ula_cidr '{}': {e}",
+                        lan.name, ula
+                    ))
+                })?;
+                if ula_net.prefix_len() > 64 {
+                    return Err(ModelError::Validation(format!(
+                        "LAN '{}' ipv6_ula_cidr '{}' prefix length must be <= 64 for SLAAC/RA",
+                        lan.name, ula
+                    )));
+                }
+            }
+        }
+        self.validate_ipv6_subnet_ids()?;
+        Ok(())
+    }
+
+    fn validate_ipv6_subnet_ids(&self) -> Result<()> {
+        let mut seen = HashSet::new();
+        for lan in &self.lans {
+            if lan.ipv6_ra_enabled
+                && let Some(id) = lan.ipv6_subnet_id
+                && !seen.insert(id)
+            {
+                return Err(ModelError::Validation(format!(
+                    "duplicate IPv6-PD subnet_id {id} on LAN '{}'",
+                    lan.name
+                )));
+            }
+        }
+        for vlan in &self.vlans {
+            if vlan.role == crate::network::InterfaceRole::Lan
+                && vlan.ipv6_ra_enabled
+                && let Some(id) = vlan.ipv6_subnet_id
+                && !seen.insert(id)
+            {
+                return Err(ModelError::Validation(format!(
+                    "duplicate IPv6-PD subnet_id {id} on VLAN '{}.{}'",
+                    vlan.parent, vlan.id
+                )));
             }
         }
         Ok(())
@@ -599,6 +653,7 @@ fn default_wans() -> Vec<WanConfig> {
         pppoe_password: None,
         mtu: 1500,
         ipv6_pd: true,
+        ipv6_pd_prefix_len: 60,
         metric: 100,
     }]
 }
@@ -615,6 +670,9 @@ fn default_lans() -> Vec<LanConfig> {
         dhcp_limit: 150,
         dhcp_lease_secs: 43_200,
         static_leases: Vec::new(),
+        ipv6_ra_enabled: true,
+        ipv6_subnet_id: None,
+        ipv6_ula_cidr: None,
     }]
 }
 
@@ -645,6 +703,8 @@ mod tests {
             id: 20,
             role: InterfaceRole::Lan,
             cidr: Some("192.168.20.1/24".to_string()),
+            ipv6_ra_enabled: true,
+            ipv6_subnet_id: Some(1),
         });
         cfg.firewall.rules.push(FirewallRule {
             name: "allow-ssh-lan".to_string(),
@@ -668,6 +728,8 @@ mod tests {
             id: 5000,
             role: InterfaceRole::Lan,
             cidr: None,
+            ipv6_ra_enabled: true,
+            ipv6_subnet_id: None,
         });
         assert!(cfg.validate().is_err());
 

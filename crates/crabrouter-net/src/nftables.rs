@@ -160,7 +160,8 @@ fn write_input_chain(out: &mut String, cfg: &RouterConfig) {
          \x20       iifname \"lo\" accept\n\
          \x20       ct state established,related accept\n\
          \x20       ct state invalid drop\n\
-         \x20       meta l4proto { icmp, ipv6-icmp } accept\n",
+         \x20       meta l4proto { icmp, ipv6-icmp } accept\n\
+         \x20       ip6 daddr fe80::/10 udp sport 547 udp dport 546 accept comment \"dhcpv6-client\"\n",
     );
     write_syn_flood_guard(out, cfg, "input");
     for rule in cfg
@@ -343,7 +344,7 @@ fn write_postrouting_chain(out: &mut String, cfg: &RouterConfig) {
     for zone in &cfg.firewall.zones {
         if zone.masquerade && !zone.interfaces.is_empty() {
             let ifaces = format_iface_set(&zone.interfaces);
-            let _ = writeln!(out, "        oifname {ifaces} masquerade");
+            let _ = writeln!(out, "        meta nfproto ipv4 oifname {ifaces} masquerade");
         }
     }
     out.push_str("    }\n");

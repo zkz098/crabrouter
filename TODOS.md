@@ -63,8 +63,8 @@
 - [ ] **多 WAN 负载均衡与故障切换**
   - [ ] 基于策略路由 + 多路由表 + ICMP/HTTP 健康探测实现主备切换与按权重分流
   - [ ] WAN 切换时精确清理受影响的 `conntrack` 条目
-- [ ] **完整 IPv6-PD 支持**
-  - [ ] 从上游 `dhcpcd` / `pppd` 获取动态 `/56` 或 `/60` 前缀并自动向多个 LAN/VLAN 下发 `/64` RA（`dnsmasq` 或 `radvd`）
+- [x] **完整 IPv6-PD 支持**
+  - [x] 从上游 `dhcpcd` / `pppd` 获取动态 `/56` 或 `/60` 前缀并自动向多个 LAN/VLAN 下发 `/64` RA（`dnsmasq` 或 `radvd`）（[ipv6_pd.rs](crates/crabrouter-net/src/ipv6_pd.rs)、[dhcpcd.rs](crates/crabrouter-net/src/dhcpcd.rs)、[pppoe.rs](crates/crabrouter-net/src/pppoe.rs)、[dnsmasq.rs](crates/crabrouter-services/src/dnsmasq.rs)）
 - [ ] **连接追踪与 QoS**
   - [ ] 通过 Netlink 读取内核 `conntrack` 实时连接表并在 WebUI 展示与搜索（接入 `@tanstack/solid-table`）
   - [ ] 集成 `tc` + `CAKE` / `fq_codel` 队列管理，解决高负载 Bufferbloat

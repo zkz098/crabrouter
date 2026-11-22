@@ -1,5 +1,6 @@
 pub mod dhcpcd;
 pub mod events;
+pub mod ipv6_pd;
 pub mod netlink;
 pub mod nftables;
 pub mod pins;
@@ -20,6 +21,10 @@ pub enum NetError {
 
 pub use dhcpcd::{WanLeaseEvent, render_dhcpcd_conf, render_dhcpcd_hook_script, sync_dhcpcd_files};
 pub use events::{WanEventBus, WanStateObserver, spawn_network_event_engine};
+pub use ipv6_pd::{
+    DownstreamIpv6Target, apply_ipv6_pd_slices_netlink, resolve_downstream_ipv6_targets,
+    slice_delegated_ipv6_prefix,
+};
 pub use netlink::{
     DryRunNetworkBackend, LinuxNetworkBackend, NetworkBackend, NetworkDiffPlan, NetworkPaths,
     compute_network_diff_plan,

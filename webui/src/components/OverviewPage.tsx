@@ -250,9 +250,22 @@ export function OverviewPage(props: Props) {
                     </span>
                   </div>
                   <div class="mt-2 grid grid-cols-2 gap-1 text-slate-400">
-                    <div>IP: {w.ip ?? "-"}</div>
+                    <div>IPv4: {w.ip ?? "-"}</div>
                     <div>网关: {w.gateway ?? "-"}</div>
+                    <div>IPv6: {w.ipv6_addr ?? "-"}</div>
+                    <div>IPv6-PD: {w.ipv6_pd_prefix ?? "-"}</div>
                   </div>
+                  <Show when={w.ipv6_slices.length > 0}>
+                    <div class="mt-2 flex flex-wrap gap-1.5 border-t border-slate-800/80 pt-2">
+                      <For each={w.ipv6_slices}>
+                        {(sl) => (
+                          <span class="rounded border border-sky-500/40 bg-sky-500/10 px-2 py-0.5 font-mono text-[11px] text-sky-200">
+                            {sl.interface} → {sl.prefix_cidr}
+                          </span>
+                        )}
+                      </For>
+                    </div>
+                  </Show>
                 </div>
               )}
             </For>

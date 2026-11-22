@@ -39,6 +39,8 @@ pub struct WanConfig {
     pub mtu: u16,
     #[serde(default = "default_true")]
     pub ipv6_pd: bool,
+    #[serde(default = "default_ipv6_pd_prefix_len")]
+    pub ipv6_pd_prefix_len: u8,
     #[serde(default = "default_metric")]
     pub metric: u32,
 }
@@ -72,6 +74,12 @@ pub struct LanConfig {
     pub dhcp_lease_secs: u32,
     #[serde(default)]
     pub static_leases: Vec<DhcpStaticLease>,
+    #[serde(default = "default_true")]
+    pub ipv6_ra_enabled: bool,
+    #[serde(default)]
+    pub ipv6_subnet_id: Option<u8>,
+    #[serde(default)]
+    pub ipv6_ula_cidr: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
@@ -82,6 +90,10 @@ pub struct VlanConfig {
     pub role: InterfaceRole,
     #[serde(default)]
     pub cidr: Option<String>,
+    #[serde(default = "default_true")]
+    pub ipv6_ra_enabled: bool,
+    #[serde(default)]
+    pub ipv6_subnet_id: Option<u8>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
@@ -150,6 +162,15 @@ pub struct DhcpLeaseEntry {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[ts(export)]
+pub struct Ipv6PdSlice {
+    pub interface: String,
+    pub subnet_id: u8,
+    pub prefix_cidr: String,
+    pub router_addr: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
 pub struct WanRuntimeState {
     pub wan_name: String,
     pub device: String,
@@ -159,6 +180,12 @@ pub struct WanRuntimeState {
     pub gateway: Option<String>,
     pub dns_servers: Vec<String>,
     pub ifindex: Option<u32>,
+    #[serde(default)]
+    pub ipv6_addr: Option<String>,
+    #[serde(default)]
+    pub ipv6_pd_prefix: Option<String>,
+    #[serde(default)]
+    pub ipv6_slices: Vec<Ipv6PdSlice>,
     pub updated_at: String,
 }
 
@@ -168,6 +195,10 @@ const fn default_mtu() -> u16 {
 
 const fn default_true() -> bool {
     true
+}
+
+const fn default_ipv6_pd_prefix_len() -> u8 {
+    60
 }
 
 const fn default_metric() -> u32 {
