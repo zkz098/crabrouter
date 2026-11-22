@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 use std::ffi::CString;
-use std::net::Ipv4Addr;
+use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 use std::sync::Arc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
@@ -11,7 +11,7 @@ use aya::programs::{SchedClassifier, TcAttachType, Xdp, tc, xdp::XdpMode};
 use crabrouter_model::{
     DomainPolicyRule, EbpfRuntimeStatus, EbpfTrafficStat, RouterConfig, wan_fwmark, wan_table_id,
 };
-use ipnet::Ipv4Net;
+use ipnet::{Ipv4Net, Ipv6Net};
 use tokio::sync::Mutex;
 
 use crate::{NetError, Result};
@@ -24,6 +24,7 @@ struct EbpfInner {
     attached_ifaces: Vec<String>,
     xdp_attached_ifaces: Vec<String>,
     dry_run_lpm: HashMap<(Ipv4Addr, u32), u64>,
+    dry_run_lpm_v6: HashMap<(Ipv6Addr, u32), u64>,
     last_error: Option<String>,
 }
 
@@ -111,6 +112,9 @@ impl EbpfEngine {
         } else {
             Vec::new()
         };
+        if let Err(err) = sync_fast_forward_cfg(bpf, cfg.ebpf.fast_forward_enabled) {
+            last_err = Some(err.to_string());
+        }
         guard.attached_ifaces = attached;
         guard.xdp_attached_ifaces = xdp_attached;
         guard.last_error = last_err;
@@ -118,7 +122,7 @@ impl EbpfEngine {
     }
 
     /// Matches a resolved domain against `cfg.ebpf.domain_rules` and inserts IPv4 `/32`
-    /// policy entries into `DOMAIN_POLICY_LPM`.
+    /// and IPv6 `/128` policy entries into `DOMAIN_POLICY_LPM` / `DOMAIN_POLICY_LPM_V6`.
     pub async fn ingest_dns_resolution(
         &self,
         cfg: &RouterConfig,
@@ -136,11 +140,19 @@ impl EbpfEngine {
         let mut inserted = 0u32;
 
         for raw in ips {
-            let Ok(v4) = raw.trim().parse::<Ipv4Addr>() else {
+            let Ok(ip) = raw.trim().parse::<IpAddr>() else {
                 continue;
             };
-            self.upsert_domain_ip(v4, 32, ttl_secs, fwmark, rule.tag_id)
-                .await?;
+            match ip {
+                IpAddr::V4(v4) => {
+                    self.upsert_domain_ip(v4, 32, ttl_secs, fwmark, rule.tag_id)
+                        .await?;
+                }
+                IpAddr::V6(v6) => {
+                    self.upsert_domain_ipv6(v6, 128, ttl_secs, fwmark, rule.tag_id)
+                        .await?;
+                }
+            }
             inserted = inserted.saturating_add(1);
         }
         Ok(inserted)
@@ -189,6 +201,49 @@ impl EbpfEngine {
         Ok(())
     }
 
+    /// Inserts or updates an IPv6 prefix in `DOMAIN_POLICY_LPM_V6`.
+    pub async fn upsert_domain_ipv6(
+        &self,
+        addr: Ipv6Addr,
+        prefix_len: u32,
+        ttl_secs: u64,
+        fwmark: u32,
+        tag_id: u32,
+    ) -> Result<()> {
+        let mut guard = self.inner.lock().await;
+        let now_unix = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs();
+        let expires_at_unix = if ttl_secs == 0 {
+            0
+        } else {
+            now_unix.saturating_add(ttl_secs)
+        };
+
+        if self.dry_run {
+            guard
+                .dry_run_lpm_v6
+                .insert((addr, prefix_len), expires_at_unix);
+            return Ok(());
+        }
+
+        let Some(bpf) = guard.bpf.as_mut() else {
+            return Err(NetError::Apply("eBPF program is not loaded".to_string()));
+        };
+        let mut trie: LpmTrie<_, [u8; 16], [u8; 16]> = LpmTrie::try_from(
+            bpf.map_mut("DOMAIN_POLICY_LPM_V6")
+                .ok_or_else(|| NetError::Apply("missing DOMAIN_POLICY_LPM_V6 map".to_string()))?,
+        )
+        .map_err(|e| NetError::Apply(format!("DOMAIN_POLICY_LPM_V6 open failed: {e}")))?;
+
+        let key = LpmKey::new(prefix_len, addr.octets());
+        let val = encode_policy_value(fwmark, tag_id, monotonic_expire_ns(ttl_secs));
+        trie.insert(&key, &val, 0)
+            .map_err(|e| NetError::Apply(format!("DOMAIN_POLICY_LPM_V6 insert failed: {e}")))?;
+        Ok(())
+    }
+
     /// Collects current eBPF attachment status, LPM entry count, and per-CPU traffic stats.
     pub async fn snapshot(&self, cfg: &RouterConfig) -> EbpfRuntimeStatus {
         let mut guard = self.inner.lock().await;
@@ -197,10 +252,12 @@ impl EbpfEngine {
                 enabled: false,
                 attached_interfaces: Vec::new(),
                 active_lpm_entries: 0,
+                active_lpm_v6_entries: 0,
                 stats: Vec::new(),
                 xdp_attached_interfaces: Vec::new(),
                 xdp_blocklist_drops: 0,
                 xdp_syn_drops: 0,
+                fast_forward_packets: 0,
                 last_error: None,
             };
         }
@@ -213,6 +270,9 @@ impl EbpfEngine {
             guard
                 .dry_run_lpm
                 .retain(|_, exp| *exp == 0 || *exp >= now_unix);
+            guard
+                .dry_run_lpm_v6
+                .retain(|_, exp| *exp == 0 || *exp >= now_unix);
             return EbpfRuntimeStatus {
                 enabled: true,
                 attached_interfaces: if guard.attached_ifaces.is_empty() {
@@ -221,10 +281,13 @@ impl EbpfEngine {
                     guard.attached_ifaces.clone()
                 },
                 active_lpm_entries: u32::try_from(guard.dry_run_lpm.len()).unwrap_or(u32::MAX),
+                active_lpm_v6_entries: u32::try_from(guard.dry_run_lpm_v6.len())
+                    .unwrap_or(u32::MAX),
                 stats: Vec::new(),
                 xdp_attached_interfaces: guard.xdp_attached_ifaces.clone(),
                 xdp_blocklist_drops: 0,
                 xdp_syn_drops: 0,
+                fast_forward_packets: 0,
                 last_error: guard.last_error.clone(),
             };
         }
@@ -237,26 +300,32 @@ impl EbpfEngine {
                 enabled: true,
                 attached_interfaces,
                 active_lpm_entries: 0,
+                active_lpm_v6_entries: 0,
                 stats: Vec::new(),
                 xdp_attached_interfaces,
                 xdp_blocklist_drops: 0,
                 xdp_syn_drops: 0,
+                fast_forward_packets: 0,
                 last_error,
             };
         };
 
         let active_lpm_entries = count_lpm_entries(bpf);
+        let active_lpm_v6_entries = count_lpm_v6_entries(bpf);
         let stats = read_flow_stats(bpf, cfg);
         let (xdp_blocklist_drops, xdp_syn_drops) = read_xdp_drop_stats(bpf);
+        let fast_forward_packets = read_fast_forward_stats(bpf);
 
         EbpfRuntimeStatus {
             enabled: true,
             attached_interfaces,
             active_lpm_entries,
+            active_lpm_v6_entries,
             stats,
             xdp_attached_interfaces,
             xdp_blocklist_drops,
             xdp_syn_drops,
+            fast_forward_packets,
             last_error,
         }
     }
@@ -293,15 +362,35 @@ fn count_lpm_entries(bpf: &Ebpf) -> u32 {
     u32::try_from(trie.keys().count()).unwrap_or(u32::MAX)
 }
 
+fn count_lpm_v6_entries(bpf: &Ebpf) -> u32 {
+    let Some(map) = bpf.map("DOMAIN_POLICY_LPM_V6") else {
+        return 0;
+    };
+    let Ok(trie) = LpmTrie::<_, [u8; 16], [u8; 16]>::try_from(map) else {
+        return 0;
+    };
+    u32::try_from(trie.keys().count()).unwrap_or(u32::MAX)
+}
+
 fn read_flow_stats(bpf: &Ebpf, cfg: &RouterConfig) -> Vec<EbpfTrafficStat> {
+    let mut out = Vec::new();
+    collect_flow_stats_v4(bpf, cfg, &mut out);
+    collect_flow_stats_v6(bpf, cfg, &mut out);
+    out.sort_by(|a, b| {
+        let b_tot = b.rx_bytes.saturating_add(b.tx_bytes);
+        let a_tot = a.rx_bytes.saturating_add(a.tx_bytes);
+        b_tot.cmp(&a_tot)
+    });
+    out
+}
+
+fn collect_flow_stats_v4(bpf: &Ebpf, cfg: &RouterConfig, out: &mut Vec<EbpfTrafficStat>) {
     let Some(map) = bpf.map("FLOW_STATS") else {
-        return Vec::new();
+        return;
     };
     let Ok(stats_map) = PerCpuHashMap::<_, [u8; 8], [u8; 32]>::try_from(map) else {
-        return Vec::new();
+        return;
     };
-
-    let mut out = Vec::new();
     for item in &stats_map {
         let Ok((key_bytes, per_cpu_vals)) = item else {
             continue;
@@ -309,39 +398,61 @@ fn read_flow_stats(bpf: &Ebpf, cfg: &RouterConfig) -> Vec<EbpfTrafficStat> {
         let ip_be = u32::from_ne_bytes([key_bytes[0], key_bytes[1], key_bytes[2], key_bytes[3]]);
         let client_ip = Ipv4Addr::from(u32::from_be(ip_be)).to_string();
         let tag_id = u32::from_le_bytes([key_bytes[4], key_bytes[5], key_bytes[6], key_bytes[7]]);
+        push_flow_stat_entry(cfg, client_ip, tag_id, &per_cpu_vals, out);
+    }
+}
 
-        let mut rx_packets = 0u64;
-        let mut rx_bytes = 0u64;
-        let mut tx_packets = 0u64;
-        let mut tx_bytes = 0u64;
+fn collect_flow_stats_v6(bpf: &Ebpf, cfg: &RouterConfig, out: &mut Vec<EbpfTrafficStat>) {
+    let Some(map) = bpf.map("FLOW_STATS_V6") else {
+        return;
+    };
+    let Ok(stats_map) = PerCpuHashMap::<_, [u8; 20], [u8; 32]>::try_from(map) else {
+        return;
+    };
+    for item in &stats_map {
+        let Ok((key_bytes, per_cpu_vals)) = item else {
+            continue;
+        };
+        let mut octets = [0u8; 16];
+        octets.copy_from_slice(&key_bytes[0..16]);
+        let client_ip = Ipv6Addr::from(octets).to_string();
+        let tag_id =
+            u32::from_le_bytes([key_bytes[16], key_bytes[17], key_bytes[18], key_bytes[19]]);
+        push_flow_stat_entry(cfg, client_ip, tag_id, &per_cpu_vals, out);
+    }
+}
 
-        for val in per_cpu_vals.iter() {
-            let (rp, rb, tp, tb) = decode_traffic_counters(val);
-            rx_packets = rx_packets.saturating_add(rp);
-            rx_bytes = rx_bytes.saturating_add(rb);
-            tx_packets = tx_packets.saturating_add(tp);
-            tx_bytes = tx_bytes.saturating_add(tb);
-        }
+fn push_flow_stat_entry(
+    cfg: &RouterConfig,
+    client_ip: String,
+    tag_id: u32,
+    per_cpu_vals: &aya::maps::PerCpuValues<[u8; 32]>,
+    out: &mut Vec<EbpfTrafficStat>,
+) {
+    let mut rx_packets = 0u64;
+    let mut rx_bytes = 0u64;
+    let mut tx_packets = 0u64;
+    let mut tx_bytes = 0u64;
 
-        let rule = cfg.ebpf.domain_rules.iter().find(|r| r.tag_id == tag_id);
-        out.push(EbpfTrafficStat {
-            client_ip,
-            tag_id,
-            domain_label: rule.map(|r| r.domain.clone()),
-            wan_name: rule.map(|r| r.wan_name.clone()),
-            tx_packets,
-            tx_bytes,
-            rx_packets,
-            rx_bytes,
-        });
+    for val in per_cpu_vals.iter() {
+        let (rp, rb, tp, tb) = decode_traffic_counters(val);
+        rx_packets = rx_packets.saturating_add(rp);
+        rx_bytes = rx_bytes.saturating_add(rb);
+        tx_packets = tx_packets.saturating_add(tp);
+        tx_bytes = tx_bytes.saturating_add(tb);
     }
 
-    out.sort_by(|a, b| {
-        let b_tot = b.rx_bytes.saturating_add(b.tx_bytes);
-        let a_tot = a.rx_bytes.saturating_add(a.tx_bytes);
-        b_tot.cmp(&a_tot)
+    let rule = cfg.ebpf.domain_rules.iter().find(|r| r.tag_id == tag_id);
+    out.push(EbpfTrafficStat {
+        client_ip,
+        tag_id,
+        domain_label: rule.map(|r| r.domain.clone()),
+        wan_name: rule.map(|r| r.wan_name.clone()),
+        tx_packets,
+        tx_bytes,
+        rx_packets,
+        rx_bytes,
     });
-    out
 }
 
 pub fn resolve_attach_interfaces(cfg: &RouterConfig) -> Vec<String> {
@@ -385,6 +496,25 @@ fn sync_xdp_guard(bpf: &mut Ebpf, cfg: &RouterConfig, ifaces: &[String]) -> Resu
         }
     }
 
+    if let Some(map) = bpf.map_mut("XDP_BLOCKLIST_LPM_V6") {
+        let mut trie = LpmTrie::<_, [u8; 16], u64>::try_from(map)
+            .map_err(|e| NetError::Apply(format!("XDP_BLOCKLIST_LPM_V6 open failed: {e}")))?;
+        let existing_keys: Vec<LpmKey<[u8; 16]>> = trie.keys().flatten().collect();
+        for k in existing_keys {
+            let _ = trie.remove(&k);
+        }
+        for raw in &cfg.ebpf.xdp_blocklist {
+            let trimmed = raw.trim();
+            if let Ok(net) = trimmed.parse::<Ipv6Net>() {
+                let key = LpmKey::new(u32::from(net.prefix_len()), net.addr().octets());
+                let _ = trie.insert(&key, &0u64, 0);
+            } else if let Ok(ip) = trimmed.parse::<Ipv6Addr>() {
+                let key = LpmKey::new(128, ip.octets());
+                let _ = trie.insert(&key, &0u64, 0);
+            }
+        }
+    }
+
     let xdp: &mut Xdp = bpf
         .program_mut("crabrouter_xdp_wan_guard")
         .ok_or_else(|| {
@@ -410,6 +540,28 @@ fn sync_xdp_guard(bpf: &mut Ebpf, cfg: &RouterConfig, ifaces: &[String]) -> Resu
         }
     }
     Ok(attached)
+}
+
+fn sync_fast_forward_cfg(bpf: &mut Ebpf, enabled: bool) -> Result<()> {
+    if let Some(map) = bpf.map_mut("FAST_FWD_CFG") {
+        let mut arr = Array::<_, u32>::try_from(map)
+            .map_err(|e| NetError::Apply(format!("FAST_FWD_CFG open failed: {e}")))?;
+        arr.set(0, &u32::from(enabled), 0)
+            .map_err(|e| NetError::Apply(format!("FAST_FWD_CFG set failed: {e}")))?;
+    }
+    Ok(())
+}
+
+fn read_fast_forward_stats(bpf: &Ebpf) -> u64 {
+    let Some(map) = bpf.map("FAST_FWD_STATS") else {
+        return 0;
+    };
+    let Ok(arr) = PerCpuArray::<_, u64>::try_from(map) else {
+        return 0;
+    };
+    arr.get(&0, 0).map_or(0, |vals| {
+        vals.iter().copied().fold(0u64, u64::saturating_add)
+    })
 }
 
 fn read_xdp_drop_stats(bpf: &Ebpf) -> (u64, u64) {
@@ -548,15 +700,17 @@ mod tests {
             )
             .await
             .expect("ingest ok");
-        assert_eq!(inserted, 1);
+        assert_eq!(inserted, 2);
 
         let snap = engine.snapshot(&cfg).await;
         assert!(snap.enabled);
         assert_eq!(snap.active_lpm_entries, 1);
+        assert_eq!(snap.active_lpm_v6_entries, 1);
         assert_eq!(snap.attached_interfaces, vec!["br-lan"]);
 
         cfg.ebpf.xdp_guard_enabled = true;
-        cfg.ebpf.xdp_blocklist = vec!["198.51.100.0/24".to_string()];
+        cfg.ebpf.fast_forward_enabled = true;
+        cfg.ebpf.xdp_blocklist = vec!["198.51.100.0/24".to_string(), "2001:db8::/32".to_string()];
         engine.sync_config(&cfg).await.expect("xdp sync ok");
         let xdp_snap = engine.snapshot(&cfg).await;
         assert_eq!(xdp_snap.xdp_attached_interfaces, vec!["eth0"]);

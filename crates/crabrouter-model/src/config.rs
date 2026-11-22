@@ -5,11 +5,13 @@ use ipnet::IpNet;
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
+use crate::bond::{BondConfig, validate_bonds};
+use crate::ebpf::EbpfConfig;
 use crate::error::{ModelError, Result};
 use crate::firewall::FirewallConfig;
 use crate::network::{
-    AcmeConfig, DdnsConfig, EbpfConfig, InterfacePin, LanConfig, MultiWanConfig, PolicyRuleConfig,
-    QosConfig, StaticRouteConfig, VlanConfig, WanConfig, WanProto,
+    AcmeConfig, DdnsConfig, InterfacePin, LanConfig, MultiWanConfig, PolicyRuleConfig, QosConfig,
+    StaticRouteConfig, VlanConfig, WanConfig, WanProto,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
@@ -146,6 +148,8 @@ pub struct RouterConfig {
     #[serde(default)]
     pub vlans: Vec<VlanConfig>,
     #[serde(default)]
+    pub bonds: Vec<BondConfig>,
+    #[serde(default)]
     pub interface_pins: Vec<InterfacePin>,
     #[serde(default)]
     pub routes: Vec<StaticRouteConfig>,
@@ -177,6 +181,7 @@ impl Default for RouterConfig {
             wans: default_wans(),
             lans: default_lans(),
             vlans: Vec::new(),
+            bonds: Vec::new(),
             interface_pins: Vec::new(),
             routes: Vec::new(),
             policy_rules: Vec::new(),
@@ -209,6 +214,7 @@ impl RouterConfig {
         self.validate_wans()?;
         self.validate_lans()?;
         self.validate_vlans()?;
+        validate_bonds(&self.bonds, &self.lans)?;
         self.validate_interface_pins()?;
         self.validate_routing()?;
         self.validate_firewall()?;
@@ -765,5 +771,7 @@ fn default_lans() -> Vec<LanConfig> {
         ipv6_ra_enabled: true,
         ipv6_subnet_id: None,
         ipv6_ula_cidr: None,
+        stp_enabled: false,
+        forward_delay_cs: 0,
     }]
 }

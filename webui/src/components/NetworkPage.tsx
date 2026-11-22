@@ -10,6 +10,10 @@ import {
 } from "../api";
 import type { AcmeChallengeType } from "../types/AcmeChallengeType";
 import type { AcmeConfig } from "../types/AcmeConfig";
+import type { BondConfig } from "../types/BondConfig";
+import type { BondLacpRate } from "../types/BondLacpRate";
+import type { BondMode } from "../types/BondMode";
+import type { BondXmitHashPolicy } from "../types/BondXmitHashPolicy";
 import type { DdnsConfig } from "../types/DdnsConfig";
 import type { DdnsProvider } from "../types/DdnsProvider";
 import type { EbpfConfig } from "../types/EbpfConfig";
@@ -206,6 +210,37 @@ export function NetworkPage(props: Props) {
       return;
     }
     next.lans[idx] = { ...cur, ...patch };
+    props.onChange(next);
+  }
+
+  function addBond() {
+    const next = structuredClone(props.draft);
+    next.bonds.push({
+      name: `bond${next.bonds.length}`,
+      slaves: [],
+      mode: "802.3ad",
+      xmit_hash_policy: "layer2+3",
+      lacp_rate: "slow",
+      miimon_ms: 100,
+      mtu: null,
+      primary: null,
+    });
+    props.onChange(next);
+  }
+
+  function updateBond(idx: number, patch: Partial<BondConfig>) {
+    const next = structuredClone(props.draft);
+    const cur = next.bonds[idx];
+    if (!cur) {
+      return;
+    }
+    next.bonds[idx] = { ...cur, ...patch };
+    props.onChange(next);
+  }
+
+  function removeBond(idx: number) {
+    const next = structuredClone(props.draft);
+    next.bonds.splice(idx, 1);
     props.onChange(next);
   }
 
@@ -884,6 +919,14 @@ export function NetworkPage(props: Props) {
             />
             启用 WAN 边缘 XDP 防护 (黑名单 / SYN 限速)
           </label>
+          <label class="flex items-center gap-2 text-xs text-slate-300 sm:col-span-2">
+            <input
+              type="checkbox"
+              checked={props.draft.ebpf.fast_forward_enabled}
+              onChange={(e) => updateEbpf({ fast_forward_enabled: e.currentTarget.checked })}
+            />
+            启用 eBPF L3 FIB 路由快转加速 (IPv4 / IPv6 直通转发)
+          </label>
           <label class="block text-xs">
             <span class="text-slate-400">XDP 挂载口 (留空默认全部 WAN)</span>
             <input
@@ -914,11 +957,13 @@ export function NetworkPage(props: Props) {
             />
           </label>
           <label class="block text-xs sm:col-span-3">
-            <span class="text-slate-400">XDP 黑名单 IPv4 / CIDR (逗号分隔，线速 XDP_DROP)</span>
+            <span class="text-slate-400">
+              XDP 黑名单 IPv4 / IPv6 / CIDR (逗号分隔，线速 XDP_DROP)
+            </span>
             <input
               type="text"
               value={props.draft.ebpf.xdp_blocklist.join(", ")}
-              placeholder="例如: 198.51.100.0/24, 203.0.113.5"
+              placeholder="例如: 198.51.100.0/24, 2001:db8::/32"
               onInput={(e) =>
                 updateEbpf({
                   xdp_blocklist: e.currentTarget.value
@@ -1009,7 +1054,8 @@ export function NetworkPage(props: Props) {
                   </span>
                 </span>
                 <span class="font-mono">
-                  LPM 活跃前缀数: {st().active_lpm_entries} · XDP 挂载:{" "}
+                  IPv4 LPM: {st().active_lpm_entries} · IPv6 LPM: {st().active_lpm_v6_entries} ·
+                  快转包: {st().fast_forward_packets} · XDP 挂载:{" "}
                   {st().xdp_attached_interfaces.join(", ") || "未启用"} · XDP 丢弃: 黑名单{" "}
                   {st().xdp_blocklist_drops} / SYN {st().xdp_syn_drops}
                 </span>
@@ -1303,6 +1349,181 @@ export function NetworkPage(props: Props) {
                     class="mt-1 w-full rounded-lg border border-slate-700 bg-slate-900 px-2.5 py-1.5 font-mono text-xs"
                   />
                 </label>
+                <label class="flex items-center gap-2 pt-5 text-xs text-slate-300">
+                  <input
+                    type="checkbox"
+                    checked={lan.stp_enabled}
+                    onChange={(e) => updateLan(idx(), { stp_enabled: e.currentTarget.checked })}
+                  />
+                  启用 Bridge STP 生成树防环
+                </label>
+                <label class="block text-xs">
+                  <span class="text-slate-400">STP Forward Delay (cs, 0=默认)</span>
+                  <input
+                    type="number"
+                    min={0}
+                    value={lan.forward_delay_cs}
+                    onInput={(e) =>
+                      updateLan(idx(), {
+                        forward_delay_cs: Math.max(0, Number(e.currentTarget.value) || 0),
+                      })
+                    }
+                    class="mt-1 w-full rounded-lg border border-slate-700 bg-slate-900 px-2.5 py-1.5 font-mono text-xs"
+                  />
+                </label>
+              </div>
+            )}
+          </For>
+        </div>
+      </section>
+
+      {/* Link Aggregation (Bonding / LACP) */}
+      <section class="rounded-xl border border-slate-800 bg-slate-900/60 p-4">
+        <div class="mb-3 flex items-center justify-between">
+          <div>
+            <h2 class="text-sm font-semibold text-slate-200">链路聚合 (Bonding / 802.3ad LACP)</h2>
+            <p class="mt-0.5 text-xs text-slate-400">
+              将多个物理网卡聚合为逻辑接口 (如 bond0)，再接入 LAN Bridge、VLAN 或作为 WAN 设备
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={addBond}
+            class="rounded-lg border border-slate-700 bg-slate-800 px-3 py-1 text-xs text-slate-200 hover:bg-slate-700"
+          >
+            + 添加聚合组
+          </button>
+        </div>
+        <div class="space-y-3">
+          <For
+            each={props.draft.bonds}
+            fallback={
+              <p class="text-xs text-slate-500">暂无链路聚合配置，点击右上角添加 bond 接口。</p>
+            }
+          >
+            {(bond, idx) => (
+              <div class="grid gap-3 rounded-xl border border-slate-800 bg-slate-950/60 p-3 sm:grid-cols-4">
+                <label class="block text-xs">
+                  <span class="text-slate-400">Bond 接口名</span>
+                  <input
+                    type="text"
+                    value={bond.name}
+                    placeholder="例如: bond0"
+                    onInput={(e) => updateBond(idx(), { name: e.currentTarget.value.trim() })}
+                    class="mt-1 w-full rounded-lg border border-slate-700 bg-slate-900 px-2.5 py-1.5 font-mono text-xs"
+                  />
+                </label>
+                <label class="block text-xs">
+                  <span class="text-slate-400">聚合模式</span>
+                  <select
+                    value={bond.mode}
+                    onChange={(e) => updateBond(idx(), { mode: e.currentTarget.value as BondMode })}
+                    class="mt-1 w-full rounded-lg border border-slate-700 bg-slate-900 px-2.5 py-1.5 text-xs"
+                  >
+                    <option value="802.3ad">802.3ad (LACP)</option>
+                    <option value="active-backup">active-backup (主备)</option>
+                    <option value="balance-xor">balance-xor</option>
+                    <option value="balance-rr">balance-rr (轮询)</option>
+                    <option value="broadcast">broadcast</option>
+                    <option value="balance-tlb">balance-tlb</option>
+                    <option value="balance-alb">balance-alb</option>
+                  </select>
+                </label>
+                <label class="block text-xs">
+                  <span class="text-slate-400">哈希策略</span>
+                  <select
+                    value={bond.xmit_hash_policy}
+                    onChange={(e) =>
+                      updateBond(idx(), {
+                        xmit_hash_policy: e.currentTarget.value as BondXmitHashPolicy,
+                      })
+                    }
+                    class="mt-1 w-full rounded-lg border border-slate-700 bg-slate-900 px-2.5 py-1.5 text-xs"
+                  >
+                    <option value="layer2+3">layer2+3</option>
+                    <option value="layer3+4">layer3+4</option>
+                    <option value="layer2">layer2</option>
+                    <option value="encap2+3">encap2+3</option>
+                    <option value="encap3+4">encap3+4</option>
+                  </select>
+                </label>
+                <label class="block text-xs">
+                  <span class="text-slate-400">LACP 速率</span>
+                  <select
+                    value={bond.lacp_rate}
+                    onChange={(e) =>
+                      updateBond(idx(), { lacp_rate: e.currentTarget.value as BondLacpRate })
+                    }
+                    class="mt-1 w-full rounded-lg border border-slate-700 bg-slate-900 px-2.5 py-1.5 text-xs"
+                  >
+                    <option value="slow">slow (30s)</option>
+                    <option value="fast">fast (1s)</option>
+                  </select>
+                </label>
+                <label class="block text-xs sm:col-span-2">
+                  <span class="text-slate-400">成员接口 (逗号分隔，如 eth1, eth2)</span>
+                  <input
+                    type="text"
+                    value={bond.slaves.join(", ")}
+                    placeholder="eth1, eth2"
+                    onInput={(e) =>
+                      updateBond(idx(), {
+                        slaves: e.currentTarget.value
+                          .split(",")
+                          .map((s) => s.trim())
+                          .filter(Boolean),
+                      })
+                    }
+                    class="mt-1 w-full rounded-lg border border-slate-700 bg-slate-900 px-2.5 py-1.5 font-mono text-xs"
+                  />
+                </label>
+                <label class="block text-xs">
+                  <span class="text-slate-400">MII 监测 (ms) / MTU (可选)</span>
+                  <div class="mt-1 flex gap-2">
+                    <input
+                      type="number"
+                      min={10}
+                      value={bond.miimon_ms}
+                      onInput={(e) =>
+                        updateBond(idx(), { miimon_ms: Number(e.currentTarget.value) || 100 })
+                      }
+                      class="w-1/2 rounded-lg border border-slate-700 bg-slate-900 px-2 py-1.5 font-mono text-xs"
+                    />
+                    <input
+                      type="number"
+                      min={576}
+                      max={9216}
+                      placeholder="MTU"
+                      value={bond.mtu ?? ""}
+                      onInput={(e) => {
+                        const val = e.currentTarget.value.trim();
+                        updateBond(idx(), { mtu: val === "" ? null : Number(val) });
+                      }}
+                      class="w-1/2 rounded-lg border border-slate-700 bg-slate-900 px-2 py-1.5 font-mono text-xs"
+                    />
+                  </div>
+                </label>
+                <div class="flex items-end justify-between gap-2">
+                  <label class="block flex-1 text-xs">
+                    <span class="text-slate-400">主备 Primary (可选)</span>
+                    <input
+                      type="text"
+                      placeholder="eth1"
+                      value={bond.primary ?? ""}
+                      onInput={(e) =>
+                        updateBond(idx(), { primary: e.currentTarget.value.trim() || null })
+                      }
+                      class="mt-1 w-full rounded-lg border border-slate-700 bg-slate-900 px-2 py-1.5 font-mono text-xs"
+                    />
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => removeBond(idx())}
+                    class="rounded-lg bg-rose-900/50 px-2.5 py-1.5 text-xs text-rose-200 hover:bg-rose-800/70"
+                  >
+                    删除
+                  </button>
+                </div>
               </div>
             )}
           </For>

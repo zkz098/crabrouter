@@ -1,4 +1,5 @@
 mod apply;
+mod bond;
 
 use std::collections::{HashMap, HashSet};
 use std::future::Future;
@@ -19,6 +20,7 @@ use crate::pppoe::{PppdManager, render_pppd_peer};
 use crate::qos::{apply_tc_qos, render_tc_qos_script};
 
 pub use apply::{apply_rtnetlink_diff, apply_rtnetlink_diff_with_wans};
+pub use bond::{BondCreateSpec, BondSlaveSpec, BridgeStpSpec, describe_bond};
 
 pub type BoxFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
 
@@ -218,7 +220,12 @@ pub struct InterfaceAddrSpec {
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct NetworkDiffPlan {
+    pub bonds_to_create: Vec<BondCreateSpec>,
+    pub bonds_to_delete: Vec<u32>,
+    pub bond_slaves_to_attach: Vec<BondSlaveSpec>,
+    pub bond_slaves_to_detach: Vec<String>,
     pub bridges_to_create: Vec<String>,
+    pub bridges_stp_to_set: Vec<BridgeStpSpec>,
     pub links_to_up_mtu: Vec<(String, Option<u32>)>,
     pub bridge_ports_to_attach: Vec<BridgePortSpec>,
     pub bridge_ports_to_detach: Vec<String>,
@@ -258,7 +265,9 @@ pub fn compute_network_diff_plan_with_wans(
         links.iter().map(|l| (l.name.as_str(), l)).collect();
     let link_by_index: HashMap<u32, &ObservedLink> = links.iter().map(|l| (l.index, l)).collect();
 
+    bond::plan_bonds(cfg, links, &link_by_name, &mut plan);
     plan_bridges_and_ports(cfg, links, &link_by_name, &mut plan);
+    bond::plan_bridge_stp(cfg, &mut plan);
     plan_vlans(cfg, links, &link_by_name, &link_by_index, &mut plan);
     plan_addresses(cfg, &link_by_name, &link_by_index, addrs, &mut plan);
     plan_routes(
@@ -753,44 +762,5 @@ mod tests {
         assert_eq!(plan.addrs_to_add.len(), 2);
         assert_eq!(plan.routes_to_add.len(), 1);
         assert_eq!(plan.rules_to_add.len(), 1);
-    }
-
-    #[test]
-    fn computes_multi_wan_per_table_routes_and_fwmark_rules() {
-        let mut cfg = RouterConfig::default();
-        cfg.wans[0].proto = WanProto::Static;
-        cfg.wans[0].static_cidr = Some("10.0.0.2/24".to_string());
-        cfg.wans[0].gateway = Some("10.0.0.1".to_string());
-
-        let mut wan2 = cfg.wans[0].clone();
-        wan2.name = "wan2".to_string();
-        wan2.device = "eth4".to_string();
-        wan2.gateway = Some("10.0.1.1".to_string());
-        wan2.static_cidr = Some("10.0.1.2/24".to_string());
-        wan2.metric = 200;
-        cfg.wans.push(wan2);
-        cfg.multi_wan.enabled = true;
-
-        let plan = compute_network_diff_plan_with_wans(
-            &cfg,
-            &[],
-            &[],
-            &[],
-            &[],
-            &[],
-            &["wan".to_string(), "wan2".to_string()],
-        );
-        assert!(plan.routes_to_add.iter().any(|r| r.table_id == 101));
-        assert!(plan.routes_to_add.iter().any(|r| r.table_id == 102));
-        assert!(
-            plan.rules_to_add
-                .iter()
-                .any(|r| r.table_id == 101 && r.fwmark == Some(wan_fwmark(101)))
-        );
-        assert!(
-            plan.rules_to_add
-                .iter()
-                .any(|r| r.table_id == 102 && r.fwmark == Some(wan_fwmark(102)))
-        );
     }
 }

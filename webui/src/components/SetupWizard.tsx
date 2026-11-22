@@ -105,6 +105,8 @@ export function SetupWizard(props: Props) {
       ipv6_ra_enabled: true,
       ipv6_subnet_id: null,
       ipv6_ula_cidr: null,
+      stp_enabled: false,
+      forward_delay_cs: 0,
     };
 
     setSubmitting(true);

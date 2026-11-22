@@ -85,6 +85,8 @@ async fn apply_link_diff(handle: &Handle, plan: &NetworkDiffPlan) -> Result<Hash
             .map_err(|e| NetError::Apply(format!("detach bridge port '{port}' failed: {e}")))?;
     }
 
+    super::bond::apply_bond_detach_and_delete(handle, plan).await?;
+
     for bridge in &plan.bridges_to_create {
         handle
             .link()
@@ -95,6 +97,8 @@ async fn apply_link_diff(handle: &Handle, plan: &NetworkDiffPlan) -> Result<Hash
     }
 
     let mut name_to_index = refresh_name_to_index(handle).await?;
+    super::bond::apply_bond_create_and_attach(handle, plan, &mut name_to_index).await?;
+    super::bond::apply_bridge_stp(handle, plan, &name_to_index).await?;
 
     for spec in &plan.bridge_ports_to_attach {
         let Some(&bridge_idx) = name_to_index.get(&spec.bridge) else {
@@ -222,7 +226,7 @@ async fn apply_route_and_rule_diff(
     Ok(())
 }
 
-async fn refresh_name_to_index(handle: &Handle) -> Result<HashMap<String, u32>> {
+pub(super) async fn refresh_name_to_index(handle: &Handle) -> Result<HashMap<String, u32>> {
     let links = dump_links(handle).await?;
     Ok(links.into_iter().map(|l| (l.name, l.index)).collect())
 }
@@ -608,4 +612,50 @@ async fn del_rule(handle: &Handle, rule: &ObservedRule) -> Result<()> {
         .execute()
         .await
         .map_err(|e| NetError::Apply(format!("del rule prio {} failed: {e}", rule.priority)))
+}
+
+#[cfg(test)]
+mod tests {
+    use crabrouter_model::{RouterConfig, WanProto, wan_fwmark};
+
+    use super::super::compute_network_diff_plan_with_wans;
+
+    #[test]
+    fn computes_multi_wan_per_table_routes_and_fwmark_rules() {
+        let mut cfg = RouterConfig::default();
+        cfg.wans[0].proto = WanProto::Static;
+        cfg.wans[0].static_cidr = Some("10.0.0.2/24".to_string());
+        cfg.wans[0].gateway = Some("10.0.0.1".to_string());
+
+        let mut wan2 = cfg.wans[0].clone();
+        wan2.name = "wan2".to_string();
+        wan2.device = "eth4".to_string();
+        wan2.gateway = Some("10.0.1.1".to_string());
+        wan2.static_cidr = Some("10.0.1.2/24".to_string());
+        wan2.metric = 200;
+        cfg.wans.push(wan2);
+        cfg.multi_wan.enabled = true;
+
+        let plan = compute_network_diff_plan_with_wans(
+            &cfg,
+            &[],
+            &[],
+            &[],
+            &[],
+            &[],
+            &["wan".to_string(), "wan2".to_string()],
+        );
+        assert!(plan.routes_to_add.iter().any(|r| r.table_id == 101));
+        assert!(plan.routes_to_add.iter().any(|r| r.table_id == 102));
+        assert!(
+            plan.rules_to_add
+                .iter()
+                .any(|r| r.table_id == 101 && r.fwmark == Some(wan_fwmark(101)))
+        );
+        assert!(
+            plan.rules_to_add
+                .iter()
+                .any(|r| r.table_id == 102 && r.fwmark == Some(wan_fwmark(102)))
+        );
+    }
 }
