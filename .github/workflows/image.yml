@@ -54,7 +54,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y \
-            mkosi systemd-container systemd-ukify systemd-boot-efi squashfs-tools \
+            systemd-container systemd-ukify systemd-boot-efi squashfs-tools \
             dosfstools e2fsprogs btrfs-progs cryptsetup-bin cpio kmod zstd xz-utils \
             python3-pefile python3-cryptography python3-pip uidmap \
             ovmf qemu-system-x86 qemu-utils xorriso mtools debian-archive-keyring
