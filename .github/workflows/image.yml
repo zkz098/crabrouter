@@ -22,6 +22,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy, rustfmt
+      - uses: Swatinem/rust-cache@v2
       - name: Build & check WebUI
         run: |
           cd webui
@@ -50,6 +51,7 @@ jobs:
           cache: pnpm
           cache-dependency-path: webui/pnpm-lock.yaml
       - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
       - name: Install mkosi & Debian image dependencies
         run: |
           sudo apt-get update
@@ -71,14 +73,21 @@ jobs:
           sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 || true
           chmod +x image/mkosi.postinst image/scripts/*.sh
           bash image/scripts/build-image.sh
+      - name: Compress image artifacts with zstd
+        run: |
+          cd image/mkosi.output
+          find . -maxdepth 1 -type l -delete
+          for f in *.raw *.vhdx *.iso *.efi; do
+            [[ -f "$f" ]] && zstd -T0 -3 --rm "$f"
+          done
+          sha256sum *.zst > SHA256SUMS
+          ls -lh
       - name: Upload mkosi output artifacts
         uses: actions/upload-artifact@v4
         with:
           name: crabrouter-debian13-image
+          compression-level: 0
           path: |
-            image/mkosi.output/*.raw
-            image/mkosi.output/*.vhdx
-            image/mkosi.output/*.iso
-            image/mkosi.output/*.efi
+            image/mkosi.output/*.zst
             image/mkosi.output/SHA256SUMS
-          if-no-files-found: warn
+          if-no-files-found: error
