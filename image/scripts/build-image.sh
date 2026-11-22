@@ -31,13 +31,13 @@ fi
 echo "==> 2. Building Debian 13 (Trixie) UEFI appliance image with mkosi"
 (cd "$IMAGE_DIR" && mkosi --image-version="$VERSION" --force)
 
-RAW_IMG="$OUT_DIR/crabrouter.raw"
-if [[ -f "$RAW_IMG" ]] && command -v qemu-img >/dev/null 2>&1; then
-  echo "==> 3. Converting raw disk image to Hyper-V VHDX"
+RAW_IMG="$(find "$OUT_DIR" -maxdepth 1 -name 'crabrouter*.raw' ! -name '*.root-*' | head -n 1 || true)"
+if [[ -n "$RAW_IMG" ]] && [[ -f "$RAW_IMG" ]] && command -v qemu-img >/dev/null 2>&1; then
+  echo "==> 3. Converting raw disk image ($RAW_IMG) to Hyper-V VHDX"
   qemu-img convert -f raw -O vhdx -o subformat=dynamic \
     "$RAW_IMG" "$OUT_DIR/crabrouter.vhdx"
 else
-  echo "warn: qemu-img not found or $RAW_IMG missing; skipping Hyper-V .vhdx conversion"
+  echo "warn: qemu-img not found or raw image missing in $OUT_DIR; skipping Hyper-V .vhdx conversion"
 fi
 
 if [[ "${BUILD_ISO:-1}" == "1" ]] && command -v xorriso >/dev/null 2>&1 && command -v mcopy >/dev/null 2>&1 && command -v mkfs.vfat >/dev/null 2>&1; then

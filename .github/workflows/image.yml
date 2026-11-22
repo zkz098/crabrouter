@@ -59,6 +59,7 @@ jobs:
             xorriso mtools arch-install-scripts debian-archive-keyring
       - name: Build release appliance & mkosi UEFI image
         run: |
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 || true
           chmod +x image/mkosi.postinst image/scripts/*.sh
           bash image/scripts/build-image.sh
       - name: Upload mkosi output artifacts
