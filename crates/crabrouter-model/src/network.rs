@@ -1,3 +1,4 @@
+use crate::error::{ModelError, Result};
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
@@ -517,6 +518,206 @@ pub struct EbpfRuntimeStatus {
     pub xdp_blocklist_drops: u64,
     #[ts(type = "number")]
     pub xdp_syn_drops: u64,
+    pub last_error: Option<String>,
+}
+
+impl EbpfConfig {
+    pub fn validate(&self) -> Result<()> {
+        let mut tags = std::collections::HashSet::new();
+        for rule in &self.domain_rules {
+            if rule.domain.trim().is_empty() {
+                return Err(ModelError::Validation(
+                    "ebpf domain_rule domain cannot be empty".to_string(),
+                ));
+            }
+            if rule.tag_id == 0 {
+                return Err(ModelError::Validation(format!(
+                    "ebpf domain_rule '{}' tag_id must be > 0",
+                    rule.domain
+                )));
+            }
+            if !tags.insert(rule.tag_id) {
+                return Err(ModelError::Validation(format!(
+                    "duplicate ebpf domain_rule tag_id {}",
+                    rule.tag_id
+                )));
+            }
+        }
+        for entry in &self.xdp_blocklist {
+            let trimmed = entry.trim();
+            if trimmed.parse::<std::net::Ipv4Addr>().is_err()
+                && trimmed.parse::<ipnet::Ipv4Net>().is_err()
+            {
+                return Err(ModelError::Validation(format!(
+                    "ebpf.xdp_blocklist invalid IPv4/CIDR '{entry}'"
+                )));
+            }
+        }
+        Ok(())
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default, TS)]
+#[serde(rename_all = "snake_case")]
+#[ts(export)]
+pub enum DdnsProvider {
+    #[default]
+    Cloudflare,
+    DynDns2,
+    Webhook,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct DdnsConfig {
+    #[serde(default)]
+    pub enabled: bool,
+    #[serde(default)]
+    pub provider: DdnsProvider,
+    #[serde(default)]
+    pub domain: String,
+    #[serde(default)]
+    pub wan_name: Option<String>,
+    #[serde(default)]
+    pub username: Option<String>,
+    #[serde(default)]
+    pub token: Option<String>,
+    #[serde(default)]
+    pub zone_id: Option<String>,
+    #[serde(default)]
+    pub record_id: Option<String>,
+    #[serde(default)]
+    pub webhook_url: Option<String>,
+    #[serde(default = "default_ddns_interval")]
+    pub interval_secs: u32,
+}
+
+impl Default for DdnsConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            provider: DdnsProvider::default(),
+            domain: String::new(),
+            wan_name: None,
+            username: None,
+            token: None,
+            zone_id: None,
+            record_id: None,
+            webhook_url: None,
+            interval_secs: default_ddns_interval(),
+        }
+    }
+}
+
+impl DdnsConfig {
+    pub fn validate(&self) -> Result<()> {
+        if !self.enabled {
+            return Ok(());
+        }
+        if self.domain.trim().is_empty() {
+            return Err(ModelError::Validation(
+                "ddns.domain cannot be empty when DDNS is enabled".to_string(),
+            ));
+        }
+        if self.interval_secs < 30 {
+            return Err(ModelError::Validation(
+                "ddns.interval_secs must be >= 30".to_string(),
+            ));
+        }
+        Ok(())
+    }
+}
+
+const fn default_ddns_interval() -> u32 {
+    300
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct DdnsRuntimeStatus {
+    pub enabled: bool,
+    pub provider: DdnsProvider,
+    pub domain: String,
+    pub last_ip: Option<String>,
+    pub last_synced_at: Option<String>,
+    pub last_error: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default, TS)]
+#[serde(rename_all = "snake_case")]
+#[ts(export)]
+pub enum AcmeChallengeType {
+    #[default]
+    Http01,
+    DnsCloudflare,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct AcmeConfig {
+    #[serde(default)]
+    pub enabled: bool,
+    #[serde(default)]
+    pub domain: String,
+    #[serde(default)]
+    pub email: String,
+    #[serde(default = "default_acme_ca")]
+    pub ca_directory: String,
+    #[serde(default)]
+    pub challenge_type: AcmeChallengeType,
+    #[serde(default = "default_acme_renew_days")]
+    pub renew_before_days: u32,
+}
+
+impl Default for AcmeConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            domain: String::new(),
+            email: String::new(),
+            ca_directory: default_acme_ca(),
+            challenge_type: AcmeChallengeType::default(),
+            renew_before_days: default_acme_renew_days(),
+        }
+    }
+}
+
+impl AcmeConfig {
+    pub fn validate(&self) -> Result<()> {
+        if !self.enabled {
+            return Ok(());
+        }
+        if self.domain.trim().is_empty() || self.email.trim().is_empty() {
+            return Err(ModelError::Validation(
+                "acme.domain and acme.email are required when ACME is enabled".to_string(),
+            ));
+        }
+        if self.renew_before_days == 0 {
+            return Err(ModelError::Validation(
+                "acme.renew_before_days must be >= 1".to_string(),
+            ));
+        }
+        Ok(())
+    }
+}
+
+fn default_acme_ca() -> String {
+    "https://acme-v02.api.letsencrypt.org/directory".to_string()
+}
+
+const fn default_acme_renew_days() -> u32 {
+    30
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct TlsRuntimeStatus {
+    pub https_enabled: bool,
+    pub acme_enabled: bool,
+    pub domain: String,
+    pub cert_path: Option<String>,
+    pub expires_at: Option<String>,
+    pub last_renewed_at: Option<String>,
     pub last_error: Option<String>,
 }
 

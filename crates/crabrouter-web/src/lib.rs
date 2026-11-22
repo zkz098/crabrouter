@@ -1,5 +1,6 @@
 pub mod api;
 pub mod crabdns_proxy;
+pub mod ddns_tls_api;
 pub mod logs;
 pub mod metrics;
 pub mod ota_api;
@@ -16,9 +17,11 @@ use axum::response::{IntoResponse, Response};
 use axum::routing::{any, get, post};
 use crabrouter_core::RouterEngine;
 use crabrouter_net::{EbpfEngine, MultiWanManager, WanEventBus};
+use crabrouter_services::{DdnsManager, TlsCertManager};
 use rust_embed::RustEmbed;
 use tower_http::cors::CorsLayer;
 
+pub use crabdns_proxy::spawn_crabdns_ebpf_bridge;
 pub use logs::{LogEvent, LogHub};
 
 #[derive(RustEmbed, Clone)]
@@ -31,6 +34,8 @@ pub struct AppState {
     pub wan_bus: WanEventBus,
     pub multi_wan: MultiWanManager,
     pub ebpf: EbpfEngine,
+    pub ddns: DdnsManager,
+    pub tls: TlsCertManager,
     pub logs: LogHub,
     pub lease_path: PathBuf,
     pub ota_dir: PathBuf,
@@ -54,6 +59,10 @@ pub fn build_router(state: AppState) -> Router {
         .route("/api/wans/multi-wan/probe", post(api::multi_wan_probe_now))
         .route("/api/ebpf/status", get(api::ebpf_status))
         .route("/api/ebpf/dns-event", post(api::ingest_ebpf_dns_event))
+        .route("/api/ddns/status", get(ddns_tls_api::ddns_status))
+        .route("/api/ddns/sync", post(ddns_tls_api::ddns_sync_now))
+        .route("/api/tls/status", get(ddns_tls_api::tls_status))
+        .route("/api/tls/renew", post(ddns_tls_api::tls_renew_now))
         .route("/api/net/wan-event", post(api::ingest_wan_event))
         .route("/api/clients", get(api::online_clients))
         .route("/api/conntrack", get(api::list_conntrack))

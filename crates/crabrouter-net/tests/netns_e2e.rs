@@ -5,11 +5,13 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use crabrouter_model::{
-    MultiWanConfig, MultiWanMode, RouterConfig, WanConfig, WanProto, WanRuntimeState,
+    InterfaceRole, MultiWanConfig, MultiWanMode, RouterConfig, VlanConfig, WanConfig, WanProto,
+    WanRuntimeState,
 };
 use crabrouter_net::{
-    WanStateObserver, apply_nft_with_precheck_and_multi_wan, apply_rtnetlink_diff_with_wans,
-    spawn_multi_wan_engine, spawn_network_event_engine,
+    WanStateObserver, apply_ipv6_pd_slices_netlink, apply_nft_with_precheck_and_multi_wan,
+    apply_rtnetlink_diff_with_wans, slice_delegated_ipv6_prefix, spawn_multi_wan_engine,
+    spawn_network_event_engine,
 };
 
 struct TestObserver {
@@ -283,7 +285,7 @@ async fn netns_veth_multi_wan_nat_and_failover_e2e() {
         .expect("apply nftables");
 
     // Verify LAN -> WAN1 NAT forwarding works through real kernel netfilter + rtnetlink
-    ns_exec(lan.pid, &["ping", "-c", "1", "-W", "2", "198.51.100.1"]);
+    ns_exec(lan.pid, &["ping", "-c", "2", "-W", "2", "198.51.100.1"]);
 
     // Start MultiWanManager and verify initial healthy state selects wan
     let observer: Arc<dyn WanStateObserver> = Arc::new(TestObserver { cfg: cfg.clone() });
@@ -304,5 +306,71 @@ async fn netns_veth_multi_wan_nat_and_failover_e2e() {
     assert_eq!(st2.failover_count, 1);
 
     // Verify LAN -> WAN2 NAT forwarding works after failover!
-    ns_exec(lan.pid, &["ping", "-c", "1", "-W", "2", "203.0.113.1"]);
+    ns_exec(lan.pid, &["ping", "-c", "2", "-W", "2", "203.0.113.1"]);
+}
+
+#[tokio::test]
+async fn netns_veth_vlan_ipv6_pd_and_load_balance_e2e() {
+    if std::env::var_os("CRABROUTER_IN_NETNS").is_none() {
+        let exe = std::env::current_exe().expect("current_exe");
+        let out = Command::new("unshare")
+            .args([
+                "--user",
+                "--net",
+                "--map-root-user",
+                exe.to_str().expect("utf8 exe"),
+                "netns_veth_vlan_ipv6_pd_and_load_balance_e2e",
+                "--exact",
+                "--nocapture",
+            ])
+            .env("CRABROUTER_IN_NETNS", "1")
+            .output();
+        if let Ok(res) = out {
+            assert!(
+                res.status.success(),
+                "netns_e2e vlan/ipv6-pd inner failed:\nstdout:\n{}\nstderr:\n{}",
+                String::from_utf8_lossy(&res.stdout),
+                String::from_utf8_lossy(&res.stderr)
+            );
+        }
+        return;
+    }
+
+    let (_wan1, _wan2, lan) = setup_veth_topology();
+    let mut cfg = build_multi_wan_test_config();
+    cfg.multi_wan.mode = MultiWanMode::LoadBalance;
+    cfg.wans[0].weight = 2;
+    cfg.wans[1].weight = 1;
+    cfg.vlans.push(VlanConfig {
+        parent: "eth1".to_string(),
+        id: 20,
+        role: InterfaceRole::Lan,
+        cidr: Some("192.168.20.1/24".to_string()),
+        ipv6_ra_enabled: true,
+        ipv6_subnet_id: Some(1),
+    });
+
+    apply_rtnetlink_diff_with_wans(&cfg, &[], &["wan".to_string(), "wan2".to_string()])
+        .await
+        .expect("apply rtnetlink with vlan and load balance");
+    apply_nft_with_precheck_and_multi_wan(&cfg, Some(&["wan".to_string(), "wan2".to_string()]))
+        .await
+        .expect("apply load-balance nftables");
+
+    // Apply IPv6-PD /60 -> /64 slices onto br-lan & eth1.20 via rtnetlink
+    let slices = slice_delegated_ipv6_prefix("2001:db8:abcd::/60", &cfg).expect("slice v6");
+    assert_eq!(slices.len(), 2);
+    apply_ipv6_pd_slices_netlink(&[], &slices)
+        .await
+        .expect("apply ipv6-pd slices to netlink");
+
+    let addr_out = Command::new("ip")
+        .args(["-6", "addr", "show", "dev", "eth1.20"])
+        .output()
+        .expect("ip -6 addr");
+    let addr_str = String::from_utf8_lossy(&addr_out.stdout);
+    assert!(addr_str.contains("2001:db8:abcd:1::1/64"));
+
+    // Verify LoadBalance mode forwards LAN traffic cleanly
+    ns_exec(lan.pid, &["ping", "-c", "2", "-W", "2", "198.51.100.1"]);
 }

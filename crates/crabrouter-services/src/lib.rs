@@ -1,4 +1,6 @@
+pub mod acme;
 pub mod crabdns;
+pub mod ddns;
 pub mod dnsmasq;
 pub mod ota;
 pub mod supervisor;
@@ -18,7 +20,9 @@ pub enum ServiceError {
     Orchestration(String),
 }
 
+pub use acme::TlsCertManager;
 pub use crabdns::render_crabdns_toml;
+pub use ddns::{DdnsManager, spawn_ddns_engine};
 pub use dnsmasq::{read_online_clients, render_dnsmasq_conf};
 pub use ota::{
     OtaCommandResult, OtaStatus, StagedOtaImage, apply_ota_update, bless_current_boot,

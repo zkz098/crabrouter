@@ -12,8 +12,10 @@ use crabrouter_net::{
     DryRunNetworkBackend, EbpfEngine, LinuxNetworkBackend, NetworkBackend, WanStateObserver,
     spawn_multi_wan_engine, spawn_network_event_engine,
 };
-use crabrouter_services::{DryRunSupervisor, ServiceSupervisor, SystemdSupervisor};
-use crabrouter_web::{AppState, LogHub, build_router};
+use crabrouter_services::{
+    DryRunSupervisor, ServiceSupervisor, SystemdSupervisor, TlsCertManager, spawn_ddns_engine,
+};
+use crabrouter_web::{AppState, LogHub, build_router, spawn_crabdns_ebpf_bridge};
 use ipnet::IpNet;
 use mimalloc::MiMalloc;
 use tokio::net::TcpListener;
@@ -121,6 +123,19 @@ async fn main() -> anyhow::Result<()> {
     if let Err(err) = ebpf.sync_config(&cfg).await {
         tracing::warn!(error = %err, "initial eBPF tc/tcx sync failed");
     }
+    spawn_crabdns_ebpf_bridge(Arc::clone(&engine), ebpf.clone(), cli.dry_run);
+
+    let ddns = {
+        let eng_cfg = Arc::clone(&engine);
+        let eng_wans = Arc::clone(&engine);
+        spawn_ddns_engine(
+            move || (*eng_cfg.active_config()).clone(),
+            move || eng_wans.db().list_wan_states().unwrap_or_default(),
+            &cfg,
+            cli.dry_run,
+        )
+    };
+    let tls = TlsCertManager::new(&cfg, cli.dry_run);
 
     let ota_dir = cli
         .config
@@ -132,6 +147,8 @@ async fn main() -> anyhow::Result<()> {
         wan_bus,
         multi_wan,
         ebpf,
+        ddns,
+        tls,
         logs,
         lease_path: cli.leases.clone(),
         ota_dir,

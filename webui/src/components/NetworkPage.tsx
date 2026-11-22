@@ -1,5 +1,17 @@
 import { For, Show, createResource, createSignal } from "solid-js";
-import { getEbpfStatus, getMultiWanStatus, triggerMultiWanProbe } from "../api";
+import {
+  getDdnsStatus,
+  getEbpfStatus,
+  getMultiWanStatus,
+  getTlsStatus,
+  triggerDdnsSync,
+  triggerMultiWanProbe,
+  triggerTlsRenew,
+} from "../api";
+import type { AcmeChallengeType } from "../types/AcmeChallengeType";
+import type { AcmeConfig } from "../types/AcmeConfig";
+import type { DdnsConfig } from "../types/DdnsConfig";
+import type { DdnsProvider } from "../types/DdnsProvider";
 import type { EbpfConfig } from "../types/EbpfConfig";
 import type { HostInterfaceSnapshot } from "../types/HostInterfaceSnapshot";
 import type { InterfaceRole } from "../types/InterfaceRole";
@@ -25,6 +37,8 @@ export function NetworkPage(props: Props) {
   const [multiWanStatus, { mutate: setMultiWanStatus, refetch: refetchMultiWan }] =
     createResource(getMultiWanStatus);
   const [ebpfStatus, { refetch: refetchEbpf }] = createResource(getEbpfStatus);
+  const [ddnsStatus, { mutate: setDdnsStatus }] = createResource(getDdnsStatus);
+  const [tlsStatus, { mutate: setTlsStatus }] = createResource(getTlsStatus);
   const [probing, setProbing] = createSignal(false);
 
   async function runProbeNow() {
@@ -46,6 +60,18 @@ export function NetworkPage(props: Props) {
   function updateEbpf(patch: Partial<EbpfConfig>) {
     const next = structuredClone(props.draft);
     next.ebpf = { ...next.ebpf, ...patch };
+    props.onChange(next);
+  }
+
+  function updateDdns(patch: Partial<DdnsConfig>) {
+    const next = structuredClone(props.draft);
+    next.ddns = { ...next.ddns, ...patch };
+    props.onChange(next);
+  }
+
+  function updateAcme(patch: Partial<AcmeConfig>) {
+    const next = structuredClone(props.draft);
+    next.acme = { ...next.acme, ...patch };
     props.onChange(next);
   }
 
@@ -1028,6 +1054,150 @@ export function NetworkPage(props: Props) {
             </div>
           )}
         </Show>
+      </section>
+
+      {/* DDNS & ACME Dynamic TLS */}
+      <section class="rounded-xl border border-slate-800 bg-slate-900/60 p-4">
+        <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <h2 class="text-sm font-semibold text-slate-200">DDNS 动态域名与 ACME 证书</h2>
+            <p class="mt-0.5 text-xs text-slate-400">
+              支持 Cloudflare / DynDNS2 / Webhook 动态域名更新，以及 Let&apos;s Encrypt ACME 动态
+              TLS 证书签发与续期。
+            </p>
+          </div>
+          <div class="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => void triggerDdnsSync().then(setDdnsStatus)}
+              class="rounded-lg border border-sky-500/40 bg-sky-500/15 px-3 py-1.5 text-xs font-medium text-sky-300 hover:bg-sky-500/25"
+            >
+              立即同步 DDNS
+            </button>
+            <button
+              type="button"
+              onClick={() => void triggerTlsRenew().then(setTlsStatus)}
+              class="rounded-lg border border-emerald-500/40 bg-emerald-500/15 px-3 py-1.5 text-xs font-medium text-emerald-300 hover:bg-emerald-500/25"
+            >
+              签发 / 续期证书
+            </button>
+          </div>
+        </div>
+
+        <div class="grid gap-4 sm:grid-cols-2">
+          <div class="space-y-2 rounded-lg border border-slate-800 bg-slate-950/50 p-3">
+            <div class="flex items-center justify-between">
+              <span class="text-xs font-semibold text-slate-300">DDNS 配置</span>
+              <label class="flex items-center gap-2 text-xs text-slate-300">
+                <input
+                  type="checkbox"
+                  checked={props.draft.ddns.enabled}
+                  onChange={(e) => updateDdns({ enabled: e.currentTarget.checked })}
+                />
+                启用
+              </label>
+            </div>
+            <div class="grid gap-2 sm:grid-cols-2">
+              <select
+                value={props.draft.ddns.provider}
+                onChange={(e) => updateDdns({ provider: e.currentTarget.value as DdnsProvider })}
+                class="rounded border border-slate-700 bg-slate-900 px-2 py-1 text-xs"
+              >
+                <option value="cloudflare">Cloudflare</option>
+                <option value="dyn_dns2">DynDNS2</option>
+                <option value="webhook">Webhook</option>
+              </select>
+              <input
+                type="text"
+                value={props.draft.ddns.domain}
+                placeholder="域名 (如 gw.example.com)"
+                onInput={(e) => updateDdns({ domain: e.currentTarget.value })}
+                class="rounded border border-slate-700 bg-slate-900 px-2 py-1 font-mono text-xs"
+              />
+              <input
+                type="text"
+                value={props.draft.ddns.token ?? ""}
+                placeholder="API Token / 密码"
+                onInput={(e) => updateDdns({ token: e.currentTarget.value || null })}
+                class="rounded border border-slate-700 bg-slate-900 px-2 py-1 font-mono text-xs"
+              />
+              <input
+                type="text"
+                value={props.draft.ddns.zone_id ?? ""}
+                placeholder="Zone ID (Cloudflare)"
+                onInput={(e) => updateDdns({ zone_id: e.currentTarget.value || null })}
+                class="rounded border border-slate-700 bg-slate-900 px-2 py-1 font-mono text-xs"
+              />
+            </div>
+            <Show when={ddnsStatus()}>
+              {(ds) => (
+                <div class="font-mono text-[11px] text-slate-400">
+                  上次 IP: {ds().last_ip ?? "-"} · 同步: {ds().last_synced_at ?? "-"}
+                  {ds().last_error ? ` · 错误: ${ds().last_error}` : ""}
+                </div>
+              )}
+            </Show>
+          </div>
+
+          <div class="space-y-2 rounded-lg border border-slate-800 bg-slate-950/50 p-3">
+            <div class="flex items-center justify-between">
+              <span class="text-xs font-semibold text-slate-300">ACME 动态 TLS</span>
+              <label class="flex items-center gap-2 text-xs text-slate-300">
+                <input
+                  type="checkbox"
+                  checked={props.draft.acme.enabled}
+                  onChange={(e) => updateAcme({ enabled: e.currentTarget.checked })}
+                />
+                启用
+              </label>
+            </div>
+            <div class="grid gap-2 sm:grid-cols-2">
+              <input
+                type="text"
+                value={props.draft.acme.domain}
+                placeholder="证书域名 (gw.example.com)"
+                onInput={(e) => updateAcme({ domain: e.currentTarget.value })}
+                class="rounded border border-slate-700 bg-slate-900 px-2 py-1 font-mono text-xs"
+              />
+              <input
+                type="email"
+                value={props.draft.acme.email}
+                placeholder="通知邮箱 (ops@example.com)"
+                onInput={(e) => updateAcme({ email: e.currentTarget.value })}
+                class="rounded border border-slate-700 bg-slate-900 px-2 py-1 font-mono text-xs"
+              />
+              <select
+                value={props.draft.acme.challenge_type}
+                onChange={(e) =>
+                  updateAcme({ challenge_type: e.currentTarget.value as AcmeChallengeType })
+                }
+                class="rounded border border-slate-700 bg-slate-900 px-2 py-1 text-xs"
+              >
+                <option value="http01">HTTP-01 (Standalone)</option>
+                <option value="dns_cloudflare">DNS-01 (Cloudflare)</option>
+              </select>
+              <input
+                type="number"
+                min="1"
+                value={props.draft.acme.renew_before_days}
+                onInput={(e) =>
+                  updateAcme({
+                    renew_before_days: Math.max(1, Number(e.currentTarget.value) || 30),
+                  })
+                }
+                class="rounded border border-slate-700 bg-slate-900 px-2 py-1 font-mono text-xs"
+              />
+            </div>
+            <Show when={tlsStatus()}>
+              {(ts) => (
+                <div class="font-mono text-[11px] text-slate-400">
+                  证书: {ts().cert_path ?? "自签/未配置"} · 到期: {ts().expires_at ?? "-"}
+                  {ts().last_error ? ` · 错误: ${ts().last_error}` : ""}
+                </div>
+              )}
+            </Show>
+          </div>
+        </div>
       </section>
 
       {/* LAN Bridge Parameters */}

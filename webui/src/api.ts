@@ -5,6 +5,7 @@ import type { ConntrackEntry } from "./types/ConntrackEntry";
 import type { ConntrackKillRequest } from "./types/ConntrackKillRequest";
 import type { ConntrackKillResponse } from "./types/ConntrackKillResponse";
 import type { CrabDnsAggregateStatus } from "./types/CrabDnsAggregateStatus";
+import type { DdnsRuntimeStatus } from "./types/DdnsRuntimeStatus";
 import type { DhcpLeaseEntry } from "./types/DhcpLeaseEntry";
 import type { DiagCommandResult } from "./types/DiagCommandResult";
 import type { EbpfRuntimeStatus } from "./types/EbpfRuntimeStatus";
@@ -24,6 +25,7 @@ import type { SetupInitRequest } from "./types/SetupInitRequest";
 import type { SetupStatusResponse } from "./types/SetupStatusResponse";
 import type { StagedOtaImage } from "./types/StagedOtaImage";
 import type { SystemdUnitStatus } from "./types/SystemdUnitStatus";
+import type { TlsRuntimeStatus } from "./types/TlsRuntimeStatus";
 import type { TracerouteRequest } from "./types/TracerouteRequest";
 import type { WanRuntimeState } from "./types/WanRuntimeState";
 import type { WireGuardKeypairResponse } from "./types/WireGuardKeypairResponse";
@@ -107,6 +109,22 @@ export function triggerMultiWanProbe(): Promise<MultiWanRuntimeStatus> {
 
 export function getEbpfStatus(): Promise<EbpfRuntimeStatus> {
   return fetchJson<EbpfRuntimeStatus>("/api/ebpf/status");
+}
+
+export function getDdnsStatus(): Promise<DdnsRuntimeStatus> {
+  return fetchJson<DdnsRuntimeStatus>("/api/ddns/status");
+}
+
+export function triggerDdnsSync(): Promise<DdnsRuntimeStatus> {
+  return fetchJson<DdnsRuntimeStatus>("/api/ddns/sync", { method: "POST" });
+}
+
+export function getTlsStatus(): Promise<TlsRuntimeStatus> {
+  return fetchJson<TlsRuntimeStatus>("/api/tls/status");
+}
+
+export function triggerTlsRenew(): Promise<TlsRuntimeStatus> {
+  return fetchJson<TlsRuntimeStatus>("/api/tls/renew", { method: "POST" });
 }
 
 export function getClients(): Promise<DhcpLeaseEntry[]> {

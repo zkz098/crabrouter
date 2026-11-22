@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+use std::sync::Arc;
 use std::time::Duration;
 
 use axum::Json;
@@ -5,6 +7,9 @@ use axum::body::Body;
 use axum::extract::{Request, State};
 use axum::http::{HeaderMap, StatusCode, Uri};
 use axum::response::{IntoResponse, Response};
+use crabrouter_core::RouterEngine;
+use crabrouter_model::RouterConfig;
+use crabrouter_net::EbpfEngine;
 use http_body_util::BodyExt;
 use hyper_util::client::legacy::Client;
 use hyper_util::client::legacy::connect::HttpConnector;
@@ -136,5 +141,117 @@ pub async fn proxy_crabdns(
         )
             .into_response()),
         Err(_) => Ok((StatusCode::GATEWAY_TIMEOUT, "crabdns proxy timed out").into_response()),
+    }
+}
+
+/// Spawns a background bridge that syncs `crabdns` resolved A/AAAA query logs and exact
+/// configured domain rules into `EbpfEngine`'s `DOMAIN_POLICY_LPM` map.
+pub fn spawn_crabdns_ebpf_bridge(engine: Arc<RouterEngine>, ebpf: EbpfEngine, dry_run: bool) {
+    tokio::spawn(async move {
+        let client = http_client();
+        let mut seen: HashSet<(String, Vec<String>)> = HashSet::new();
+        let mut tick: u64 = 0;
+
+        loop {
+            let cfg = engine.active_config();
+            if cfg.ebpf.enabled && !cfg.ebpf.domain_rules.is_empty() && !dry_run {
+                if let Ok(json_val) =
+                    fetch_local_json(&client, cfg.dns.crabdns_web_port, "/api/logs?limit=200").await
+                {
+                    let _ = ingest_crabdns_logs_json(&ebpf, &cfg, &json_val, &mut seen).await;
+                }
+                if tick.is_multiple_of(20) {
+                    prewarm_exact_domain_rules(&ebpf, &cfg).await;
+                }
+            }
+            if seen.len() > 4096 {
+                seen.clear();
+            }
+            tick = tick.saturating_add(1);
+            tokio::time::sleep(Duration::from_secs(3)).await;
+        }
+    });
+}
+
+/// Parses `crabdns` `/api/logs` JSON payload and feeds matching `(domain, answers)` into eBPF LPM.
+pub async fn ingest_crabdns_logs_json<S: std::hash::BuildHasher>(
+    ebpf: &EbpfEngine,
+    cfg: &RouterConfig,
+    payload: &serde_json::Value,
+    seen: &mut HashSet<(String, Vec<String>), S>,
+) -> u32 {
+    let Some(items) = payload
+        .as_array()
+        .or_else(|| payload.get("logs").and_then(|v| v.as_array()))
+    else {
+        return 0;
+    };
+
+    let mut total_inserted = 0u32;
+    for item in items {
+        let Some(domain) = item.get("domain").and_then(|v| v.as_str()) else {
+            continue;
+        };
+        let Some(ans_arr) = item.get("answers").and_then(|v| v.as_array()) else {
+            continue;
+        };
+        let ips: Vec<String> = ans_arr
+            .iter()
+            .filter_map(|v| v.as_str().map(str::to_string))
+            .collect();
+        if ips.is_empty() || !seen.insert((domain.to_string(), ips.clone())) {
+            continue;
+        }
+        if let Ok(n) = ebpf.ingest_dns_resolution(cfg, domain, &ips, 300).await {
+            total_inserted = total_inserted.saturating_add(n);
+        }
+    }
+    total_inserted
+}
+
+async fn prewarm_exact_domain_rules(ebpf: &EbpfEngine, cfg: &RouterConfig) {
+    for rule in &cfg.ebpf.domain_rules {
+        let dom = rule.domain.trim().trim_end_matches('.');
+        if dom.is_empty() || dom.starts_with("*.") {
+            continue;
+        }
+        if let Ok(addrs) = tokio::net::lookup_host((dom, 80)).await {
+            let ips: Vec<String> = addrs.map(|a| a.ip().to_string()).collect();
+            if !ips.is_empty() {
+                let _ = ebpf.ingest_dns_resolution(cfg, dom, &ips, 300).await;
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crabrouter_model::DomainPolicyRule;
+
+    #[tokio::test]
+    async fn ingests_crabdns_log_payload_into_ebpf() {
+        let mut cfg = RouterConfig::default();
+        cfg.ebpf.enabled = true;
+        cfg.ebpf.domain_rules.push(DomainPolicyRule {
+            domain: "*.openai.com".to_string(),
+            wan_name: "wan".to_string(),
+            tag_id: 4,
+        });
+
+        let ebpf = EbpfEngine::new(true);
+        ebpf.sync_config(&cfg).await.expect("sync");
+        let payload = serde_json::json!([
+            { "domain": "api.openai.com", "answers": ["104.18.7.192"] },
+            { "domain": "unrelated.org", "answers": ["93.184.216.34"] }
+        ]);
+
+        let mut seen = HashSet::new();
+        let inserted = ingest_crabdns_logs_json(&ebpf, &cfg, &payload, &mut seen).await;
+        assert_eq!(inserted, 1);
+
+        // Duplicate batch should be deduplicated
+        let inserted2 = ingest_crabdns_logs_json(&ebpf, &cfg, &payload, &mut seen).await;
+        assert_eq!(inserted2, 0);
     }
 }

@@ -128,4 +128,58 @@ IFACES_JSON="$(curl -fsS "http://127.0.0.1:${HTTP_PORT}/api/interfaces")"
 echo "==> /api/setup/status: $SETUP_JSON"
 echo "==> /api/ota/status:   $OTA_JSON"
 echo "==> /api/interfaces:   $(echo "$IFACES_JSON" | head -c 180)..."
+
+if [[ "${CRABROUTER_TEST_OTA_ROLLBACK:-0}" == "1" ]] || [[ "${1:-}" == "--test-ota-rollback" ]]; then
+  if command -v sfdisk >/dev/null 2>&1 && command -v mcopy >/dev/null 2>&1 && command -v mdir >/dev/null 2>&1; then
+    echo "==> Testing systemd-boot Boot Assessment A/B OTA rollback..."
+    if [[ -S "$WORK_DIR/monitor.sock" ]] && command -v socat >/dev/null 2>&1; then
+      echo "quit" | socat - UNIX-CONNECT:"$WORK_DIR/monitor.sock" >/dev/null 2>&1 || true
+      sleep 1
+    fi
+    kill "$QEMU_PID" 2>/dev/null || true
+    wait "$QEMU_PID" 2>/dev/null || true
+    QEMU_PID=""
+
+    qemu-img convert -f qcow2 -O raw "$WORK_DIR/disk.qcow2" "$WORK_DIR/rollback.raw"
+    ESP_START_SECTOR="$(sfdisk -d "$WORK_DIR/rollback.raw" | awk '/type=C12A7328-F81F-11D2-BA4B-00A0C93EC93B/ {for(i=1;i<=NF;i++) if($i ~ /^start=/) {gsub(/[^0-9]/,"",$i); print $i; exit}}')"
+    if [[ -n "$ESP_START_SECTOR" ]]; then
+      ESP_OFFSET=$((ESP_START_SECTOR * 512))
+      printf "INVALID_UKI_IMAGE" > "$WORK_DIR/bad.efi"
+      mcopy -o -i "$WORK_DIR/rollback.raw@@${ESP_OFFSET}" "$WORK_DIR/bad.efi" "::/EFI/Linux/crabrouter_9.9.9+1-0.efi"
+      qemu-img create -q -f qcow2 -F raw -b "$WORK_DIR/rollback.raw" "$WORK_DIR/rollback.qcow2"
+
+      qemu-system-x86_64 \
+        "${KVM_ARGS[@]}" -m 2048 -smp 2 -nographic \
+        -serial "file:$WORK_DIR/serial-rollback.log" \
+        -monitor "unix:$WORK_DIR/monitor.sock,server,nowait" \
+        -drive "if=pflash,format=raw,readonly=on,file=$OVMF_CODE" \
+        "${OVMF_VARS_DRIVE[@]}" \
+        -drive "file=$WORK_DIR/rollback.qcow2,format=qcow2,if=virtio" \
+        -netdev user,id=wan0 -device virtio-net-pci,netdev=wan0 \
+        -netdev "user,id=lan0,net=192.168.10.0/24,hostfwd=tcp:127.0.0.1:${HTTP_PORT}-192.168.10.1:8080" \
+        -device virtio-net-pci,netdev=lan0 \
+        </dev/null >/dev/null 2>&1 &
+      QEMU_PID=$!
+
+      RB_DEADLINE=$((SECONDS + BOOT_TIMEOUT_SECS))
+      RB_HEALTH=""
+      while (( SECONDS < RB_DEADLINE )); do
+        if RB_HEALTH="$(curl -fsS --max-time 2 "http://127.0.0.1:${HTTP_PORT}/api/health" 2>/dev/null)"; then
+          if [[ "$RB_HEALTH" == *'"version":"0.1.0"'* ]]; then
+            break
+          fi
+        fi
+        sleep 2
+      done
+      if [[ "$RB_HEALTH" != *'"version":"0.1.0"'* ]]; then
+        echo "error: A/B OTA rollback failed to recover version 0.1.0" >&2
+        exit 1
+      fi
+      echo "==> A/B OTA rollback verified! Recovered healthy slot: $RB_HEALTH"
+    fi
+  else
+    echo "warn: sfdisk/mtools unavailable; skipping OTA rollback injection"
+  fi
+fi
+
 echo "==> QEMU/KVM E2E boot & API verification PASSED!"

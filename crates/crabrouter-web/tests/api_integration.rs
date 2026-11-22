@@ -10,7 +10,7 @@ use crabrouter_net::{
     DryRunNetworkBackend, EbpfEngine, WanStateObserver, spawn_multi_wan_engine,
     spawn_network_event_engine,
 };
-use crabrouter_services::DryRunSupervisor;
+use crabrouter_services::{DdnsManager, DryRunSupervisor, TlsCertManager};
 use crabrouter_web::{AppState, LogHub, build_router};
 use http_body_util::BodyExt;
 use serde_json::{Value, json};
@@ -38,11 +38,17 @@ async fn setup_test_app() -> (Router, PathBuf) {
     let multi_wan = spawn_multi_wan_engine(observer, wan_bus.clone(), true);
     let ebpf = EbpfEngine::new(true);
 
+    let cfg_snapshot = engine.active_config();
+    let ddns = DdnsManager::new(&cfg_snapshot, true);
+    let tls = TlsCertManager::new(&cfg_snapshot, true);
+
     let app = build_router(AppState {
         engine,
         wan_bus,
         multi_wan,
         ebpf,
+        ddns,
+        tls,
         logs: LogHub::new(),
         lease_path: dir.join("dnsmasq.leases"),
         ota_dir: dir.join("ota"),
@@ -203,6 +209,11 @@ async fn multi_wan_ebpf_conntrack_and_status_endpoints() {
         wan_name: "wan".to_string(),
         tag_id: 3,
     });
+    cfg.ddns.enabled = true;
+    cfg.ddns.domain = "gw.example.com".to_string();
+    cfg.acme.enabled = true;
+    cfg.acme.domain = "gw.example.com".to_string();
+    cfg.acme.email = "ops@example.com".to_string();
     let (st, _) = req_json(
         &app,
         "POST",
@@ -255,6 +266,10 @@ async fn multi_wan_ebpf_conntrack_and_status_endpoints() {
         ("GET", "/api/hardware/health", None),
         ("GET", "/api/diag/logs", None),
         ("GET", "/api/ota/status", None),
+        ("GET", "/api/ddns/status", None),
+        ("POST", "/api/ddns/sync", None),
+        ("GET", "/api/tls/status", None),
+        ("POST", "/api/tls/renew", None),
         ("POST", "/api/wireguard/keypair", None),
         (
             "POST",
