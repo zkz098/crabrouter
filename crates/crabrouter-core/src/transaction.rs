@@ -461,4 +461,119 @@ mod tests {
         assert!(engine.status().await.pending.is_none());
         let _ = std::fs::remove_dir_all(&dir);
     }
+
+    #[tokio::test(start_paused = true)]
+    async fn commit_confirm_timeout_auto_rolls_back() {
+        let dir = std::env::temp_dir().join(format!("crabrouter-vclk-rb-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let store = ConfigStore::new(dir.join("router.toml"));
+        let engine = RouterEngine::bootstrap(
+            store.clone(),
+            Arc::new(DryRunNetworkBackend),
+            Arc::new(DryRunSupervisor),
+        )
+        .await
+        .unwrap();
+
+        let mut candidate_cfg = (*engine.active_config()).clone();
+        candidate_cfg.system.hostname = "temp-gw".to_string();
+        candidate_cfg.system.commit_confirm_timeout_secs = 60;
+        let status = engine.begin_commit(candidate_cfg).await.unwrap();
+        assert!(status.pending.is_some());
+        assert_eq!(engine.active_config().system.hostname, "temp-gw");
+        // Let the spawned rollback_task register its sleep timer at t=0.
+        tokio::task::yield_now().await;
+
+        // Halfway through the 60s window: commit is still pending.
+        tokio::time::advance(Duration::from_secs(30)).await;
+        tokio::task::yield_now().await;
+        assert!(engine.status().await.pending.is_some());
+        assert_eq!(engine.active_config().system.hostname, "temp-gw");
+
+        // Past the 60s deadline: auto-rollback task fires and restores previous config.
+        tokio::time::advance(Duration::from_secs(31)).await;
+        for _ in 0..20 {
+            tokio::task::yield_now().await;
+            if engine.status().await.pending.is_none() {
+                break;
+            }
+        }
+        assert!(engine.status().await.pending.is_none());
+        assert_eq!(engine.active_config().system.hostname, "crabrouter");
+        assert!(engine.db().take_pending_marker().unwrap().is_none());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn confirm_right_before_timeout_cancels_rollback() {
+        let dir = std::env::temp_dir().join(format!("crabrouter-vclk-ok-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let store = ConfigStore::new(dir.join("router.toml"));
+        let engine = RouterEngine::bootstrap(
+            store.clone(),
+            Arc::new(DryRunNetworkBackend),
+            Arc::new(DryRunSupervisor),
+        )
+        .await
+        .unwrap();
+
+        let mut candidate_cfg = (*engine.active_config()).clone();
+        candidate_cfg.system.hostname = "confirmed-gw".to_string();
+        candidate_cfg.system.commit_confirm_timeout_secs = 60;
+        engine.begin_commit(candidate_cfg).await.unwrap();
+
+        tokio::time::advance(Duration::from_secs(59)).await;
+        tokio::task::yield_now().await;
+        let confirmed = engine.confirm_commit().await.unwrap();
+        assert!(confirmed.pending.is_none());
+
+        // Advance well past original 60s deadline; config must remain confirmed.
+        tokio::time::advance(Duration::from_secs(30)).await;
+        tokio::task::yield_now().await;
+        assert_eq!(engine.active_config().system.hostname, "confirmed-gw");
+        assert_eq!(
+            store.load_or_init().unwrap().system.hostname,
+            "confirmed-gw"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn concurrent_begin_commit_rejected_until_timeout() {
+        let dir = std::env::temp_dir().join(format!("crabrouter-vclk-dup-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let store = ConfigStore::new(dir.join("router.toml"));
+        let engine = RouterEngine::bootstrap(
+            store,
+            Arc::new(DryRunNetworkBackend),
+            Arc::new(DryRunSupervisor),
+        )
+        .await
+        .unwrap();
+
+        let mut cfg1 = (*engine.active_config()).clone();
+        cfg1.system.hostname = "gw-1".to_string();
+        cfg1.system.commit_confirm_timeout_secs = 15;
+        engine.begin_commit(cfg1).await.unwrap();
+        // Let the spawned rollback_task register its sleep timer at t=0.
+        tokio::task::yield_now().await;
+
+        let mut cfg2 = (*engine.active_config()).clone();
+        cfg2.system.hostname = "gw-2".to_string();
+        assert!(engine.begin_commit(cfg2.clone()).await.is_err());
+
+        // Once timeout expires and auto-rollback completes, a new commit is accepted.
+        tokio::time::advance(Duration::from_secs(16)).await;
+        for _ in 0..20 {
+            tokio::task::yield_now().await;
+            if engine.status().await.pending.is_none() {
+                break;
+            }
+        }
+        assert!(engine.status().await.pending.is_none());
+        let st = engine.begin_commit(cfg2).await.unwrap();
+        assert!(st.pending.is_some());
+        assert_eq!(engine.active_config().system.hostname, "gw-2");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 }

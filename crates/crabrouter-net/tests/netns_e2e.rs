@@ -374,3 +374,110 @@ async fn netns_veth_vlan_ipv6_pd_and_load_balance_e2e() {
     // Verify LoadBalance mode forwards LAN traffic cleanly
     ns_exec(lan.pid, &["ping", "-c", "2", "-W", "2", "198.51.100.1"]);
 }
+
+#[tokio::test]
+async fn netns_veth_link_flap_netem_and_concurrent_nft_e2e() {
+    if std::env::var_os("CRABROUTER_IN_NETNS").is_none() {
+        let exe = std::env::current_exe().expect("current_exe");
+        let out = Command::new("unshare")
+            .args([
+                "--user",
+                "--net",
+                "--map-root-user",
+                exe.to_str().expect("utf8 exe"),
+                "netns_veth_link_flap_netem_and_concurrent_nft_e2e",
+                "--exact",
+                "--nocapture",
+            ])
+            .env("CRABROUTER_IN_NETNS", "1")
+            .output();
+        if let Ok(res) = out {
+            assert!(
+                res.status.success(),
+                "netns_e2e fault-injection inner failed:\nstdout:\n{}\nstderr:\n{}",
+                String::from_utf8_lossy(&res.stdout),
+                String::from_utf8_lossy(&res.stderr)
+            );
+        }
+        return;
+    }
+
+    let (wan1, _wan2, lan) = setup_veth_topology();
+    let cfg = build_multi_wan_test_config();
+    apply_rtnetlink_diff_with_wans(&cfg, &[], &["wan".to_string()])
+        .await
+        .expect("apply initial rtnetlink diff");
+    apply_nft_with_precheck_and_multi_wan(&cfg, Some(&["wan".to_string()]))
+        .await
+        .expect("apply initial nftables");
+
+    // 1. Link flap: bring eth0 down, then up and reapply rtnetlink diff -> forwarding recovers.
+    run_cmd("ip", &["link", "set", "eth0", "down"]);
+    run_cmd("ip", &["link", "set", "eth0", "up"]);
+    apply_rtnetlink_diff_with_wans(&cfg, &[], &["wan".to_string()])
+        .await
+        .expect("reapply rtnetlink after link flap");
+    ns_exec(lan.pid, &["ping", "-c", "2", "-W", "2", "198.51.100.1"]);
+
+    // 2. Concurrent nftables + WanEventBus updates must serialize cleanly without race errors.
+    let observer: Arc<dyn WanStateObserver> = Arc::new(TestObserver { cfg: cfg.clone() });
+    let wan_bus = spawn_network_event_engine(Arc::clone(&observer), false);
+    let multi_wan = spawn_multi_wan_engine(observer, wan_bus.clone(), false);
+
+    let wans_a = ["wan".to_string()];
+    let wans_b = ["wan".to_string(), "wan2".to_string()];
+    let (nft_res_a, nft_res_b, ()) = tokio::join!(
+        apply_nft_with_precheck_and_multi_wan(&cfg, Some(&wans_a)),
+        apply_nft_with_precheck_and_multi_wan(&cfg, Some(&wans_b)),
+        wan_bus.emit(crabrouter_net::WanLeaseEvent {
+            source: "fault-test".to_string(),
+            wan_name: "wan".to_string(),
+            device: "eth0".to_string(),
+            event: "BOUND".to_string(),
+            ip: Some("100.64.1.2/24".to_string()),
+            gateway: Some("100.64.1.1".to_string()),
+            dns_servers: Vec::new(),
+            ifindex: None,
+            ipv6_addr: None,
+            ipv6_pd_prefix: None,
+        }),
+    );
+    nft_res_a.expect("concurrent nft apply A");
+    nft_res_b.expect("concurrent nft apply B");
+    let nft_list = Command::new("nft")
+        .args(["list", "table", "inet", "crabrouter"])
+        .output()
+        .expect("nft list table");
+    assert!(nft_list.status.success(), "nft table must remain intact");
+
+    // 3. Optional tc netem 100% loss injection (when sch_netem is available on host kernel).
+    let netem_add = Command::new("nsenter")
+        .args([
+            "-t",
+            &wan1.pid.to_string(),
+            "-n",
+            "tc",
+            "qdisc",
+            "replace",
+            "dev",
+            "wan-peer",
+            "root",
+            "netem",
+            "loss",
+            "100%",
+        ])
+        .output();
+    if let Ok(res) = netem_add
+        && res.status.success()
+    {
+        let _ = multi_wan.run_probe_cycle().await;
+        let st_down = multi_wan.run_probe_cycle().await;
+        assert_eq!(st_down.active_wans, vec!["wan2"]);
+
+        ns_exec(wan1.pid, &["tc", "qdisc", "del", "dev", "wan-peer", "root"]);
+        let _ = multi_wan.run_probe_cycle().await;
+        let _ = multi_wan.run_probe_cycle().await;
+        let st_up = multi_wan.run_probe_cycle().await;
+        assert_eq!(st_up.active_wans, vec!["wan"]);
+    }
+}

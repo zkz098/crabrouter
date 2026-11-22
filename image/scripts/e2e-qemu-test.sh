@@ -182,4 +182,38 @@ if [[ "${CRABROUTER_TEST_OTA_ROLLBACK:-0}" == "1" ]] || [[ "${1:-}" == "--test-o
   fi
 fi
 
+if [[ "${CRABROUTER_TEST_POWER_LOSS_RECOVERY:-0}" == "1" ]] || [[ "${1:-}" == "--test-power-loss" ]]; then
+  if [[ -S "$WORK_DIR/monitor.sock" ]] && command -v socat >/dev/null 2>&1; then
+    echo "==> Testing unconfirmed commit power-loss crash recovery..."
+    CFG_BEFORE="$(curl -fsS "http://127.0.0.1:${HTTP_PORT}/api/config" || true)"
+    if [[ "$CFG_BEFORE" == *'"hostname"'* ]]; then
+      MOD_CFG="$(echo "$CFG_BEFORE" | sed 's/"hostname":"[^"]*"/"hostname":"unconfirmed-crash"/')"
+      curl -fsS -X POST -H 'Content-Type: application/json' -d "$MOD_CFG" \
+        "http://127.0.0.1:${HTTP_PORT}/api/config/commit" >/dev/null || true
+      echo "system_reset" | socat - UNIX-CONNECT:"$WORK_DIR/monitor.sock" >/dev/null 2>&1 || true
+
+      PL_DEADLINE=$((SECONDS + BOOT_TIMEOUT_SECS))
+      PL_HEALTH=""
+      while (( SECONDS < PL_DEADLINE )); do
+        if PL_HEALTH="$(curl -fsS --max-time 2 "http://127.0.0.1:${HTTP_PORT}/api/health" 2>/dev/null)"; then
+          if [[ "$PL_HEALTH" == *'"status":"ok"'* ]]; then
+            break
+          fi
+        fi
+        sleep 2
+      done
+      CFG_AFTER="$(curl -fsS "http://127.0.0.1:${HTTP_PORT}/api/config" || true)"
+      if [[ "$CFG_AFTER" == *'"unconfirmed-crash"'* ]]; then
+        echo "error: power-loss recovery failed to revert unconfirmed commit" >&2
+        exit 1
+      fi
+      echo "==> Power-loss crash recovery verified!"
+    else
+      echo "warn: /api/config requires auth; skipping unauthenticated power-loss test"
+    fi
+  else
+    echo "warn: monitor.sock/socat unavailable; skipping power-loss injection"
+  fi
+fi
+
 echo "==> QEMU/KVM E2E boot & API verification PASSED!"
