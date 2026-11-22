@@ -356,8 +356,7 @@ fn write_mangle_prerouting_chain(
 
     out.push_str(
         "    chain mangle_prerouting {\n\
-         \x20       type filter hook prerouting priority mangle; policy accept;\n\
-         \x20       ct mark != 0 meta mark set ct mark return\n",
+         \x20       type filter hook prerouting priority mangle; policy accept;\n",
     );
     let _ = writeln!(out, "        iifname != {lan_set} return");
     out.push_str("        fib daddr type local return\n");
@@ -366,6 +365,7 @@ fn write_mangle_prerouting_chain(
             let _ = writeln!(out, "        ip daddr {net} return");
         }
     }
+    out.push_str("        ct mark != 0 meta mark set ct mark return\n");
 
     if cfg.multi_wan.mode == MultiWanMode::Failover || candidates.len() == 1 {
         let mark = candidates[0].0;

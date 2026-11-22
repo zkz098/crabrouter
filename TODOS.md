@@ -79,8 +79,8 @@
 ## Phase 3：测试矩阵与生态扩展
 
 ### 7. 端到端自动化仿真测试
-- [ ] 构建基于 **Linux Network Namespace (`netns`) + `veth`** 的集成测试套件（在隔离命名空间中真实运行 `nft`、`dnsmasq`、`pppd` 服务端模拟多线拨号与 NAT 转发验证）
-- [ ] 构建 **QEMU/KVM 整机镜像启动测试**（验证 `mkosi` 产物启动、`crabrouterd.service` 拉起、WebUI 健康检查及 A/B OTA 升级回滚）
+- [x] 构建基于 **Linux Network Namespace (`netns`) + `veth`** 的集成测试套件（[netns_e2e.rs](crates/crabrouter-net/tests/netns_e2e.rs)：免 `sudo` 隔离命名空间中真实运行 `rtnetlink`、`br-lan`、`nft` NAT/PBR 与 Multi-WAN 故障切换验证）
+- [x] 构建 **QEMU/KVM 整机镜像启动测试**（[e2e-qemu-test.sh](image/scripts/e2e-qemu-test.sh)：基于 `qcow2` CoW 快照与 OVMF UEFI 启动 `mkosi` 产物，验证 `br-lan` 拉起、`crabrouterd.service`、WebUI 静态资源与 `/api/health` / `/api/setup/status` / `/api/ota/status` 健康检查）
 
 ### 8. 可选扩展服务
 - [ ] 动态路由协议托管与 UI：`frr` 或 `bird2`/`bird3`（BGP / OSPF）

@@ -8,7 +8,7 @@ use rtnetlink::packet_route::AddressFamily;
 use rtnetlink::packet_route::address::AddressAttribute;
 use rtnetlink::packet_route::link::{InfoData, InfoKind, InfoVlan, LinkAttribute, LinkInfo};
 use rtnetlink::packet_route::route::{RouteAddress, RouteAttribute, RouteProtocol};
-use rtnetlink::packet_route::rule::RuleAttribute;
+use rtnetlink::packet_route::rule::{RuleAction, RuleAttribute};
 use rtnetlink::{
     AddressMessageBuilder, Handle, IpVersion, LinkBridge, LinkUnspec, LinkVlan,
     RouteMessageBuilder, new_connection,
@@ -538,6 +538,7 @@ async fn add_rule(handle: &Handle, rule: &DesiredRule) -> Result<()> {
             .rule()
             .add()
             .v6()
+            .action(RuleAction::ToTable)
             .priority(rule.priority)
             .table_id(rule.table_id);
         if let Some(IpNet::V6(s)) = rule.src {
@@ -560,6 +561,7 @@ async fn add_rule(handle: &Handle, rule: &DesiredRule) -> Result<()> {
             .rule()
             .add()
             .v4()
+            .action(RuleAction::ToTable)
             .priority(rule.priority)
             .table_id(rule.table_id);
         if let Some(IpNet::V4(s)) = rule.src {
