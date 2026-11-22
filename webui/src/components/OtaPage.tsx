@@ -17,6 +17,13 @@ interface Props {
   onRefreshOta: () => void;
 }
 
+const SECTION_CLS =
+  "rounded-xl border border-[#eaeaea] dark:border-[#262626] bg-white dark:bg-[#0a0a0a] p-4 sm:p-5 transition-colors hover:border-[#d4d4d8] dark:hover:border-[#3a3a3a]";
+const BTN_OUTLINE =
+  "rounded-lg border border-[#eaeaea] dark:border-[#262626] bg-white dark:bg-[#111111] hover:bg-[#f4f4f5] dark:hover:bg-[#1a1a1a] px-3 py-1.5 text-xs font-medium text-[#171717] dark:text-[#ededed] cursor-pointer transition-all active:scale-[0.97] disabled:opacity-50";
+const BTN_PRIMARY =
+  "rounded-lg bg-[#171717] hover:bg-[#383838] dark:bg-[#ededed] dark:hover:bg-[#d4d4d8] px-4 py-1.5 text-xs font-medium text-white dark:text-[#0a0a0a] border-0 cursor-pointer transition-all active:scale-[0.97] disabled:opacity-50";
+
 function formatBytes(bytes: number): string {
   if (bytes < 1024) {
     return `${bytes} B`;
@@ -87,40 +94,58 @@ export function OtaPage(props: Props) {
   }
 
   return (
-    <div class="space-y-6">
+    <div class="space-y-5 sm:space-y-6 animate-view-enter">
       {/* A/B Slot & Boot Assessment Cards */}
       <section class="grid gap-4 md:grid-cols-3">
-        <div class="rounded-xl border border-slate-800 bg-slate-900/60 p-4">
-          <div class="text-xs text-slate-400">当前活跃槽位 (A/B Root)</div>
-          <div class="mt-1 font-mono text-xl font-semibold text-orange-400">
+        <div class={`${SECTION_CLS} animate-card-enter`}>
+          <div class="flex items-center justify-between gap-2">
+            <span class="text-xs font-medium text-[#666666] dark:text-[#a1a1aa]">
+              当前活跃槽位 (A/B Root)
+            </span>
+            <div class="w-8 h-8 rounded-lg flex items-center justify-center shrink-0 text-sky-600 dark:text-sky-400 bg-sky-500/10">
+              <span class="i-ri-hard-drive-2-line text-base" />
+            </div>
+          </div>
+          <div class="mt-2.5 font-mono text-2xl font-semibold tracking-tight text-[#171717] dark:text-[#ededed]">
             Slot {props.otaStatus?.active_slot ?? "未知"}
           </div>
-          <div class="mt-1 text-xs text-slate-400">
+          <div class="mt-1 text-xs text-[#666666] dark:text-[#a1a1aa]">
             系统版本: {props.otaStatus?.current_version ?? "dev/unreleased"}
           </div>
         </div>
 
-        <div class="rounded-xl border border-slate-800 bg-slate-900/60 p-4">
-          <div class="text-xs text-slate-400">systemd-boot 启动评估</div>
-          <div class="mt-1 flex items-center justify-between">
-            <span class="font-mono text-xl font-semibold text-emerald-400">
-              {props.otaStatus?.boot_assessment ?? "-"}
+        <div class={`${SECTION_CLS} animate-card-enter`} style={{ "animation-delay": "60ms" }}>
+          <div class="flex items-center justify-between gap-2">
+            <span class="text-xs font-medium text-[#666666] dark:text-[#a1a1aa]">
+              systemd-boot 启动评估
             </span>
             <button
               type="button"
               disabled={busy()}
               onClick={() => void runAction(() => blessOtaBoot())}
-              class="rounded border border-emerald-500/40 bg-emerald-500/10 px-2.5 py-1 text-xs text-emerald-300 hover:bg-emerald-500/20 disabled:opacity-50"
+              class="rounded-lg border border-emerald-500/25 bg-emerald-500/10 hover:bg-emerald-500/20 px-2.5 py-1 text-[11px] font-medium text-emerald-700 dark:text-emerald-400 cursor-pointer transition-colors disabled:opacity-50"
             >
               确认槽位健康
             </button>
           </div>
-          <div class="mt-1 text-xs text-slate-400">升级后若连续 3 次未通过健康检查将自动回滚</div>
+          <div class="mt-2.5 font-mono text-2xl font-semibold tracking-tight text-emerald-600 dark:text-emerald-400">
+            {props.otaStatus?.boot_assessment ?? "-"}
+          </div>
+          <div class="mt-1 text-xs text-[#666666] dark:text-[#a1a1aa]">
+            升级后连续 3 次未通过健康检查将自动回滚
+          </div>
         </div>
 
-        <div class="rounded-xl border border-slate-800 bg-slate-900/60 p-4">
-          <div class="text-xs text-slate-400">槽位切换与重启</div>
-          <div class="mt-2 flex items-center gap-2">
+        <div class={`${SECTION_CLS} animate-card-enter`} style={{ "animation-delay": "120ms" }}>
+          <div class="flex items-center justify-between gap-2">
+            <span class="text-xs font-medium text-[#666666] dark:text-[#a1a1aa]">
+              槽位切换与重启
+            </span>
+            <div class="w-8 h-8 rounded-lg flex items-center justify-center shrink-0 text-amber-600 dark:text-amber-400 bg-amber-500/10">
+              <span class="i-ri-restart-line text-base" />
+            </div>
+          </div>
+          <div class="mt-3 flex items-center gap-2">
             <Show
               when={confirmReboot()}
               fallback={
@@ -128,7 +153,7 @@ export function OtaPage(props: Props) {
                   type="button"
                   disabled={busy()}
                   onClick={() => setConfirmReboot(true)}
-                  class="rounded-lg bg-amber-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-amber-500 disabled:opacity-50"
+                  class="rounded-lg border border-amber-500/30 bg-amber-500/10 hover:bg-amber-500/20 px-3 py-1.5 text-xs font-medium text-amber-700 dark:text-amber-300 cursor-pointer transition-colors disabled:opacity-50"
                 >
                   重启并切换新槽位
                 </button>
@@ -141,31 +166,29 @@ export function OtaPage(props: Props) {
                   setConfirmReboot(false);
                   void runAction(() => rebootSystem());
                 }}
-                class="rounded-lg bg-red-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-red-500"
+                class="rounded-lg bg-rose-600 hover:bg-rose-500 px-3 py-1.5 text-xs font-medium text-white border-0 cursor-pointer transition-colors"
               >
                 确认立即重启
               </button>
-              <button
-                type="button"
-                onClick={() => setConfirmReboot(false)}
-                class="rounded-lg border border-slate-700 bg-slate-800 px-3 py-1.5 text-xs hover:bg-slate-700"
-              >
+              <button type="button" onClick={() => setConfirmReboot(false)} class={BTN_OUTLINE}>
                 取消
               </button>
             </Show>
           </div>
-          <div class="mt-2 text-xs text-slate-400">通过 systemd-logind D-Bus 触发平滑重启</div>
+          <div class="mt-2 text-xs text-[#666666] dark:text-[#a1a1aa]">
+            通过 systemd-logind D-Bus 触发平滑重启
+          </div>
         </div>
       </section>
 
       {/* Remote OTA Feed */}
-      <section class="rounded-xl border border-slate-800 bg-slate-900/60 p-4">
-        <h2 class="mb-3 text-sm font-semibold text-slate-200">
+      <section class={SECTION_CLS}>
+        <h2 class="mb-3.5 text-sm font-medium text-[#171717] dark:text-[#ededed]">
           在线 OTA 拉取升级 (systemd-sysupdate)
         </h2>
         <div class="flex flex-wrap items-end gap-3 text-xs">
           <label class="flex-1 min-w-64 block">
-            <span class="text-slate-400">OTA 镜像源 URL</span>
+            <span class="text-[#666666] dark:text-[#a1a1aa]">OTA 镜像源 URL</span>
             <input
               type="text"
               value={sourceUrl()}
@@ -176,10 +199,10 @@ export function OtaPage(props: Props) {
                 next.system.ota_update_url = val;
                 props.onChange(next);
               }}
-              class="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 font-mono text-xs"
+              class="mt-1 w-full rounded-lg border border-[#eaeaea] dark:border-[#262626] bg-[#fafafa] dark:bg-[#000000] px-3 py-2 font-mono text-xs text-[#171717] dark:text-[#ededed] outline-none focus:border-[#171717] dark:focus:border-[#ededed]"
             />
           </label>
-          <label class="flex items-center gap-2 pb-2 text-slate-300">
+          <label class="flex items-center gap-2 pb-2 text-[#171717] dark:text-[#ededed]">
             <input
               type="checkbox"
               checked={verifySig()}
@@ -191,7 +214,7 @@ export function OtaPage(props: Props) {
             type="button"
             disabled={busy()}
             onClick={() => void runAction(() => checkOtaUpdates())}
-            class="rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 font-medium hover:bg-slate-700 disabled:opacity-50"
+            class={BTN_OUTLINE}
           >
             检查更新
           </button>
@@ -207,7 +230,7 @@ export function OtaPage(props: Props) {
                 }),
               )
             }
-            class="rounded-lg bg-orange-600 px-4 py-2 font-semibold text-white hover:bg-orange-500 disabled:opacity-50"
+            class={BTN_PRIMARY}
           >
             拉取并写入备用槽位
           </button>
@@ -215,15 +238,17 @@ export function OtaPage(props: Props) {
       </section>
 
       {/* Local Upload & Staged Images */}
-      <section class="rounded-xl border border-slate-800 bg-slate-900/60 p-4">
-        <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
+      <section class={SECTION_CLS}>
+        <div class="mb-3.5 flex flex-wrap items-center justify-between gap-2">
           <div>
-            <h2 class="text-sm font-semibold text-slate-200">本地上传 OTA 镜像升级</h2>
-            <p class="text-xs text-slate-400">
+            <h2 class="text-sm font-medium text-[#171717] dark:text-[#ededed]">
+              本地上传 OTA 镜像升级
+            </h2>
+            <p class="mt-0.5 text-xs text-[#666666] dark:text-[#a1a1aa]">
               支持上传 Debian 13 `mkosi` 产出的 `.raw` / `.raw.xz` / `.efi` 固件镜像。
             </p>
           </div>
-          <label class="cursor-pointer rounded-lg bg-sky-600 px-4 py-2 text-xs font-medium text-white hover:bg-sky-500">
+          <label class={BTN_PRIMARY}>
             选择固件文件上传
             <input
               type="file"
@@ -237,15 +262,19 @@ export function OtaPage(props: Props) {
 
         <Show
           when={(props.otaStatus?.staged_images.length ?? 0) > 0}
-          fallback={<p class="text-xs text-slate-400">暂未上传本地固件镜像。</p>}
+          fallback={
+            <p class="text-xs text-[#666666] dark:text-[#a1a1aa]">暂未上传本地固件镜像。</p>
+          }
         >
           <div class="space-y-2">
             <For each={props.otaStatus?.staged_images ?? []}>
               {(img) => (
-                <div class="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-800 bg-slate-950/60 px-3 py-2 text-xs">
+                <div class="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[#eaeaea] dark:border-[#262626] bg-[#fafafa] dark:bg-[#111111] px-3.5 py-2.5 text-xs">
                   <div>
-                    <div class="font-mono font-semibold text-slate-100">{img.filename}</div>
-                    <div class="mt-0.5 font-mono text-[11px] text-slate-400">
+                    <div class="font-mono font-semibold text-[#171717] dark:text-[#ededed]">
+                      {img.filename}
+                    </div>
+                    <div class="mt-0.5 font-mono text-[11px] text-[#666666] dark:text-[#a1a1aa]">
                       {formatBytes(img.size_bytes)} · SHA256: {img.sha256.slice(0, 24)}...
                     </div>
                   </div>
@@ -261,7 +290,7 @@ export function OtaPage(props: Props) {
                         }),
                       )
                     }
-                    class="rounded-lg bg-orange-600 px-3 py-1.5 font-medium text-white hover:bg-orange-500 disabled:opacity-50"
+                    class={BTN_PRIMARY}
                   >
                     写入备用槽位
                   </button>
@@ -274,19 +303,25 @@ export function OtaPage(props: Props) {
 
       <Show when={result()}>
         {(res) => (
-          <section class="rounded-xl border border-slate-800 bg-slate-900/60 p-4">
-            <div class="mb-2 flex items-center justify-between text-xs">
+          <section class={SECTION_CLS}>
+            <div class="mb-2.5 flex items-center justify-between text-xs">
               <span
-                class={res().ok ? "font-semibold text-emerald-300" : "font-semibold text-red-300"}
+                class={`font-medium ${
+                  res().ok
+                    ? "text-emerald-600 dark:text-emerald-400"
+                    : "text-rose-600 dark:text-rose-400"
+                }`}
               >
                 [{res().action}] {res().message}
               </span>
               <Show when={res().reboot_required}>
-                <span class="rounded bg-amber-500/20 px-2 py-0.5 text-amber-300">需要重启生效</span>
+                <span class="rounded-full border border-amber-500/20 bg-amber-500/10 px-2 py-0.5 text-[11px] font-medium text-amber-700 dark:text-amber-400">
+                  需要重启生效
+                </span>
               </Show>
             </div>
             <Show when={res().output}>
-              <pre class="max-h-64 overflow-auto rounded-lg border border-slate-800 bg-slate-950 p-3 font-mono text-xs text-slate-300">
+              <pre class="max-h-64 overflow-auto rounded-xl border border-[#eaeaea] dark:border-[#262626] bg-[#fafafa] dark:bg-[#000000] p-3 font-mono text-xs text-[#171717] dark:text-[#ededed]">
                 {res().output}
               </pre>
             </Show>

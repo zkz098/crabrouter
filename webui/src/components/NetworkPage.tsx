@@ -93,13 +93,13 @@ export function NetworkPage(props: Props) {
   function healthBadgeClass(h: WanHealthState): string {
     switch (h) {
       case "healthy":
-        return "bg-emerald-500/20 text-emerald-300";
+        return "border border-emerald-500/20 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400";
       case "degraded":
-        return "bg-amber-500/20 text-amber-300";
+        return "border border-amber-500/20 bg-amber-500/10 text-amber-700 dark:text-amber-400";
       case "down":
-        return "bg-rose-500/20 text-rose-300";
+        return "border border-rose-500/20 bg-rose-500/10 text-rose-700 dark:text-rose-600 dark:text-rose-400";
       default:
-        return "bg-slate-700 text-slate-300";
+        return "border border-zinc-500/20 bg-zinc-500/10 text-zinc-600 dark:text-zinc-400";
     }
   }
 
@@ -295,14 +295,14 @@ export function NetworkPage(props: Props) {
     );
 
   return (
-    <div class="space-y-6">
+    <div class="space-y-5 sm:space-y-6 animate-view-enter">
       {/* Drag & Drop + Checkbox Bridge Port Assigner */}
-      <section class="rounded-xl border border-slate-800 bg-slate-900/60 p-4">
+      <section class="rounded-xl border border-[#eaeaea] dark:border-[#262626] bg-white dark:bg-[#0a0a0a] p-4 sm:p-5 transition-colors hover:border-[#d4d4d8] dark:hover:border-[#3a3a3a]">
         <div class="mb-3">
-          <h2 class="text-sm font-semibold text-slate-200">
+          <h2 class="text-sm font-medium text-[#171717] dark:text-[#ededed]">
             物理端口编排（支持拖拽或勾选加入 Bridge）
           </h2>
-          <p class="mt-0.5 text-xs text-slate-400">
+          <p class="mt-0.5 text-xs text-[#666666] dark:text-[#a1a1aa]">
             将物理网口拖入目标 LAN Bridge 区域或直接勾选下方复选框。
           </p>
         </div>
@@ -311,16 +311,18 @@ export function NetworkPage(props: Props) {
           <div
             onDragOver={(e) => e.preventDefault()}
             onDrop={() => dropToUnassigned()}
-            class="rounded-xl border border-dashed border-slate-700 bg-slate-950/60 p-3"
+            class="rounded-xl border border-dashed border-[#eaeaea] dark:border-[#262626] bg-[#fafafa] dark:bg-[#111111] p-3"
           >
-            <div class="mb-2 text-xs font-medium text-slate-400">未分配 / WAN 物理接口池</div>
+            <div class="mb-2 text-xs font-medium text-[#666666] dark:text-[#a1a1aa]">
+              未分配 / WAN 物理接口池
+            </div>
             <div class="flex flex-wrap gap-2">
               <For each={unassignedIfaces()}>
                 {(name) => (
                   <div
                     draggable
                     onDragStart={() => setDraggedIface(name)}
-                    class="cursor-grab rounded-lg border border-slate-700 bg-slate-900 px-3 py-1.5 font-mono text-xs text-slate-200 active:cursor-grabbing"
+                    class="cursor-grab rounded-lg border border-[#eaeaea] dark:border-[#262626] bg-white dark:bg-[#0a0a0a] px-3 py-1.5 font-mono text-xs text-[#171717] dark:text-[#ededed] active:cursor-grabbing"
                   >
                     {name}
                   </div>
@@ -328,7 +330,7 @@ export function NetworkPage(props: Props) {
               </For>
               <For each={props.draft.wans}>
                 {(wan) => (
-                  <div class="rounded-lg border border-orange-500/40 bg-orange-500/10 px-3 py-1.5 font-mono text-xs text-orange-300">
+                  <div class="rounded-lg border border-[#0070f3]/30 bg-[#0070f3]/10 px-3 py-1.5 font-mono text-xs text-[#0070f3] dark:text-sky-400">
                     {wan.device} (WAN: {wan.name})
                   </div>
                 )}
@@ -341,13 +343,13 @@ export function NetworkPage(props: Props) {
               <div
                 onDragOver={(e) => e.preventDefault()}
                 onDrop={() => dropToLan(lanIdx())}
-                class="rounded-xl border border-sky-500/40 bg-sky-950/20 p-3"
+                class="rounded-xl border border-sky-500/25 bg-sky-500/5 p-3"
               >
                 <div class="mb-2 flex items-center justify-between text-xs">
-                  <span class="font-mono font-semibold text-sky-300">
+                  <span class="font-mono font-semibold text-sky-600 dark:text-sky-400">
                     {lan.bridge} ({lan.name})
                   </span>
-                  <span class="text-slate-400">拖放端口到此处</span>
+                  <span class="text-[#666666] dark:text-[#a1a1aa]">拖放端口到此处</span>
                 </div>
                 <div class="mb-2 flex flex-wrap gap-2">
                   <For each={lan.ports}>
@@ -355,13 +357,13 @@ export function NetworkPage(props: Props) {
                       <div
                         draggable
                         onDragStart={() => setDraggedIface(port)}
-                        class="flex cursor-grab items-center gap-1.5 rounded-lg border border-sky-500/50 bg-sky-500/15 px-2.5 py-1 font-mono text-xs text-sky-200"
+                        class="flex cursor-grab items-center gap-1.5 rounded-lg border border-sky-500/25 bg-sky-500/10 px-2.5 py-1 font-mono text-xs text-sky-700 dark:text-sky-600 dark:text-sky-400"
                       >
                         <span>{port}</span>
                         <button
                           type="button"
                           onClick={() => togglePortInLan(lanIdx(), port)}
-                          class="text-sky-300 hover:text-white"
+                          class="text-sky-600 dark:text-sky-400 hover:text-[#171717] dark:hover:text-white bg-transparent border-0 cursor-pointer"
                           title="移出 Bridge"
                         >
                           ×
@@ -370,10 +372,10 @@ export function NetworkPage(props: Props) {
                     )}
                   </For>
                 </div>
-                <div class="flex flex-wrap gap-2 border-t border-slate-800/80 pt-2">
+                <div class="flex flex-wrap gap-2 border-t border-[#eaeaea] dark:border-[#262626] pt-2">
                   <For each={allPhysicalNames()}>
                     {(iface) => (
-                      <label class="flex items-center gap-1.5 text-xs text-slate-300">
+                      <label class="flex items-center gap-1.5 text-xs text-[#171717] dark:text-[#ededed]">
                         <input
                           type="checkbox"
                           checked={lan.ports.includes(iface)}
@@ -391,13 +393,13 @@ export function NetworkPage(props: Props) {
       </section>
 
       {/* WAN Config */}
-      <section class="rounded-xl border border-slate-800 bg-slate-900/60 p-4">
+      <section class="rounded-xl border border-[#eaeaea] dark:border-[#262626] bg-white dark:bg-[#0a0a0a] p-4 sm:p-5 transition-colors hover:border-[#d4d4d8] dark:hover:border-[#3a3a3a]">
         <div class="mb-3 flex items-center justify-between">
-          <h2 class="text-sm font-semibold text-slate-200">WAN 上行接口配置</h2>
+          <h2 class="text-sm font-medium text-[#171717] dark:text-[#ededed]">WAN 上行接口配置</h2>
           <button
             type="button"
             onClick={addWan}
-            class="rounded-lg border border-slate-700 bg-slate-800 px-3 py-1 text-xs hover:bg-slate-700"
+            class="rounded-lg border border-[#eaeaea] dark:border-[#262626] bg-white dark:bg-[#111111] hover:bg-[#f4f4f5] dark:hover:bg-[#1a1a1a] px-3 py-1.5 text-xs font-medium text-[#171717] dark:text-[#ededed] cursor-pointer transition-colors"
           >
             + 添加 WAN
           </button>
@@ -408,15 +410,15 @@ export function NetworkPage(props: Props) {
             {(wan, idx) => {
               const runtime = () => props.wanStates.find((s) => s.wan_name === wan.name);
               return (
-                <div class="rounded-xl border border-slate-800 bg-slate-950/60 p-4">
+                <div class="rounded-xl border border-[#eaeaea] dark:border-[#262626] bg-[#fafafa] dark:bg-[#111111] p-4">
                   <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
                     <div class="flex items-center gap-2">
-                      <span class="font-mono text-sm font-semibold text-orange-300">
+                      <span class="font-mono text-sm font-semibold text-[#0070f3] dark:text-sky-400">
                         {wan.name}
                       </span>
                       <Show when={runtime()}>
                         {(st) => (
-                          <span class="rounded bg-emerald-500/20 px-2 py-0.5 text-[11px] text-emerald-300">
+                          <span class="rounded border border-emerald-500/20 bg-emerald-500/10 px-2 py-0.5 text-[11px] text-emerald-700 dark:text-emerald-400">
                             {st().state} · {st().ip ?? "无 IP"}
                           </span>
                         )}
@@ -425,7 +427,7 @@ export function NetworkPage(props: Props) {
                     <button
                       type="button"
                       onClick={() => removeWan(idx())}
-                      class="text-xs text-red-400 hover:text-red-300"
+                      class="text-xs text-rose-600 dark:text-rose-600 dark:text-rose-400 hover:text-rose-700 dark:hover:text-rose-300 bg-transparent border-0 cursor-pointer"
                     >
                       删除
                     </button>
@@ -433,31 +435,31 @@ export function NetworkPage(props: Props) {
 
                   <div class="grid gap-3 sm:grid-cols-3">
                     <label class="block text-xs">
-                      <span class="text-slate-400">名称</span>
+                      <span class="text-[#666666] dark:text-[#a1a1aa]">名称</span>
                       <input
                         type="text"
                         value={wan.name}
                         onInput={(e) => updateWan(idx(), { name: e.currentTarget.value })}
-                        class="mt-1 w-full rounded-lg border border-slate-700 bg-slate-900 px-2.5 py-1.5 text-xs"
+                        class="mt-1 w-full rounded-lg border border-[#eaeaea] dark:border-[#262626] bg-white dark:bg-[#000000] text-[#171717] dark:text-[#ededed] outline-none focus:border-[#171717] dark:focus:border-[#ededed] px-2.5 py-1.5 text-xs"
                       />
                     </label>
                     <label class="block text-xs">
-                      <span class="text-slate-400">物理/VLAN 设备</span>
+                      <span class="text-[#666666] dark:text-[#a1a1aa]">物理/VLAN 设备</span>
                       <input
                         type="text"
                         value={wan.device}
                         onInput={(e) => updateWan(idx(), { device: e.currentTarget.value })}
-                        class="mt-1 w-full rounded-lg border border-slate-700 bg-slate-900 px-2.5 py-1.5 font-mono text-xs"
+                        class="mt-1 w-full rounded-lg border border-[#eaeaea] dark:border-[#262626] bg-white dark:bg-[#000000] text-[#171717] dark:text-[#ededed] outline-none focus:border-[#171717] dark:focus:border-[#ededed] px-2.5 py-1.5 font-mono text-xs"
                       />
                     </label>
                     <label class="block text-xs">
-                      <span class="text-slate-400">协议</span>
+                      <span class="text-[#666666] dark:text-[#a1a1aa]">协议</span>
                       <select
                         value={wan.proto}
                         onChange={(e) =>
                           updateWan(idx(), { proto: e.currentTarget.value as WanProto })
                         }
-                        class="mt-1 w-full rounded-lg border border-slate-700 bg-slate-900 px-2.5 py-1.5 text-xs"
+                        class="mt-1 w-full rounded-lg border border-[#eaeaea] dark:border-[#262626] bg-white dark:bg-[#000000] text-[#171717] dark:text-[#ededed] outline-none focus:border-[#171717] dark:focus:border-[#ededed] px-2.5 py-1.5 text-xs"
                       >
                         <option value="dhcp">DHCP</option>
                         <option value="pppoe">PPPoE</option>
@@ -465,29 +467,29 @@ export function NetworkPage(props: Props) {
                       </select>
                     </label>
                     <label class="block text-xs">
-                      <span class="text-slate-400">MTU</span>
+                      <span class="text-[#666666] dark:text-[#a1a1aa]">MTU</span>
                       <input
                         type="number"
                         value={wan.mtu}
                         onInput={(e) =>
                           updateWan(idx(), { mtu: Number(e.currentTarget.value) || 1500 })
                         }
-                        class="mt-1 w-full rounded-lg border border-slate-700 bg-slate-900 px-2.5 py-1.5 font-mono text-xs"
+                        class="mt-1 w-full rounded-lg border border-[#eaeaea] dark:border-[#262626] bg-white dark:bg-[#000000] text-[#171717] dark:text-[#ededed] outline-none focus:border-[#171717] dark:focus:border-[#ededed] px-2.5 py-1.5 font-mono text-xs"
                       />
                     </label>
                     <label class="block text-xs">
-                      <span class="text-slate-400">路由跃点 (Metric)</span>
+                      <span class="text-[#666666] dark:text-[#a1a1aa]">路由跃点 (Metric)</span>
                       <input
                         type="number"
                         value={wan.metric}
                         onInput={(e) =>
                           updateWan(idx(), { metric: Number(e.currentTarget.value) || 100 })
                         }
-                        class="mt-1 w-full rounded-lg border border-slate-700 bg-slate-900 px-2.5 py-1.5 font-mono text-xs"
+                        class="mt-1 w-full rounded-lg border border-[#eaeaea] dark:border-[#262626] bg-white dark:bg-[#000000] text-[#171717] dark:text-[#ededed] outline-none focus:border-[#171717] dark:focus:border-[#ededed] px-2.5 py-1.5 font-mono text-xs"
                       />
                     </label>
                     <label class="block text-xs">
-                      <span class="text-slate-400">分流权重 (Weight)</span>
+                      <span class="text-[#666666] dark:text-[#a1a1aa]">分流权重 (Weight)</span>
                       <input
                         type="number"
                         min="1"
@@ -497,11 +499,11 @@ export function NetworkPage(props: Props) {
                             weight: Math.max(1, Number(e.currentTarget.value) || 1),
                           })
                         }
-                        class="mt-1 w-full rounded-lg border border-slate-700 bg-slate-900 px-2.5 py-1.5 font-mono text-xs"
+                        class="mt-1 w-full rounded-lg border border-[#eaeaea] dark:border-[#262626] bg-white dark:bg-[#000000] text-[#171717] dark:text-[#ededed] outline-none focus:border-[#171717] dark:focus:border-[#ededed] px-2.5 py-1.5 font-mono text-xs"
                       />
                     </label>
                     <label class="block text-xs">
-                      <span class="text-slate-400">路由表 ID (可选)</span>
+                      <span class="text-[#666666] dark:text-[#a1a1aa]">路由表 ID (可选)</span>
                       <input
                         type="number"
                         value={wan.table_id ?? ""}
@@ -510,10 +512,10 @@ export function NetworkPage(props: Props) {
                           const raw = e.currentTarget.value.trim();
                           updateWan(idx(), { table_id: raw ? Number(raw) : null });
                         }}
-                        class="mt-1 w-full rounded-lg border border-slate-700 bg-slate-900 px-2.5 py-1.5 font-mono text-xs"
+                        class="mt-1 w-full rounded-lg border border-[#eaeaea] dark:border-[#262626] bg-white dark:bg-[#000000] text-[#171717] dark:text-[#ededed] outline-none focus:border-[#171717] dark:focus:border-[#ededed] px-2.5 py-1.5 font-mono text-xs"
                       />
                     </label>
-                    <div class="flex flex-wrap items-center gap-3 pt-5 text-xs text-slate-300">
+                    <div class="flex flex-wrap items-center gap-3 pt-5 text-xs text-[#171717] dark:text-[#ededed]">
                       <label class="flex items-center gap-2">
                         <input
                           type="checkbox"
@@ -540,7 +542,7 @@ export function NetworkPage(props: Props) {
                               ipv6_pd_prefix_len: Number(e.currentTarget.value) || 60,
                             })
                           }
-                          class="rounded-lg border border-slate-700 bg-slate-900 px-2 py-1 font-mono text-xs"
+                          class="rounded-lg border border-[#eaeaea] dark:border-[#262626] bg-white dark:bg-[#000000] text-[#171717] dark:text-[#ededed] outline-none focus:border-[#171717] dark:focus:border-[#ededed] px-2 py-1 font-mono text-xs"
                           title="申请的 IPv6-PD 前缀长度提示"
                         >
                           <option value={56}>/56 (256 个 /64 子网)</option>
@@ -554,12 +556,12 @@ export function NetworkPage(props: Props) {
 
                   <Show when={runtime()?.ipv6_pd_prefix}>
                     {(pd) => (
-                      <div class="mt-3 rounded-lg border border-sky-500/30 bg-sky-950/20 p-2.5 text-xs">
+                      <div class="mt-3 rounded-lg border border-sky-500/25 bg-sky-500/10 p-2.5 text-xs">
                         <div class="flex flex-wrap items-center justify-between gap-2">
-                          <span class="font-mono text-sky-300">
+                          <span class="font-mono text-sky-600 dark:text-sky-400">
                             已获取 IPv6-PD 委派前缀: {pd()}
                           </span>
-                          <span class="font-mono text-slate-400">
+                          <span class="font-mono text-[#666666] dark:text-[#a1a1aa]">
                             WAN IPv6: {runtime()?.ipv6_addr ?? "-"}
                           </span>
                         </div>
@@ -567,7 +569,7 @@ export function NetworkPage(props: Props) {
                           <div class="mt-2 flex flex-wrap gap-1.5">
                             <For each={runtime()?.ipv6_slices}>
                               {(sl) => (
-                                <span class="rounded border border-sky-500/40 bg-sky-500/10 px-2 py-0.5 font-mono text-[11px] text-sky-200">
+                                <span class="rounded border border-sky-500/25 bg-sky-500/10 px-2 py-0.5 font-mono text-[11px] text-sky-700 dark:text-sky-300">
                                   {sl.interface} (#{sl.subnet_id}) → {sl.prefix_cidr}
                                 </span>
                               )}
@@ -581,23 +583,23 @@ export function NetworkPage(props: Props) {
                   <Show when={wan.proto === "static"}>
                     <div class="mt-3 grid gap-3 sm:grid-cols-2">
                       <label class="block text-xs">
-                        <span class="text-slate-400">静态 CIDR</span>
+                        <span class="text-[#666666] dark:text-[#a1a1aa]">静态 CIDR</span>
                         <input
                           type="text"
                           value={wan.static_cidr ?? ""}
                           onInput={(e) => updateWan(idx(), { static_cidr: e.currentTarget.value })}
-                          class="mt-1 w-full rounded-lg border border-slate-700 bg-slate-900 px-2.5 py-1.5 font-mono text-xs"
+                          class="mt-1 w-full rounded-lg border border-[#eaeaea] dark:border-[#262626] bg-white dark:bg-[#000000] text-[#171717] dark:text-[#ededed] outline-none focus:border-[#171717] dark:focus:border-[#ededed] px-2.5 py-1.5 font-mono text-xs"
                         />
                       </label>
                       <label class="block text-xs">
-                        <span class="text-slate-400">网关</span>
+                        <span class="text-[#666666] dark:text-[#a1a1aa]">网关</span>
                         <input
                           type="text"
                           value={wan.gateway ?? ""}
                           onInput={(e) =>
                             updateWan(idx(), { gateway: e.currentTarget.value || null })
                           }
-                          class="mt-1 w-full rounded-lg border border-slate-700 bg-slate-900 px-2.5 py-1.5 font-mono text-xs"
+                          class="mt-1 w-full rounded-lg border border-[#eaeaea] dark:border-[#262626] bg-white dark:bg-[#000000] text-[#171717] dark:text-[#ededed] outline-none focus:border-[#171717] dark:focus:border-[#ededed] px-2.5 py-1.5 font-mono text-xs"
                         />
                       </label>
                     </div>
@@ -606,25 +608,25 @@ export function NetworkPage(props: Props) {
                   <Show when={wan.proto === "pppoe"}>
                     <div class="mt-3 grid gap-3 sm:grid-cols-2">
                       <label class="block text-xs">
-                        <span class="text-slate-400">PPPoE 账号</span>
+                        <span class="text-[#666666] dark:text-[#a1a1aa]">PPPoE 账号</span>
                         <input
                           type="text"
                           value={wan.pppoe_username ?? ""}
                           onInput={(e) =>
                             updateWan(idx(), { pppoe_username: e.currentTarget.value })
                           }
-                          class="mt-1 w-full rounded-lg border border-slate-700 bg-slate-900 px-2.5 py-1.5 text-xs"
+                          class="mt-1 w-full rounded-lg border border-[#eaeaea] dark:border-[#262626] bg-white dark:bg-[#000000] text-[#171717] dark:text-[#ededed] outline-none focus:border-[#171717] dark:focus:border-[#ededed] px-2.5 py-1.5 text-xs"
                         />
                       </label>
                       <label class="block text-xs">
-                        <span class="text-slate-400">PPPoE 密码</span>
+                        <span class="text-[#666666] dark:text-[#a1a1aa]">PPPoE 密码</span>
                         <input
                           type="password"
                           value={wan.pppoe_password ?? ""}
                           onInput={(e) =>
                             updateWan(idx(), { pppoe_password: e.currentTarget.value })
                           }
-                          class="mt-1 w-full rounded-lg border border-slate-700 bg-slate-900 px-2.5 py-1.5 text-xs"
+                          class="mt-1 w-full rounded-lg border border-[#eaeaea] dark:border-[#262626] bg-white dark:bg-[#000000] text-[#171717] dark:text-[#ededed] outline-none focus:border-[#171717] dark:focus:border-[#ededed] px-2.5 py-1.5 text-xs"
                         />
                       </label>
                     </div>
@@ -637,17 +639,19 @@ export function NetworkPage(props: Props) {
       </section>
 
       {/* Multi-WAN Load Balancing & Failover */}
-      <section class="rounded-xl border border-slate-800 bg-slate-900/60 p-4">
+      <section class="rounded-xl border border-[#eaeaea] dark:border-[#262626] bg-white dark:bg-[#0a0a0a] p-4 sm:p-5 transition-colors hover:border-[#d4d4d8] dark:hover:border-[#3a3a3a]">
         <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
           <div>
-            <h2 class="text-sm font-semibold text-slate-200">多 WAN 负载均衡与故障切换</h2>
-            <p class="mt-0.5 text-xs text-slate-400">
+            <h2 class="text-sm font-medium text-[#171717] dark:text-[#ededed]">
+              多 WAN 负载均衡与故障切换
+            </h2>
+            <p class="mt-0.5 text-xs text-[#666666] dark:text-[#a1a1aa]">
               基于独立路由表、nftables ct mark 策略路由与 ICMP/HTTP
               健康探测，支持主备切换、按权重分流及故障切换精确清理 conntrack。
             </p>
           </div>
           <div class="flex items-center gap-3">
-            <label class="flex items-center gap-2 text-xs text-slate-300">
+            <label class="flex items-center gap-2 text-xs text-[#171717] dark:text-[#ededed]">
               <input
                 type="checkbox"
                 checked={props.draft.multi_wan.enabled}
@@ -659,14 +663,14 @@ export function NetworkPage(props: Props) {
               type="button"
               disabled={probing()}
               onClick={() => void runProbeNow()}
-              class="rounded-lg border border-sky-500/40 bg-sky-500/15 px-3 py-1.5 text-xs font-medium text-sky-300 hover:bg-sky-500/25 disabled:opacity-50"
+              class="rounded-lg border border-[#eaeaea] dark:border-[#262626] bg-[#171717] hover:bg-[#383838] dark:bg-[#ededed] dark:hover:bg-[#d4d4d8] px-3 py-1.5 text-xs font-medium text-white dark:text-[#0a0a0a] cursor-pointer transition-colors disabled:opacity-50"
             >
               {probing() ? "探测中..." : "立即探测"}
             </button>
             <button
               type="button"
               onClick={() => void refetchMultiWan()}
-              class="rounded-lg border border-slate-700 bg-slate-800 px-2.5 py-1.5 text-xs text-slate-300 hover:bg-slate-700"
+              class="rounded-lg border border-[#eaeaea] dark:border-[#262626] bg-white dark:bg-[#111111] hover:bg-[#f4f4f5] dark:hover:bg-[#1a1a1a] px-2.5 py-1.5 text-xs font-medium text-[#171717] dark:text-[#ededed] cursor-pointer transition-colors"
             >
               刷新
             </button>
@@ -675,24 +679,24 @@ export function NetworkPage(props: Props) {
 
         <div class="grid gap-3 sm:grid-cols-4">
           <label class="block text-xs">
-            <span class="text-slate-400">调度模式</span>
+            <span class="text-[#666666] dark:text-[#a1a1aa]">调度模式</span>
             <select
               value={props.draft.multi_wan.mode}
               onChange={(e) => updateMultiWan({ mode: e.currentTarget.value as MultiWanMode })}
-              class="mt-1 w-full rounded-lg border border-slate-700 bg-slate-900 px-2.5 py-1.5 text-xs"
+              class="mt-1 w-full rounded-lg border border-[#eaeaea] dark:border-[#262626] bg-white dark:bg-[#000000] text-[#171717] dark:text-[#ededed] outline-none focus:border-[#171717] dark:focus:border-[#ededed] px-2.5 py-1.5 text-xs"
             >
               <option value="failover">主备故障切换 (Failover)</option>
               <option value="load_balance">按权重负载均衡 (Load Balance)</option>
             </select>
           </label>
           <label class="block text-xs">
-            <span class="text-slate-400">探测协议</span>
+            <span class="text-[#666666] dark:text-[#a1a1aa]">探测协议</span>
             <select
               value={props.draft.multi_wan.probe_protocol}
               onChange={(e) =>
                 updateMultiWan({ probe_protocol: e.currentTarget.value as ProbeProtocol })
               }
-              class="mt-1 w-full rounded-lg border border-slate-700 bg-slate-900 px-2.5 py-1.5 text-xs"
+              class="mt-1 w-full rounded-lg border border-[#eaeaea] dark:border-[#262626] bg-white dark:bg-[#000000] text-[#171717] dark:text-[#ededed] outline-none focus:border-[#171717] dark:focus:border-[#ededed] px-2.5 py-1.5 text-xs"
             >
               <option value="icmp">ICMP (Ping)</option>
               <option value="http">HTTP (TCP/HEAD)</option>
@@ -700,7 +704,7 @@ export function NetworkPage(props: Props) {
             </select>
           </label>
           <label class="block text-xs">
-            <span class="text-slate-400">探测间隔 (秒)</span>
+            <span class="text-[#666666] dark:text-[#a1a1aa]">探测间隔 (秒)</span>
             <input
               type="number"
               min="1"
@@ -710,11 +714,11 @@ export function NetworkPage(props: Props) {
                   probe_interval_secs: Math.max(1, Number(e.currentTarget.value) || 5),
                 })
               }
-              class="mt-1 w-full rounded-lg border border-slate-700 bg-slate-900 px-2.5 py-1.5 font-mono text-xs"
+              class="mt-1 w-full rounded-lg border border-[#eaeaea] dark:border-[#262626] bg-white dark:bg-[#000000] text-[#171717] dark:text-[#ededed] outline-none focus:border-[#171717] dark:focus:border-[#ededed] px-2.5 py-1.5 font-mono text-xs"
             />
           </label>
           <label class="block text-xs">
-            <span class="text-slate-400">探测超时 (ms)</span>
+            <span class="text-[#666666] dark:text-[#a1a1aa]">探测超时 (ms)</span>
             <input
               type="number"
               min="200"
@@ -724,11 +728,13 @@ export function NetworkPage(props: Props) {
                   probe_timeout_ms: Math.max(200, Number(e.currentTarget.value) || 2000),
                 })
               }
-              class="mt-1 w-full rounded-lg border border-slate-700 bg-slate-900 px-2.5 py-1.5 font-mono text-xs"
+              class="mt-1 w-full rounded-lg border border-[#eaeaea] dark:border-[#262626] bg-white dark:bg-[#000000] text-[#171717] dark:text-[#ededed] outline-none focus:border-[#171717] dark:focus:border-[#ededed] px-2.5 py-1.5 font-mono text-xs"
             />
           </label>
           <label class="block text-xs sm:col-span-2">
-            <span class="text-slate-400">全局探测目标 (逗号分隔 IP 或 URL)</span>
+            <span class="text-[#666666] dark:text-[#a1a1aa]">
+              全局探测目标 (逗号分隔 IP 或 URL)
+            </span>
             <input
               type="text"
               value={props.draft.multi_wan.probe_targets.join(", ")}
@@ -740,11 +746,11 @@ export function NetworkPage(props: Props) {
                     .filter(Boolean),
                 })
               }
-              class="mt-1 w-full rounded-lg border border-slate-700 bg-slate-900 px-2.5 py-1.5 font-mono text-xs"
+              class="mt-1 w-full rounded-lg border border-[#eaeaea] dark:border-[#262626] bg-white dark:bg-[#000000] text-[#171717] dark:text-[#ededed] outline-none focus:border-[#171717] dark:focus:border-[#ededed] px-2.5 py-1.5 font-mono text-xs"
             />
           </label>
           <label class="block text-xs">
-            <span class="text-slate-400">离线/恢复阈值 (次)</span>
+            <span class="text-[#666666] dark:text-[#a1a1aa]">离线/恢复阈值 (次)</span>
             <div class="mt-1 flex gap-2">
               <input
                 type="number"
@@ -756,7 +762,7 @@ export function NetworkPage(props: Props) {
                   })
                 }
                 title="连续失败次数判定离线"
-                class="w-1/2 rounded-lg border border-slate-700 bg-slate-900 px-2 py-1.5 font-mono text-xs"
+                class="w-1/2 rounded-lg border border-[#eaeaea] dark:border-[#262626] bg-white dark:bg-[#000000] text-[#171717] dark:text-[#ededed] outline-none focus:border-[#171717] dark:focus:border-[#ededed] px-2 py-1.5 font-mono text-xs"
               />
               <input
                 type="number"
@@ -768,11 +774,11 @@ export function NetworkPage(props: Props) {
                   })
                 }
                 title="连续成功次数判定恢复"
-                class="w-1/2 rounded-lg border border-slate-700 bg-slate-900 px-2 py-1.5 font-mono text-xs"
+                class="w-1/2 rounded-lg border border-[#eaeaea] dark:border-[#262626] bg-white dark:bg-[#000000] text-[#171717] dark:text-[#ededed] outline-none focus:border-[#171717] dark:focus:border-[#ededed] px-2 py-1.5 font-mono text-xs"
               />
             </div>
           </label>
-          <div class="flex flex-col justify-end gap-1.5 text-xs text-slate-300">
+          <div class="flex flex-col justify-end gap-1.5 text-xs text-[#171717] dark:text-[#ededed]">
             <label class="flex items-center gap-2">
               <input
                 type="checkbox"
@@ -796,11 +802,11 @@ export function NetworkPage(props: Props) {
 
         <Show when={multiWanStatus()}>
           {(mw) => (
-            <div class="mt-4 rounded-xl border border-slate-800 bg-slate-950/60 p-3 text-xs">
-              <div class="mb-2 flex flex-wrap items-center justify-between gap-2 text-slate-400">
+            <div class="mt-4 rounded-xl border border-[#eaeaea] dark:border-[#262626] bg-[#fafafa] dark:bg-[#111111] p-3 text-xs">
+              <div class="mb-2 flex flex-wrap items-center justify-between gap-2 text-[#666666] dark:text-[#a1a1aa]">
                 <span>
                   当前活跃上行:{" "}
-                  <span class="font-mono text-emerald-300">
+                  <span class="font-mono text-emerald-700 dark:text-emerald-400">
                     {mw().active_wans.length > 0
                       ? mw().active_wans.join(", ")
                       : "未启用 / 等待探测"}
@@ -815,10 +821,10 @@ export function NetworkPage(props: Props) {
                 <div class="grid gap-2 sm:grid-cols-2">
                   <For each={mw().wans}>
                     {(item) => (
-                      <div class="flex items-center justify-between rounded-lg border border-slate-800 bg-slate-900/70 px-3 py-2">
+                      <div class="flex items-center justify-between rounded-lg border border-[#eaeaea] dark:border-[#262626] bg-white dark:bg-[#0a0a0a] px-3 py-2">
                         <div>
                           <div class="flex items-center gap-2">
-                            <span class="font-mono font-semibold text-slate-200">
+                            <span class="font-mono font-semibold text-[#171717] dark:text-[#ededed]">
                               {item.wan_name}
                             </span>
                             <span
@@ -827,22 +833,24 @@ export function NetworkPage(props: Props) {
                               {item.health}
                             </span>
                             <Show when={item.active}>
-                              <span class="rounded bg-sky-500/20 px-1.5 py-0.5 text-[10px] text-sky-300">
+                              <span class="rounded border border-sky-500/20 bg-sky-500/10 px-1.5 py-0.5 text-[10px] text-sky-600 dark:text-sky-400">
                                 active
                               </span>
                             </Show>
                           </div>
-                          <div class="mt-0.5 font-mono text-[11px] text-slate-400">
+                          <div class="mt-0.5 font-mono text-[11px] text-[#666666] dark:text-[#a1a1aa]">
                             {item.device} · table {item.table_id} · mark 0x
                             {item.fwmark.toString(16)} · eff_weight {item.effective_weight}/
                             {item.weight}
                           </div>
                         </div>
-                        <div class="text-right font-mono text-[11px] text-slate-300">
+                        <div class="text-right font-mono text-[11px] text-[#171717] dark:text-[#ededed]">
                           <div>
                             {typeof item.rtt_ms === "number" ? `${item.rtt_ms.toFixed(1)} ms` : "-"}
                           </div>
-                          <div class="text-slate-500">loss {item.packet_loss_pct}%</div>
+                          <div class="text-[#8f8f8f] dark:text-[#71717a]">
+                            loss {item.packet_loss_pct}%
+                          </div>
                         </div>
                       </div>
                     )}
@@ -855,19 +863,19 @@ export function NetworkPage(props: Props) {
       </section>
 
       {/* eBPF / TCX Domain Policy & Traffic Stats */}
-      <section class="rounded-xl border border-slate-800 bg-slate-900/60 p-4">
+      <section class="rounded-xl border border-[#eaeaea] dark:border-[#262626] bg-white dark:bg-[#0a0a0a] p-4 sm:p-5 transition-colors hover:border-[#d4d4d8] dark:hover:border-[#3a3a3a]">
         <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
           <div>
-            <h2 class="text-sm font-semibold text-slate-200">
+            <h2 class="text-sm font-medium text-[#171717] dark:text-[#ededed]">
               eBPF / TCX 域名策略分流与精细化统计
             </h2>
-            <p class="mt-0.5 text-xs text-slate-400">
+            <p class="mt-0.5 text-xs text-[#666666] dark:text-[#a1a1aa]">
               基于 aya 加载内核 tc/tcx 分类器，将 crabdns 解析结果写入 LPM Trie 实现 skb-&gt;mark
               分流，并通过 PerCpuHashMap 采集客户端/域名维度实时流量。
             </p>
           </div>
           <div class="flex items-center gap-3">
-            <label class="flex items-center gap-2 text-xs text-slate-300">
+            <label class="flex items-center gap-2 text-xs text-[#171717] dark:text-[#ededed]">
               <input
                 type="checkbox"
                 checked={props.draft.ebpf.enabled}
@@ -878,14 +886,14 @@ export function NetworkPage(props: Props) {
             <button
               type="button"
               onClick={addEbpfRule}
-              class="rounded-lg border border-sky-500/40 bg-sky-500/15 px-3 py-1.5 text-xs font-medium text-sky-300 hover:bg-sky-500/25"
+              class="rounded-lg border border-[#eaeaea] dark:border-[#262626] bg-[#171717] hover:bg-[#383838] dark:bg-[#ededed] dark:hover:bg-[#d4d4d8] px-3 py-1.5 text-xs font-medium text-white dark:text-[#0a0a0a] cursor-pointer transition-colors"
             >
               + 添加域名规则
             </button>
             <button
               type="button"
               onClick={() => void refetchEbpf()}
-              class="rounded-lg border border-slate-700 bg-slate-800 px-2.5 py-1.5 text-xs text-slate-300 hover:bg-slate-700"
+              class="rounded-lg border border-[#eaeaea] dark:border-[#262626] bg-white dark:bg-[#111111] hover:bg-[#f4f4f5] dark:hover:bg-[#1a1a1a] px-2.5 py-1.5 text-xs font-medium text-[#171717] dark:text-[#ededed] cursor-pointer transition-colors"
             >
               刷新状态
             </button>
@@ -893,7 +901,9 @@ export function NetworkPage(props: Props) {
         </div>
 
         <label class="mb-3 block text-xs">
-          <span class="text-slate-400">挂载接口 (逗号分隔，留空默认自动挂载到全部 LAN Bridge)</span>
+          <span class="text-[#666666] dark:text-[#a1a1aa]">
+            挂载接口 (逗号分隔，留空默认自动挂载到全部 LAN Bridge)
+          </span>
           <input
             type="text"
             value={props.draft.ebpf.attach_interfaces.join(", ")}
@@ -906,12 +916,12 @@ export function NetworkPage(props: Props) {
                   .filter(Boolean),
               })
             }
-            class="mt-1 w-full rounded-lg border border-slate-700 bg-slate-900 px-2.5 py-1.5 font-mono text-xs"
+            class="mt-1 w-full rounded-lg border border-[#eaeaea] dark:border-[#262626] bg-white dark:bg-[#000000] text-[#171717] dark:text-[#ededed] outline-none focus:border-[#171717] dark:focus:border-[#ededed] px-2.5 py-1.5 font-mono text-xs"
           />
         </label>
 
-        <div class="mb-3 grid gap-3 rounded-lg border border-slate-800 bg-slate-950/40 p-3 sm:grid-cols-3">
-          <label class="flex items-center gap-2 text-xs text-slate-300">
+        <div class="mb-3 grid gap-3 rounded-lg border border-[#eaeaea] dark:border-[#262626] bg-[#fafafa] dark:bg-[#111111] p-3 sm:grid-cols-3">
+          <label class="flex items-center gap-2 text-xs text-[#171717] dark:text-[#ededed]">
             <input
               type="checkbox"
               checked={props.draft.ebpf.xdp_guard_enabled}
@@ -919,7 +929,7 @@ export function NetworkPage(props: Props) {
             />
             启用 WAN 边缘 XDP 防护 (黑名单 / SYN 限速)
           </label>
-          <label class="flex items-center gap-2 text-xs text-slate-300 sm:col-span-2">
+          <label class="flex items-center gap-2 text-xs text-[#171717] dark:text-[#ededed] sm:col-span-2">
             <input
               type="checkbox"
               checked={props.draft.ebpf.fast_forward_enabled}
@@ -928,7 +938,7 @@ export function NetworkPage(props: Props) {
             启用 eBPF L3 FIB 路由快转加速 (IPv4 / IPv6 直通转发)
           </label>
           <label class="block text-xs">
-            <span class="text-slate-400">XDP 挂载口 (留空默认全部 WAN)</span>
+            <span class="text-[#666666] dark:text-[#a1a1aa]">XDP 挂载口 (留空默认全部 WAN)</span>
             <input
               type="text"
               value={props.draft.ebpf.xdp_interfaces.join(", ")}
@@ -941,11 +951,11 @@ export function NetworkPage(props: Props) {
                     .filter(Boolean),
                 })
               }
-              class="mt-1 w-full rounded border border-slate-700 bg-slate-900 px-2 py-1 font-mono text-xs"
+              class="mt-1 w-full rounded border border-[#eaeaea] dark:border-[#262626] bg-white dark:bg-[#000000] text-[#171717] dark:text-[#ededed] outline-none focus:border-[#171717] dark:focus:border-[#ededed] px-2 py-1 font-mono text-xs"
             />
           </label>
           <label class="block text-xs">
-            <span class="text-slate-400">单源 IP SYN 限速 (pkt/s, 0=关闭)</span>
+            <span class="text-[#666666] dark:text-[#a1a1aa]">单源 IP SYN 限速 (pkt/s, 0=关闭)</span>
             <input
               type="number"
               min="0"
@@ -953,11 +963,11 @@ export function NetworkPage(props: Props) {
               onInput={(e) =>
                 updateEbpf({ xdp_syn_rate_limit: Math.max(0, Number(e.currentTarget.value) || 0) })
               }
-              class="mt-1 w-full rounded border border-slate-700 bg-slate-900 px-2 py-1 font-mono text-xs"
+              class="mt-1 w-full rounded border border-[#eaeaea] dark:border-[#262626] bg-white dark:bg-[#000000] text-[#171717] dark:text-[#ededed] outline-none focus:border-[#171717] dark:focus:border-[#ededed] px-2 py-1 font-mono text-xs"
             />
           </label>
           <label class="block text-xs sm:col-span-3">
-            <span class="text-slate-400">
+            <span class="text-[#666666] dark:text-[#a1a1aa]">
               XDP 黑名单 IPv4 / IPv6 / CIDR (逗号分隔，线速 XDP_DROP)
             </span>
             <input
@@ -972,7 +982,7 @@ export function NetworkPage(props: Props) {
                     .filter(Boolean),
                 })
               }
-              class="mt-1 w-full rounded border border-slate-700 bg-slate-900 px-2 py-1 font-mono text-xs"
+              class="mt-1 w-full rounded border border-[#eaeaea] dark:border-[#262626] bg-white dark:bg-[#000000] text-[#171717] dark:text-[#ededed] outline-none focus:border-[#171717] dark:focus:border-[#ededed] px-2 py-1 font-mono text-xs"
             />
           </label>
         </div>
@@ -980,7 +990,7 @@ export function NetworkPage(props: Props) {
         <div class="space-y-2">
           <For each={props.draft.ebpf.domain_rules}>
             {(rule, idx) => (
-              <div class="grid items-center gap-2 rounded-lg border border-slate-800 bg-slate-950/60 p-2.5 sm:grid-cols-4">
+              <div class="grid items-center gap-2 rounded-lg border border-[#eaeaea] dark:border-[#262626] bg-[#fafafa] dark:bg-[#111111] p-2.5 sm:grid-cols-4">
                 <input
                   type="text"
                   value={rule.domain}
@@ -993,7 +1003,7 @@ export function NetworkPage(props: Props) {
                       props.onChange(next);
                     }
                   }}
-                  class="rounded border border-slate-700 bg-slate-900 px-2 py-1 font-mono text-xs"
+                  class="rounded border border-[#eaeaea] dark:border-[#262626] bg-white dark:bg-[#000000] text-[#171717] dark:text-[#ededed] outline-none focus:border-[#171717] dark:focus:border-[#ededed] px-2 py-1 font-mono text-xs"
                 />
                 <select
                   value={rule.wan_name}
@@ -1005,7 +1015,7 @@ export function NetworkPage(props: Props) {
                       props.onChange(next);
                     }
                   }}
-                  class="rounded border border-slate-700 bg-slate-900 px-2 py-1 text-xs"
+                  class="rounded border border-[#eaeaea] dark:border-[#262626] bg-white dark:bg-[#000000] text-[#171717] dark:text-[#ededed] outline-none focus:border-[#171717] dark:focus:border-[#ededed] px-2 py-1 text-xs"
                 >
                   <For each={props.draft.wans}>
                     {(wan) => <option value={wan.name}>WAN: {wan.name}</option>}
@@ -1023,7 +1033,7 @@ export function NetworkPage(props: Props) {
                       props.onChange(next);
                     }
                   }}
-                  class="rounded border border-slate-700 bg-slate-900 px-2 py-1 font-mono text-xs"
+                  class="rounded border border-[#eaeaea] dark:border-[#262626] bg-white dark:bg-[#000000] text-[#171717] dark:text-[#ededed] outline-none focus:border-[#171717] dark:focus:border-[#ededed] px-2 py-1 font-mono text-xs"
                 />
                 <button
                   type="button"
@@ -1032,7 +1042,7 @@ export function NetworkPage(props: Props) {
                     next.ebpf.domain_rules.splice(idx(), 1);
                     props.onChange(next);
                   }}
-                  class="rounded border border-rose-500/40 bg-rose-500/10 px-2 py-1 text-xs text-rose-300 hover:bg-rose-500/20"
+                  class="rounded border border-rose-500/25 bg-rose-500/10 px-2 py-1 text-xs font-medium text-rose-600 dark:text-rose-600 dark:text-rose-400 hover:bg-rose-500/20 cursor-pointer"
                 >
                   删除
                 </button>
@@ -1043,11 +1053,11 @@ export function NetworkPage(props: Props) {
 
         <Show when={ebpfStatus()}>
           {(st) => (
-            <div class="mt-3 rounded-xl border border-slate-800 bg-slate-950/60 p-3 text-xs">
-              <div class="flex flex-wrap items-center justify-between gap-2 text-slate-400">
+            <div class="mt-3 rounded-xl border border-[#eaeaea] dark:border-[#262626] bg-[#fafafa] dark:bg-[#111111] p-3 text-xs">
+              <div class="flex flex-wrap items-center justify-between gap-2 text-[#666666] dark:text-[#a1a1aa]">
                 <span>
                   挂载接口:{" "}
-                  <span class="font-mono text-slate-200">
+                  <span class="font-mono text-[#171717] dark:text-[#ededed]">
                     {st().attached_interfaces.length > 0
                       ? st().attached_interfaces.join(", ")
                       : "未挂载"}
@@ -1061,12 +1071,14 @@ export function NetworkPage(props: Props) {
                 </span>
               </div>
               <Show when={st().last_error}>
-                {(err) => <div class="mt-1 font-mono text-rose-400">错误: {err()}</div>}
+                {(err) => (
+                  <div class="mt-1 font-mono text-rose-600 dark:text-rose-400">错误: {err()}</div>
+                )}
               </Show>
               <Show when={st().stats.length > 0}>
                 <div class="mt-2 overflow-x-auto">
                   <table class="w-full text-left font-mono text-[11px]">
-                    <thead class="text-slate-500">
+                    <thead class="text-[#8f8f8f] dark:text-[#71717a]">
                       <tr>
                         <th class="py-1">客户端 IP</th>
                         <th class="py-1">Tag / 域名</th>
@@ -1075,7 +1087,7 @@ export function NetworkPage(props: Props) {
                         <th class="py-1 text-right">下行 (RX)</th>
                       </tr>
                     </thead>
-                    <tbody class="divide-y divide-slate-800/70 text-slate-300">
+                    <tbody class="divide-y divide-[#eaeaea] dark:divide-[#262626] text-[#171717] dark:text-[#ededed]">
                       <For each={st().stats.slice(0, 20)}>
                         {(row) => (
                           <tr>
@@ -1103,11 +1115,13 @@ export function NetworkPage(props: Props) {
       </section>
 
       {/* DDNS & ACME Dynamic TLS */}
-      <section class="rounded-xl border border-slate-800 bg-slate-900/60 p-4">
+      <section class="rounded-xl border border-[#eaeaea] dark:border-[#262626] bg-white dark:bg-[#0a0a0a] p-4 sm:p-5 transition-colors hover:border-[#d4d4d8] dark:hover:border-[#3a3a3a]">
         <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
           <div>
-            <h2 class="text-sm font-semibold text-slate-200">DDNS 动态域名与 ACME 证书</h2>
-            <p class="mt-0.5 text-xs text-slate-400">
+            <h2 class="text-sm font-medium text-[#171717] dark:text-[#ededed]">
+              DDNS 动态域名与 ACME 证书
+            </h2>
+            <p class="mt-0.5 text-xs text-[#666666] dark:text-[#a1a1aa]">
               支持 Cloudflare / DynDNS2 / Webhook 动态域名更新，以及 Let&apos;s Encrypt ACME 动态
               TLS 证书签发与续期。
             </p>
@@ -1116,14 +1130,14 @@ export function NetworkPage(props: Props) {
             <button
               type="button"
               onClick={() => void triggerDdnsSync().then(setDdnsStatus)}
-              class="rounded-lg border border-sky-500/40 bg-sky-500/15 px-3 py-1.5 text-xs font-medium text-sky-300 hover:bg-sky-500/25"
+              class="rounded-lg border border-[#eaeaea] dark:border-[#262626] bg-[#171717] hover:bg-[#383838] dark:bg-[#ededed] dark:hover:bg-[#d4d4d8] px-3 py-1.5 text-xs font-medium text-white dark:text-[#0a0a0a] cursor-pointer transition-colors"
             >
               立即同步 DDNS
             </button>
             <button
               type="button"
               onClick={() => void triggerTlsRenew().then(setTlsStatus)}
-              class="rounded-lg border border-emerald-500/40 bg-emerald-500/15 px-3 py-1.5 text-xs font-medium text-emerald-300 hover:bg-emerald-500/25"
+              class="rounded-lg border border-emerald-500/25 bg-emerald-500/10 hover:border border-emerald-500/20 bg-emerald-500/10 px-3 py-1.5 text-xs font-medium text-emerald-700 dark:text-emerald-400 cursor-pointer transition-colors"
             >
               签发 / 续期证书
             </button>
@@ -1131,10 +1145,12 @@ export function NetworkPage(props: Props) {
         </div>
 
         <div class="grid gap-4 sm:grid-cols-2">
-          <div class="space-y-2 rounded-lg border border-slate-800 bg-slate-950/50 p-3">
+          <div class="space-y-2 rounded-lg border border-[#eaeaea] dark:border-[#262626] bg-[#fafafa] dark:bg-[#111111] p-3">
             <div class="flex items-center justify-between">
-              <span class="text-xs font-semibold text-slate-300">DDNS 配置</span>
-              <label class="flex items-center gap-2 text-xs text-slate-300">
+              <span class="text-xs font-semibold text-[#171717] dark:text-[#ededed]">
+                DDNS 配置
+              </span>
+              <label class="flex items-center gap-2 text-xs text-[#171717] dark:text-[#ededed]">
                 <input
                   type="checkbox"
                   checked={props.draft.ddns.enabled}
@@ -1147,7 +1163,7 @@ export function NetworkPage(props: Props) {
               <select
                 value={props.draft.ddns.provider}
                 onChange={(e) => updateDdns({ provider: e.currentTarget.value as DdnsProvider })}
-                class="rounded border border-slate-700 bg-slate-900 px-2 py-1 text-xs"
+                class="rounded border border-[#eaeaea] dark:border-[#262626] bg-white dark:bg-[#000000] text-[#171717] dark:text-[#ededed] outline-none focus:border-[#171717] dark:focus:border-[#ededed] px-2 py-1 text-xs"
               >
                 <option value="cloudflare">Cloudflare</option>
                 <option value="dyn_dns2">DynDNS2</option>
@@ -1158,26 +1174,26 @@ export function NetworkPage(props: Props) {
                 value={props.draft.ddns.domain}
                 placeholder="域名 (如 gw.example.com)"
                 onInput={(e) => updateDdns({ domain: e.currentTarget.value })}
-                class="rounded border border-slate-700 bg-slate-900 px-2 py-1 font-mono text-xs"
+                class="rounded border border-[#eaeaea] dark:border-[#262626] bg-white dark:bg-[#000000] text-[#171717] dark:text-[#ededed] outline-none focus:border-[#171717] dark:focus:border-[#ededed] px-2 py-1 font-mono text-xs"
               />
               <input
                 type="text"
                 value={props.draft.ddns.token ?? ""}
                 placeholder="API Token / 密码"
                 onInput={(e) => updateDdns({ token: e.currentTarget.value || null })}
-                class="rounded border border-slate-700 bg-slate-900 px-2 py-1 font-mono text-xs"
+                class="rounded border border-[#eaeaea] dark:border-[#262626] bg-white dark:bg-[#000000] text-[#171717] dark:text-[#ededed] outline-none focus:border-[#171717] dark:focus:border-[#ededed] px-2 py-1 font-mono text-xs"
               />
               <input
                 type="text"
                 value={props.draft.ddns.zone_id ?? ""}
                 placeholder="Zone ID (Cloudflare)"
                 onInput={(e) => updateDdns({ zone_id: e.currentTarget.value || null })}
-                class="rounded border border-slate-700 bg-slate-900 px-2 py-1 font-mono text-xs"
+                class="rounded border border-[#eaeaea] dark:border-[#262626] bg-white dark:bg-[#000000] text-[#171717] dark:text-[#ededed] outline-none focus:border-[#171717] dark:focus:border-[#ededed] px-2 py-1 font-mono text-xs"
               />
             </div>
             <Show when={ddnsStatus()}>
               {(ds) => (
-                <div class="font-mono text-[11px] text-slate-400">
+                <div class="font-mono text-[11px] text-[#666666] dark:text-[#a1a1aa]">
                   上次 IP: {ds().last_ip ?? "-"} · 同步: {ds().last_synced_at ?? "-"}
                   {ds().last_error ? ` · 错误: ${ds().last_error}` : ""}
                 </div>
@@ -1185,10 +1201,12 @@ export function NetworkPage(props: Props) {
             </Show>
           </div>
 
-          <div class="space-y-2 rounded-lg border border-slate-800 bg-slate-950/50 p-3">
+          <div class="space-y-2 rounded-lg border border-[#eaeaea] dark:border-[#262626] bg-[#fafafa] dark:bg-[#111111] p-3">
             <div class="flex items-center justify-between">
-              <span class="text-xs font-semibold text-slate-300">ACME 动态 TLS</span>
-              <label class="flex items-center gap-2 text-xs text-slate-300">
+              <span class="text-xs font-semibold text-[#171717] dark:text-[#ededed]">
+                ACME 动态 TLS
+              </span>
+              <label class="flex items-center gap-2 text-xs text-[#171717] dark:text-[#ededed]">
                 <input
                   type="checkbox"
                   checked={props.draft.acme.enabled}
@@ -1203,21 +1221,21 @@ export function NetworkPage(props: Props) {
                 value={props.draft.acme.domain}
                 placeholder="证书域名 (gw.example.com)"
                 onInput={(e) => updateAcme({ domain: e.currentTarget.value })}
-                class="rounded border border-slate-700 bg-slate-900 px-2 py-1 font-mono text-xs"
+                class="rounded border border-[#eaeaea] dark:border-[#262626] bg-white dark:bg-[#000000] text-[#171717] dark:text-[#ededed] outline-none focus:border-[#171717] dark:focus:border-[#ededed] px-2 py-1 font-mono text-xs"
               />
               <input
                 type="email"
                 value={props.draft.acme.email}
                 placeholder="通知邮箱 (ops@example.com)"
                 onInput={(e) => updateAcme({ email: e.currentTarget.value })}
-                class="rounded border border-slate-700 bg-slate-900 px-2 py-1 font-mono text-xs"
+                class="rounded border border-[#eaeaea] dark:border-[#262626] bg-white dark:bg-[#000000] text-[#171717] dark:text-[#ededed] outline-none focus:border-[#171717] dark:focus:border-[#ededed] px-2 py-1 font-mono text-xs"
               />
               <select
                 value={props.draft.acme.challenge_type}
                 onChange={(e) =>
                   updateAcme({ challenge_type: e.currentTarget.value as AcmeChallengeType })
                 }
-                class="rounded border border-slate-700 bg-slate-900 px-2 py-1 text-xs"
+                class="rounded border border-[#eaeaea] dark:border-[#262626] bg-white dark:bg-[#000000] text-[#171717] dark:text-[#ededed] outline-none focus:border-[#171717] dark:focus:border-[#ededed] px-2 py-1 text-xs"
               >
                 <option value="http01">HTTP-01 (Standalone)</option>
                 <option value="dns_cloudflare">DNS-01 (Cloudflare)</option>
@@ -1231,12 +1249,12 @@ export function NetworkPage(props: Props) {
                     renew_before_days: Math.max(1, Number(e.currentTarget.value) || 30),
                   })
                 }
-                class="rounded border border-slate-700 bg-slate-900 px-2 py-1 font-mono text-xs"
+                class="rounded border border-[#eaeaea] dark:border-[#262626] bg-white dark:bg-[#000000] text-[#171717] dark:text-[#ededed] outline-none focus:border-[#171717] dark:focus:border-[#ededed] px-2 py-1 font-mono text-xs"
               />
             </div>
             <Show when={tlsStatus()}>
               {(ts) => (
-                <div class="font-mono text-[11px] text-slate-400">
+                <div class="font-mono text-[11px] text-[#666666] dark:text-[#a1a1aa]">
                   证书: {ts().cert_path ?? "自签/未配置"} · 到期: {ts().expires_at ?? "-"}
                   {ts().last_error ? ` · 错误: ${ts().last_error}` : ""}
                 </div>
@@ -1247,41 +1265,43 @@ export function NetworkPage(props: Props) {
       </section>
 
       {/* LAN Bridge Parameters */}
-      <section class="rounded-xl border border-slate-800 bg-slate-900/60 p-4">
-        <h2 class="mb-3 text-sm font-semibold text-slate-200">LAN 网桥与 DHCP 地址池</h2>
+      <section class="rounded-xl border border-[#eaeaea] dark:border-[#262626] bg-white dark:bg-[#0a0a0a] p-4 sm:p-5 transition-colors hover:border-[#d4d4d8] dark:hover:border-[#3a3a3a]">
+        <h2 class="mb-3.5 text-sm font-medium text-[#171717] dark:text-[#ededed]">
+          LAN 网桥与 DHCP 地址池
+        </h2>
         <div class="space-y-4">
           <For each={props.draft.lans}>
             {(lan, idx) => (
-              <div class="grid gap-3 rounded-xl border border-slate-800 bg-slate-950/60 p-4 sm:grid-cols-3">
+              <div class="grid gap-3 rounded-xl border border-[#eaeaea] dark:border-[#262626] bg-[#fafafa] dark:bg-[#111111] p-4 sm:grid-cols-3">
                 <label class="block text-xs">
-                  <span class="text-slate-400">Bridge 设备名</span>
+                  <span class="text-[#666666] dark:text-[#a1a1aa]">Bridge 设备名</span>
                   <input
                     type="text"
                     value={lan.bridge}
                     onInput={(e) => updateLan(idx(), { bridge: e.currentTarget.value })}
-                    class="mt-1 w-full rounded-lg border border-slate-700 bg-slate-900 px-2.5 py-1.5 font-mono text-xs"
+                    class="mt-1 w-full rounded-lg border border-[#eaeaea] dark:border-[#262626] bg-white dark:bg-[#000000] text-[#171717] dark:text-[#ededed] outline-none focus:border-[#171717] dark:focus:border-[#ededed] px-2.5 py-1.5 font-mono text-xs"
                   />
                 </label>
                 <label class="block text-xs">
-                  <span class="text-slate-400">LAN CIDR</span>
+                  <span class="text-[#666666] dark:text-[#a1a1aa]">LAN CIDR</span>
                   <input
                     type="text"
                     value={lan.cidr}
                     onInput={(e) => updateLan(idx(), { cidr: e.currentTarget.value })}
-                    class="mt-1 w-full rounded-lg border border-slate-700 bg-slate-900 px-2.5 py-1.5 font-mono text-xs"
+                    class="mt-1 w-full rounded-lg border border-[#eaeaea] dark:border-[#262626] bg-white dark:bg-[#000000] text-[#171717] dark:text-[#ededed] outline-none focus:border-[#171717] dark:focus:border-[#ededed] px-2.5 py-1.5 font-mono text-xs"
                   />
                 </label>
                 <label class="block text-xs">
-                  <span class="text-slate-400">本地域名后缀</span>
+                  <span class="text-[#666666] dark:text-[#a1a1aa]">本地域名后缀</span>
                   <input
                     type="text"
                     value={lan.domain}
                     onInput={(e) => updateLan(idx(), { domain: e.currentTarget.value })}
-                    class="mt-1 w-full rounded-lg border border-slate-700 bg-slate-900 px-2.5 py-1.5 font-mono text-xs"
+                    class="mt-1 w-full rounded-lg border border-[#eaeaea] dark:border-[#262626] bg-white dark:bg-[#000000] text-[#171717] dark:text-[#ededed] outline-none focus:border-[#171717] dark:focus:border-[#ededed] px-2.5 py-1.5 font-mono text-xs"
                   />
                 </label>
                 <label class="block text-xs">
-                  <span class="text-slate-400">DHCP 起始偏移</span>
+                  <span class="text-[#666666] dark:text-[#a1a1aa]">DHCP 起始偏移</span>
                   <input
                     type="number"
                     value={lan.dhcp_start_offset}
@@ -1290,21 +1310,21 @@ export function NetworkPage(props: Props) {
                         dhcp_start_offset: Number(e.currentTarget.value) || 100,
                       })
                     }
-                    class="mt-1 w-full rounded-lg border border-slate-700 bg-slate-900 px-2.5 py-1.5 font-mono text-xs"
+                    class="mt-1 w-full rounded-lg border border-[#eaeaea] dark:border-[#262626] bg-white dark:bg-[#000000] text-[#171717] dark:text-[#ededed] outline-none focus:border-[#171717] dark:focus:border-[#ededed] px-2.5 py-1.5 font-mono text-xs"
                   />
                 </label>
                 <label class="block text-xs">
-                  <span class="text-slate-400">DHCP 地址数</span>
+                  <span class="text-[#666666] dark:text-[#a1a1aa]">DHCP 地址数</span>
                   <input
                     type="number"
                     value={lan.dhcp_limit}
                     onInput={(e) =>
                       updateLan(idx(), { dhcp_limit: Number(e.currentTarget.value) || 150 })
                     }
-                    class="mt-1 w-full rounded-lg border border-slate-700 bg-slate-900 px-2.5 py-1.5 font-mono text-xs"
+                    class="mt-1 w-full rounded-lg border border-[#eaeaea] dark:border-[#262626] bg-white dark:bg-[#000000] text-[#171717] dark:text-[#ededed] outline-none focus:border-[#171717] dark:focus:border-[#ededed] px-2.5 py-1.5 font-mono text-xs"
                   />
                 </label>
-                <label class="flex items-center gap-2 pt-5 text-xs text-slate-300">
+                <label class="flex items-center gap-2 pt-5 text-xs text-[#171717] dark:text-[#ededed]">
                   <input
                     type="checkbox"
                     checked={lan.dhcp_enabled}
@@ -1312,7 +1332,7 @@ export function NetworkPage(props: Props) {
                   />
                   启用 dnsmasq DHCPv4 服务
                 </label>
-                <label class="flex items-center gap-2 pt-5 text-xs text-slate-300">
+                <label class="flex items-center gap-2 pt-5 text-xs text-[#171717] dark:text-[#ededed]">
                   <input
                     type="checkbox"
                     checked={lan.ipv6_ra_enabled}
@@ -1321,7 +1341,9 @@ export function NetworkPage(props: Props) {
                   启用 IPv6 RA + /64 SLAAC 下发
                 </label>
                 <label class="block text-xs">
-                  <span class="text-slate-400">IPv6-PD /64 子网序号 (可选 SLA ID)</span>
+                  <span class="text-[#666666] dark:text-[#a1a1aa]">
+                    IPv6-PD /64 子网序号 (可选 SLA ID)
+                  </span>
                   <input
                     type="number"
                     min={0}
@@ -1334,11 +1356,13 @@ export function NetworkPage(props: Props) {
                         ipv6_subnet_id: val === "" ? null : Number(val),
                       });
                     }}
-                    class="mt-1 w-full rounded-lg border border-slate-700 bg-slate-900 px-2.5 py-1.5 font-mono text-xs"
+                    class="mt-1 w-full rounded-lg border border-[#eaeaea] dark:border-[#262626] bg-white dark:bg-[#000000] text-[#171717] dark:text-[#ededed] outline-none focus:border-[#171717] dark:focus:border-[#ededed] px-2.5 py-1.5 font-mono text-xs"
                   />
                 </label>
                 <label class="block text-xs">
-                  <span class="text-slate-400">IPv6 ULA 静态前缀 (可选, 如 fd00:10::1/64)</span>
+                  <span class="text-[#666666] dark:text-[#a1a1aa]">
+                    IPv6 ULA 静态前缀 (可选, 如 fd00:10::1/64)
+                  </span>
                   <input
                     type="text"
                     placeholder="留空仅使用 WAN PD 前缀"
@@ -1346,10 +1370,10 @@ export function NetworkPage(props: Props) {
                     onInput={(e) =>
                       updateLan(idx(), { ipv6_ula_cidr: e.currentTarget.value.trim() || null })
                     }
-                    class="mt-1 w-full rounded-lg border border-slate-700 bg-slate-900 px-2.5 py-1.5 font-mono text-xs"
+                    class="mt-1 w-full rounded-lg border border-[#eaeaea] dark:border-[#262626] bg-white dark:bg-[#000000] text-[#171717] dark:text-[#ededed] outline-none focus:border-[#171717] dark:focus:border-[#ededed] px-2.5 py-1.5 font-mono text-xs"
                   />
                 </label>
-                <label class="flex items-center gap-2 pt-5 text-xs text-slate-300">
+                <label class="flex items-center gap-2 pt-5 text-xs text-[#171717] dark:text-[#ededed]">
                   <input
                     type="checkbox"
                     checked={lan.stp_enabled}
@@ -1358,7 +1382,9 @@ export function NetworkPage(props: Props) {
                   启用 Bridge STP 生成树防环
                 </label>
                 <label class="block text-xs">
-                  <span class="text-slate-400">STP Forward Delay (cs, 0=默认)</span>
+                  <span class="text-[#666666] dark:text-[#a1a1aa]">
+                    STP Forward Delay (cs, 0=默认)
+                  </span>
                   <input
                     type="number"
                     min={0}
@@ -1368,7 +1394,7 @@ export function NetworkPage(props: Props) {
                         forward_delay_cs: Math.max(0, Number(e.currentTarget.value) || 0),
                       })
                     }
-                    class="mt-1 w-full rounded-lg border border-slate-700 bg-slate-900 px-2.5 py-1.5 font-mono text-xs"
+                    class="mt-1 w-full rounded-lg border border-[#eaeaea] dark:border-[#262626] bg-white dark:bg-[#000000] text-[#171717] dark:text-[#ededed] outline-none focus:border-[#171717] dark:focus:border-[#ededed] px-2.5 py-1.5 font-mono text-xs"
                   />
                 </label>
               </div>
@@ -1378,18 +1404,20 @@ export function NetworkPage(props: Props) {
       </section>
 
       {/* Link Aggregation (Bonding / LACP) */}
-      <section class="rounded-xl border border-slate-800 bg-slate-900/60 p-4">
+      <section class="rounded-xl border border-[#eaeaea] dark:border-[#262626] bg-white dark:bg-[#0a0a0a] p-4 sm:p-5 transition-colors hover:border-[#d4d4d8] dark:hover:border-[#3a3a3a]">
         <div class="mb-3 flex items-center justify-between">
           <div>
-            <h2 class="text-sm font-semibold text-slate-200">链路聚合 (Bonding / 802.3ad LACP)</h2>
-            <p class="mt-0.5 text-xs text-slate-400">
+            <h2 class="text-sm font-medium text-[#171717] dark:text-[#ededed]">
+              链路聚合 (Bonding / 802.3ad LACP)
+            </h2>
+            <p class="mt-0.5 text-xs text-[#666666] dark:text-[#a1a1aa]">
               将多个物理网卡聚合为逻辑接口 (如 bond0)，再接入 LAN Bridge、VLAN 或作为 WAN 设备
             </p>
           </div>
           <button
             type="button"
             onClick={addBond}
-            class="rounded-lg border border-slate-700 bg-slate-800 px-3 py-1 text-xs text-slate-200 hover:bg-slate-700"
+            class="rounded-lg border border-[#eaeaea] dark:border-[#262626] bg-white dark:bg-[#111111] hover:bg-[#f4f4f5] dark:hover:bg-[#1a1a1a] px-3 py-1.5 text-xs font-medium text-[#171717] dark:text-[#ededed] cursor-pointer transition-colors"
           >
             + 添加聚合组
           </button>
@@ -1398,27 +1426,29 @@ export function NetworkPage(props: Props) {
           <For
             each={props.draft.bonds}
             fallback={
-              <p class="text-xs text-slate-500">暂无链路聚合配置，点击右上角添加 bond 接口。</p>
+              <p class="text-xs text-[#8f8f8f] dark:text-[#71717a]">
+                暂无链路聚合配置，点击右上角添加 bond 接口。
+              </p>
             }
           >
             {(bond, idx) => (
-              <div class="grid gap-3 rounded-xl border border-slate-800 bg-slate-950/60 p-3 sm:grid-cols-4">
+              <div class="grid gap-3 rounded-xl border border-[#eaeaea] dark:border-[#262626] bg-[#fafafa] dark:bg-[#111111] p-3 sm:grid-cols-4">
                 <label class="block text-xs">
-                  <span class="text-slate-400">Bond 接口名</span>
+                  <span class="text-[#666666] dark:text-[#a1a1aa]">Bond 接口名</span>
                   <input
                     type="text"
                     value={bond.name}
                     placeholder="例如: bond0"
                     onInput={(e) => updateBond(idx(), { name: e.currentTarget.value.trim() })}
-                    class="mt-1 w-full rounded-lg border border-slate-700 bg-slate-900 px-2.5 py-1.5 font-mono text-xs"
+                    class="mt-1 w-full rounded-lg border border-[#eaeaea] dark:border-[#262626] bg-white dark:bg-[#000000] text-[#171717] dark:text-[#ededed] outline-none focus:border-[#171717] dark:focus:border-[#ededed] px-2.5 py-1.5 font-mono text-xs"
                   />
                 </label>
                 <label class="block text-xs">
-                  <span class="text-slate-400">聚合模式</span>
+                  <span class="text-[#666666] dark:text-[#a1a1aa]">聚合模式</span>
                   <select
                     value={bond.mode}
                     onChange={(e) => updateBond(idx(), { mode: e.currentTarget.value as BondMode })}
-                    class="mt-1 w-full rounded-lg border border-slate-700 bg-slate-900 px-2.5 py-1.5 text-xs"
+                    class="mt-1 w-full rounded-lg border border-[#eaeaea] dark:border-[#262626] bg-white dark:bg-[#000000] text-[#171717] dark:text-[#ededed] outline-none focus:border-[#171717] dark:focus:border-[#ededed] px-2.5 py-1.5 text-xs"
                   >
                     <option value="802.3ad">802.3ad (LACP)</option>
                     <option value="active-backup">active-backup (主备)</option>
@@ -1430,7 +1460,7 @@ export function NetworkPage(props: Props) {
                   </select>
                 </label>
                 <label class="block text-xs">
-                  <span class="text-slate-400">哈希策略</span>
+                  <span class="text-[#666666] dark:text-[#a1a1aa]">哈希策略</span>
                   <select
                     value={bond.xmit_hash_policy}
                     onChange={(e) =>
@@ -1438,7 +1468,7 @@ export function NetworkPage(props: Props) {
                         xmit_hash_policy: e.currentTarget.value as BondXmitHashPolicy,
                       })
                     }
-                    class="mt-1 w-full rounded-lg border border-slate-700 bg-slate-900 px-2.5 py-1.5 text-xs"
+                    class="mt-1 w-full rounded-lg border border-[#eaeaea] dark:border-[#262626] bg-white dark:bg-[#000000] text-[#171717] dark:text-[#ededed] outline-none focus:border-[#171717] dark:focus:border-[#ededed] px-2.5 py-1.5 text-xs"
                   >
                     <option value="layer2+3">layer2+3</option>
                     <option value="layer3+4">layer3+4</option>
@@ -1448,20 +1478,22 @@ export function NetworkPage(props: Props) {
                   </select>
                 </label>
                 <label class="block text-xs">
-                  <span class="text-slate-400">LACP 速率</span>
+                  <span class="text-[#666666] dark:text-[#a1a1aa]">LACP 速率</span>
                   <select
                     value={bond.lacp_rate}
                     onChange={(e) =>
                       updateBond(idx(), { lacp_rate: e.currentTarget.value as BondLacpRate })
                     }
-                    class="mt-1 w-full rounded-lg border border-slate-700 bg-slate-900 px-2.5 py-1.5 text-xs"
+                    class="mt-1 w-full rounded-lg border border-[#eaeaea] dark:border-[#262626] bg-white dark:bg-[#000000] text-[#171717] dark:text-[#ededed] outline-none focus:border-[#171717] dark:focus:border-[#ededed] px-2.5 py-1.5 text-xs"
                   >
                     <option value="slow">slow (30s)</option>
                     <option value="fast">fast (1s)</option>
                   </select>
                 </label>
                 <label class="block text-xs sm:col-span-2">
-                  <span class="text-slate-400">成员接口 (逗号分隔，如 eth1, eth2)</span>
+                  <span class="text-[#666666] dark:text-[#a1a1aa]">
+                    成员接口 (逗号分隔，如 eth1, eth2)
+                  </span>
                   <input
                     type="text"
                     value={bond.slaves.join(", ")}
@@ -1474,11 +1506,11 @@ export function NetworkPage(props: Props) {
                           .filter(Boolean),
                       })
                     }
-                    class="mt-1 w-full rounded-lg border border-slate-700 bg-slate-900 px-2.5 py-1.5 font-mono text-xs"
+                    class="mt-1 w-full rounded-lg border border-[#eaeaea] dark:border-[#262626] bg-white dark:bg-[#000000] text-[#171717] dark:text-[#ededed] outline-none focus:border-[#171717] dark:focus:border-[#ededed] px-2.5 py-1.5 font-mono text-xs"
                   />
                 </label>
                 <label class="block text-xs">
-                  <span class="text-slate-400">MII 监测 (ms) / MTU (可选)</span>
+                  <span class="text-[#666666] dark:text-[#a1a1aa]">MII 监测 (ms) / MTU (可选)</span>
                   <div class="mt-1 flex gap-2">
                     <input
                       type="number"
@@ -1487,7 +1519,7 @@ export function NetworkPage(props: Props) {
                       onInput={(e) =>
                         updateBond(idx(), { miimon_ms: Number(e.currentTarget.value) || 100 })
                       }
-                      class="w-1/2 rounded-lg border border-slate-700 bg-slate-900 px-2 py-1.5 font-mono text-xs"
+                      class="w-1/2 rounded-lg border border-[#eaeaea] dark:border-[#262626] bg-white dark:bg-[#000000] text-[#171717] dark:text-[#ededed] outline-none focus:border-[#171717] dark:focus:border-[#ededed] px-2 py-1.5 font-mono text-xs"
                     />
                     <input
                       type="number"
@@ -1499,13 +1531,13 @@ export function NetworkPage(props: Props) {
                         const val = e.currentTarget.value.trim();
                         updateBond(idx(), { mtu: val === "" ? null : Number(val) });
                       }}
-                      class="w-1/2 rounded-lg border border-slate-700 bg-slate-900 px-2 py-1.5 font-mono text-xs"
+                      class="w-1/2 rounded-lg border border-[#eaeaea] dark:border-[#262626] bg-white dark:bg-[#000000] text-[#171717] dark:text-[#ededed] outline-none focus:border-[#171717] dark:focus:border-[#ededed] px-2 py-1.5 font-mono text-xs"
                     />
                   </div>
                 </label>
                 <div class="flex items-end justify-between gap-2">
                   <label class="block flex-1 text-xs">
-                    <span class="text-slate-400">主备 Primary (可选)</span>
+                    <span class="text-[#666666] dark:text-[#a1a1aa]">主备 Primary (可选)</span>
                     <input
                       type="text"
                       placeholder="eth1"
@@ -1513,13 +1545,13 @@ export function NetworkPage(props: Props) {
                       onInput={(e) =>
                         updateBond(idx(), { primary: e.currentTarget.value.trim() || null })
                       }
-                      class="mt-1 w-full rounded-lg border border-slate-700 bg-slate-900 px-2 py-1.5 font-mono text-xs"
+                      class="mt-1 w-full rounded-lg border border-[#eaeaea] dark:border-[#262626] bg-white dark:bg-[#000000] text-[#171717] dark:text-[#ededed] outline-none focus:border-[#171717] dark:focus:border-[#ededed] px-2 py-1.5 font-mono text-xs"
                     />
                   </label>
                   <button
                     type="button"
                     onClick={() => removeBond(idx())}
-                    class="rounded-lg bg-rose-900/50 px-2.5 py-1.5 text-xs text-rose-200 hover:bg-rose-800/70"
+                    class="rounded-lg border border-rose-500/25 bg-rose-500/10 px-2.5 py-1.5 text-xs font-medium text-rose-600 dark:text-rose-600 dark:text-rose-400 hover:bg-rose-500/20 cursor-pointer"
                   >
                     删除
                   </button>
@@ -1531,13 +1563,13 @@ export function NetworkPage(props: Props) {
       </section>
 
       {/* 802.1Q VLAN */}
-      <section class="rounded-xl border border-slate-800 bg-slate-900/60 p-4">
+      <section class="rounded-xl border border-[#eaeaea] dark:border-[#262626] bg-white dark:bg-[#0a0a0a] p-4 sm:p-5 transition-colors hover:border-[#d4d4d8] dark:hover:border-[#3a3a3a]">
         <div class="mb-3 flex items-center justify-between">
-          <h2 class="text-sm font-semibold text-slate-200">802.1Q VLAN 子接口</h2>
+          <h2 class="text-sm font-medium text-[#171717] dark:text-[#ededed]">802.1Q VLAN 子接口</h2>
           <button
             type="button"
             onClick={addVlan}
-            class="rounded-lg border border-slate-700 bg-slate-800 px-3 py-1 text-xs hover:bg-slate-700"
+            class="rounded-lg border border-[#eaeaea] dark:border-[#262626] bg-white dark:bg-[#111111] hover:bg-[#f4f4f5] dark:hover:bg-[#1a1a1a] px-3 py-1.5 text-xs font-medium text-[#171717] dark:text-[#ededed] cursor-pointer transition-colors"
           >
             + 添加 VLAN
           </button>
@@ -1545,7 +1577,7 @@ export function NetworkPage(props: Props) {
         <div class="space-y-2">
           <For each={props.draft.vlans}>
             {(vlan, idx) => (
-              <div class="grid items-center gap-2 rounded-lg border border-slate-800 bg-slate-950/60 p-3 sm:grid-cols-7">
+              <div class="grid items-center gap-2 rounded-lg border border-[#eaeaea] dark:border-[#262626] bg-[#fafafa] dark:bg-[#111111] p-3 sm:grid-cols-7">
                 <input
                   type="text"
                   value={vlan.parent}
@@ -1555,7 +1587,7 @@ export function NetworkPage(props: Props) {
                     next.vlans[idx()].parent = e.currentTarget.value;
                     props.onChange(next);
                   }}
-                  class="rounded border border-slate-700 bg-slate-900 px-2 py-1 font-mono text-xs"
+                  class="rounded border border-[#eaeaea] dark:border-[#262626] bg-white dark:bg-[#000000] text-[#171717] dark:text-[#ededed] outline-none focus:border-[#171717] dark:focus:border-[#ededed] px-2 py-1 font-mono text-xs"
                 />
                 <input
                   type="number"
@@ -1567,7 +1599,7 @@ export function NetworkPage(props: Props) {
                     next.vlans[idx()].id = Number(e.currentTarget.value) || 1;
                     props.onChange(next);
                   }}
-                  class="rounded border border-slate-700 bg-slate-900 px-2 py-1 font-mono text-xs"
+                  class="rounded border border-[#eaeaea] dark:border-[#262626] bg-white dark:bg-[#000000] text-[#171717] dark:text-[#ededed] outline-none focus:border-[#171717] dark:focus:border-[#ededed] px-2 py-1 font-mono text-xs"
                 />
                 <select
                   value={vlan.role}
@@ -1576,7 +1608,7 @@ export function NetworkPage(props: Props) {
                     next.vlans[idx()].role = e.currentTarget.value as InterfaceRole;
                     props.onChange(next);
                   }}
-                  class="rounded border border-slate-700 bg-slate-900 px-2 py-1 text-xs"
+                  class="rounded border border-[#eaeaea] dark:border-[#262626] bg-white dark:bg-[#000000] text-[#171717] dark:text-[#ededed] outline-none focus:border-[#171717] dark:focus:border-[#ededed] px-2 py-1 text-xs"
                 >
                   <option value="lan">LAN</option>
                   <option value="wan">WAN</option>
@@ -1591,9 +1623,9 @@ export function NetworkPage(props: Props) {
                     next.vlans[idx()].cidr = e.currentTarget.value || null;
                     props.onChange(next);
                   }}
-                  class="rounded border border-slate-700 bg-slate-900 px-2 py-1 font-mono text-xs"
+                  class="rounded border border-[#eaeaea] dark:border-[#262626] bg-white dark:bg-[#000000] text-[#171717] dark:text-[#ededed] outline-none focus:border-[#171717] dark:focus:border-[#ededed] px-2 py-1 font-mono text-xs"
                 />
-                <label class="flex items-center gap-1.5 text-xs text-slate-300">
+                <label class="flex items-center gap-1.5 text-xs text-[#171717] dark:text-[#ededed]">
                   <input
                     type="checkbox"
                     checked={vlan.ipv6_ra_enabled}
@@ -1617,7 +1649,7 @@ export function NetworkPage(props: Props) {
                     next.vlans[idx()].ipv6_subnet_id = val === "" ? null : Number(val);
                     props.onChange(next);
                   }}
-                  class="rounded border border-slate-700 bg-slate-900 px-2 py-1 font-mono text-xs"
+                  class="rounded border border-[#eaeaea] dark:border-[#262626] bg-white dark:bg-[#000000] text-[#171717] dark:text-[#ededed] outline-none focus:border-[#171717] dark:focus:border-[#ededed] px-2 py-1 font-mono text-xs"
                 />
                 <button
                   type="button"
@@ -1626,7 +1658,7 @@ export function NetworkPage(props: Props) {
                     next.vlans.splice(idx(), 1);
                     props.onChange(next);
                   }}
-                  class="text-right text-xs text-red-400 hover:text-red-300"
+                  class="text-right text-xs text-rose-600 dark:text-rose-600 dark:text-rose-400 hover:text-rose-700 dark:hover:text-rose-300 bg-transparent border-0 cursor-pointer"
                 >
                   删除
                 </button>
@@ -1637,13 +1669,15 @@ export function NetworkPage(props: Props) {
       </section>
 
       {/* MAC Pinning */}
-      <section class="rounded-xl border border-slate-800 bg-slate-900/60 p-4">
+      <section class="rounded-xl border border-[#eaeaea] dark:border-[#262626] bg-white dark:bg-[#0a0a0a] p-4 sm:p-5 transition-colors hover:border-[#d4d4d8] dark:hover:border-[#3a3a3a]">
         <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
           <div>
-            <h2 class="text-sm font-semibold text-slate-200">
+            <h2 class="text-sm font-medium text-[#171717] dark:text-[#ededed]">
               网卡 MAC 固化命名（systemd.link / udev）
             </h2>
-            <p class="text-xs text-slate-400">防止热插拔或内核枚举顺序变化导致网口名漂移。</p>
+            <p class="text-xs text-[#666666] dark:text-[#a1a1aa]">
+              防止热插拔或内核枚举顺序变化导致网口名漂移。
+            </p>
           </div>
           <div class="flex gap-2">
             <Show when={props.interfaces.length > 0}>
@@ -1663,7 +1697,7 @@ export function NetworkPage(props: Props) {
                     addPin();
                   }
                 }}
-                class="rounded-lg border border-slate-700 bg-slate-800 px-3 py-1 text-xs hover:bg-slate-700"
+                class="rounded-lg border border-[#eaeaea] dark:border-[#262626] bg-white dark:bg-[#111111] hover:bg-[#f4f4f5] dark:hover:bg-[#1a1a1a] px-3 py-1.5 text-xs font-medium text-[#171717] dark:text-[#ededed] cursor-pointer transition-colors"
               >
                 + 从主机网卡导入 / 新增
               </button>
@@ -1673,7 +1707,7 @@ export function NetworkPage(props: Props) {
         <div class="space-y-2">
           <For each={props.draft.interface_pins}>
             {(pin, idx) => (
-              <div class="grid items-center gap-2 rounded-lg border border-slate-800 bg-slate-950/60 p-3 sm:grid-cols-3">
+              <div class="grid items-center gap-2 rounded-lg border border-[#eaeaea] dark:border-[#262626] bg-[#fafafa] dark:bg-[#111111] p-3 sm:grid-cols-3">
                 <input
                   type="text"
                   value={pin.mac}
@@ -1683,7 +1717,7 @@ export function NetworkPage(props: Props) {
                     next.interface_pins[idx()].mac = e.currentTarget.value;
                     props.onChange(next);
                   }}
-                  class="rounded border border-slate-700 bg-slate-900 px-2 py-1 font-mono text-xs"
+                  class="rounded border border-[#eaeaea] dark:border-[#262626] bg-white dark:bg-[#000000] text-[#171717] dark:text-[#ededed] outline-none focus:border-[#171717] dark:focus:border-[#ededed] px-2 py-1 font-mono text-xs"
                 />
                 <input
                   type="text"
@@ -1694,7 +1728,7 @@ export function NetworkPage(props: Props) {
                     next.interface_pins[idx()].name = e.currentTarget.value;
                     props.onChange(next);
                   }}
-                  class="rounded border border-slate-700 bg-slate-900 px-2 py-1 font-mono text-xs"
+                  class="rounded border border-[#eaeaea] dark:border-[#262626] bg-white dark:bg-[#000000] text-[#171717] dark:text-[#ededed] outline-none focus:border-[#171717] dark:focus:border-[#ededed] px-2 py-1 font-mono text-xs"
                 />
                 <button
                   type="button"
@@ -1703,7 +1737,7 @@ export function NetworkPage(props: Props) {
                     next.interface_pins.splice(idx(), 1);
                     props.onChange(next);
                   }}
-                  class="text-right text-xs text-red-400 hover:text-red-300"
+                  class="text-right text-xs text-rose-600 dark:text-rose-600 dark:text-rose-400 hover:text-rose-700 dark:hover:text-rose-300 bg-transparent border-0 cursor-pointer"
                 >
                   删除
                 </button>
@@ -1715,13 +1749,13 @@ export function NetworkPage(props: Props) {
 
       {/* Static Routes & PBR */}
       <section class="grid gap-4 md:grid-cols-2">
-        <div class="rounded-xl border border-slate-800 bg-slate-900/60 p-4">
+        <div class="rounded-xl border border-[#eaeaea] dark:border-[#262626] bg-white dark:bg-[#0a0a0a] p-4 sm:p-5 transition-colors hover:border-[#d4d4d8] dark:hover:border-[#3a3a3a]">
           <div class="mb-3 flex items-center justify-between">
-            <h2 class="text-sm font-semibold text-slate-200">静态路由表</h2>
+            <h2 class="text-sm font-medium text-[#171717] dark:text-[#ededed]">静态路由表</h2>
             <button
               type="button"
               onClick={addRoute}
-              class="rounded-lg border border-slate-700 bg-slate-800 px-2.5 py-1 text-xs hover:bg-slate-700"
+              class="rounded-lg border border-[#eaeaea] dark:border-[#262626] bg-white dark:bg-[#111111] hover:bg-[#f4f4f5] dark:hover:bg-[#1a1a1a] px-2.5 py-1.5 text-xs font-medium text-[#171717] dark:text-[#ededed] cursor-pointer transition-colors"
             >
               + 新增路由
             </button>
@@ -1729,7 +1763,7 @@ export function NetworkPage(props: Props) {
           <div class="space-y-2">
             <For each={props.draft.routes}>
               {(route, idx) => (
-                <div class="space-y-2 rounded-lg border border-slate-800 bg-slate-950/60 p-3 text-xs">
+                <div class="space-y-2 rounded-lg border border-[#eaeaea] dark:border-[#262626] bg-[#fafafa] dark:bg-[#111111] p-3 text-xs">
                   <div class="grid grid-cols-2 gap-2">
                     <input
                       type="text"
@@ -1740,7 +1774,7 @@ export function NetworkPage(props: Props) {
                         next.routes[idx()].destination = e.currentTarget.value;
                         props.onChange(next);
                       }}
-                      class="rounded border border-slate-700 bg-slate-900 px-2 py-1 font-mono"
+                      class="rounded border border-[#eaeaea] dark:border-[#262626] bg-white dark:bg-[#000000] text-[#171717] dark:text-[#ededed] outline-none focus:border-[#171717] dark:focus:border-[#ededed] px-2 py-1 font-mono"
                     />
                     <input
                       type="text"
@@ -1751,7 +1785,7 @@ export function NetworkPage(props: Props) {
                         next.routes[idx()].gateway = e.currentTarget.value || null;
                         props.onChange(next);
                       }}
-                      class="rounded border border-slate-700 bg-slate-900 px-2 py-1 font-mono"
+                      class="rounded border border-[#eaeaea] dark:border-[#262626] bg-white dark:bg-[#000000] text-[#171717] dark:text-[#ededed] outline-none focus:border-[#171717] dark:focus:border-[#ededed] px-2 py-1 font-mono"
                     />
                   </div>
                   <div class="flex items-center justify-between gap-2">
@@ -1764,7 +1798,7 @@ export function NetworkPage(props: Props) {
                         next.routes[idx()].table_id = Number(e.currentTarget.value) || 254;
                         props.onChange(next);
                       }}
-                      class="w-24 rounded border border-slate-700 bg-slate-900 px-2 py-1 font-mono"
+                      class="w-24 rounded border border-[#eaeaea] dark:border-[#262626] bg-white dark:bg-[#000000] text-[#171717] dark:text-[#ededed] outline-none focus:border-[#171717] dark:focus:border-[#ededed] px-2 py-1 font-mono"
                     />
                     <input
                       type="text"
@@ -1775,7 +1809,7 @@ export function NetworkPage(props: Props) {
                         next.routes[idx()].device = e.currentTarget.value || null;
                         props.onChange(next);
                       }}
-                      class="flex-1 rounded border border-slate-700 bg-slate-900 px-2 py-1 font-mono"
+                      class="flex-1 rounded border border-[#eaeaea] dark:border-[#262626] bg-white dark:bg-[#000000] text-[#171717] dark:text-[#ededed] outline-none focus:border-[#171717] dark:focus:border-[#ededed] px-2 py-1 font-mono"
                     />
                     <button
                       type="button"
@@ -1784,7 +1818,7 @@ export function NetworkPage(props: Props) {
                         next.routes.splice(idx(), 1);
                         props.onChange(next);
                       }}
-                      class="text-red-400 hover:text-red-300"
+                      class="text-rose-600 dark:text-rose-600 dark:text-rose-400 hover:text-rose-700 dark:hover:text-rose-300 bg-transparent border-0 cursor-pointer"
                     >
                       删除
                     </button>
@@ -1795,13 +1829,15 @@ export function NetworkPage(props: Props) {
           </div>
         </div>
 
-        <div class="rounded-xl border border-slate-800 bg-slate-900/60 p-4">
+        <div class="rounded-xl border border-[#eaeaea] dark:border-[#262626] bg-white dark:bg-[#0a0a0a] p-4 sm:p-5 transition-colors hover:border-[#d4d4d8] dark:hover:border-[#3a3a3a]">
           <div class="mb-3 flex items-center justify-between">
-            <h2 class="text-sm font-semibold text-slate-200">策略路由规则 (PBR)</h2>
+            <h2 class="text-sm font-medium text-[#171717] dark:text-[#ededed]">
+              策略路由规则 (PBR)
+            </h2>
             <button
               type="button"
               onClick={addPolicyRule}
-              class="rounded-lg border border-slate-700 bg-slate-800 px-2.5 py-1 text-xs hover:bg-slate-700"
+              class="rounded-lg border border-[#eaeaea] dark:border-[#262626] bg-white dark:bg-[#111111] hover:bg-[#f4f4f5] dark:hover:bg-[#1a1a1a] px-2.5 py-1.5 text-xs font-medium text-[#171717] dark:text-[#ededed] cursor-pointer transition-colors"
             >
               + 新增规则
             </button>
@@ -1809,7 +1845,7 @@ export function NetworkPage(props: Props) {
           <div class="space-y-2">
             <For each={props.draft.policy_rules}>
               {(rule, idx) => (
-                <div class="space-y-2 rounded-lg border border-slate-800 bg-slate-950/60 p-3 text-xs">
+                <div class="space-y-2 rounded-lg border border-[#eaeaea] dark:border-[#262626] bg-[#fafafa] dark:bg-[#111111] p-3 text-xs">
                   <div class="grid grid-cols-3 gap-2">
                     <input
                       type="number"
@@ -1820,7 +1856,7 @@ export function NetworkPage(props: Props) {
                         next.policy_rules[idx()].priority = Number(e.currentTarget.value) || 1000;
                         props.onChange(next);
                       }}
-                      class="rounded border border-slate-700 bg-slate-900 px-2 py-1 font-mono"
+                      class="rounded border border-[#eaeaea] dark:border-[#262626] bg-white dark:bg-[#000000] text-[#171717] dark:text-[#ededed] outline-none focus:border-[#171717] dark:focus:border-[#ededed] px-2 py-1 font-mono"
                     />
                     <input
                       type="number"
@@ -1831,7 +1867,7 @@ export function NetworkPage(props: Props) {
                         next.policy_rules[idx()].table_id = Number(e.currentTarget.value) || 100;
                         props.onChange(next);
                       }}
-                      class="rounded border border-slate-700 bg-slate-900 px-2 py-1 font-mono"
+                      class="rounded border border-[#eaeaea] dark:border-[#262626] bg-white dark:bg-[#000000] text-[#171717] dark:text-[#ededed] outline-none focus:border-[#171717] dark:focus:border-[#ededed] px-2 py-1 font-mono"
                     />
                     <input
                       type="text"
@@ -1842,7 +1878,7 @@ export function NetworkPage(props: Props) {
                         next.policy_rules[idx()].iif = e.currentTarget.value || null;
                         props.onChange(next);
                       }}
-                      class="rounded border border-slate-700 bg-slate-900 px-2 py-1 font-mono"
+                      class="rounded border border-[#eaeaea] dark:border-[#262626] bg-white dark:bg-[#000000] text-[#171717] dark:text-[#ededed] outline-none focus:border-[#171717] dark:focus:border-[#ededed] px-2 py-1 font-mono"
                     />
                   </div>
                   <div class="flex items-center gap-2">
@@ -1855,7 +1891,7 @@ export function NetworkPage(props: Props) {
                         next.policy_rules[idx()].src = e.currentTarget.value || null;
                         props.onChange(next);
                       }}
-                      class="flex-1 rounded border border-slate-700 bg-slate-900 px-2 py-1 font-mono"
+                      class="flex-1 rounded border border-[#eaeaea] dark:border-[#262626] bg-white dark:bg-[#000000] text-[#171717] dark:text-[#ededed] outline-none focus:border-[#171717] dark:focus:border-[#ededed] px-2 py-1 font-mono"
                     />
                     <button
                       type="button"
@@ -1864,7 +1900,7 @@ export function NetworkPage(props: Props) {
                         next.policy_rules.splice(idx(), 1);
                         props.onChange(next);
                       }}
-                      class="text-red-400 hover:text-red-300"
+                      class="text-rose-600 dark:text-rose-600 dark:text-rose-400 hover:text-rose-700 dark:hover:text-rose-300 bg-transparent border-0 cursor-pointer"
                     >
                       删除
                     </button>

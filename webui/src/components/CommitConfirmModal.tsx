@@ -36,28 +36,30 @@ export function CommitConfirmModal(props: Props) {
   return (
     <Show when={props.pending}>
       {(pending) => (
-        <div class="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/75 p-4 backdrop-blur-sm">
-          <div class="w-full max-w-md rounded-2xl border border-amber-500/50 bg-slate-900 p-6 shadow-2xl">
+        <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 dark:bg-black/80 p-4 backdrop-blur-sm">
+          <div class="w-full max-w-md rounded-2xl border border-[#eaeaea] dark:border-[#262626] bg-white dark:bg-[#0a0a0a] p-6 shadow-2xl animate-card-enter">
             <div class="flex items-start gap-3">
-              <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-500/20 text-amber-400">
+              <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
                 <span class="i-ri-shield-check-line text-xl" />
               </div>
               <div class="flex-1">
-                <h3 class="text-base font-semibold text-slate-100">
+                <h3 class="text-base font-semibold tracking-tight text-[#171717] dark:text-[#ededed]">
                   Commit-Confirm 防失联确认 (Gen #{pending().generation})
                 </h3>
-                <p class="mt-1 text-xs leading-relaxed text-slate-300">
+                <p class="mt-1 text-xs leading-relaxed text-[#666666] dark:text-[#a1a1aa]">
                   新网络与防火墙配置已生效。请确认当前管理连接正常，否则系统将在倒计时结束后自动回滚到上一份已确认配置。
                 </p>
               </div>
             </div>
 
-            <div class="mt-5 rounded-xl border border-slate-800 bg-slate-950/80 p-4">
+            <div class="mt-5 rounded-xl border border-[#eaeaea] dark:border-[#262626] bg-[#fafafa] dark:bg-[#111111] p-4">
               <div class="flex items-baseline justify-between">
-                <span class="text-xs text-slate-400">自动回滚剩余时间</span>
-                <span class="font-mono text-2xl font-bold text-amber-400">{remainingSecs()}s</span>
+                <span class="text-xs text-[#666666] dark:text-[#a1a1aa]">自动回滚剩余时间</span>
+                <span class="font-mono text-2xl font-semibold tabular-nums text-amber-600 dark:text-amber-400">
+                  {remainingSecs()}s
+                </span>
               </div>
-              <div class="mt-2 h-2 w-full overflow-hidden rounded-full bg-slate-800">
+              <div class="mt-2.5 h-2 w-full overflow-hidden rounded-full bg-[#eaeaea] dark:bg-[#262626]">
                 <div
                   class="h-full rounded-full bg-amber-500 transition-all duration-200"
                   style={{ width: `${progressPct()}%` }}
@@ -70,7 +72,7 @@ export function CommitConfirmModal(props: Props) {
                 type="button"
                 disabled={props.busy}
                 onClick={() => props.onRollback()}
-                class="rounded-lg border border-slate-700 bg-slate-800 px-4 py-2 text-xs font-medium text-slate-200 hover:bg-slate-700 disabled:opacity-50"
+                class="rounded-lg border border-[#eaeaea] dark:border-[#262626] bg-white dark:bg-[#111111] hover:bg-[#f4f4f5] dark:hover:bg-[#1a1a1a] px-4 py-2 text-xs font-medium text-[#171717] dark:text-[#ededed] cursor-pointer transition-all active:scale-[0.97] disabled:opacity-50"
               >
                 立即回滚
               </button>
@@ -78,7 +80,7 @@ export function CommitConfirmModal(props: Props) {
                 type="button"
                 disabled={props.busy}
                 onClick={() => props.onConfirm()}
-                class="rounded-lg bg-emerald-600 px-4 py-2 text-xs font-medium text-white hover:bg-emerald-500 disabled:opacity-50"
+                class="rounded-lg bg-[#171717] hover:bg-[#383838] dark:bg-[#ededed] dark:hover:bg-[#d4d4d8] px-4 py-2 text-xs font-medium text-white dark:text-[#0a0a0a] border-0 cursor-pointer transition-all active:scale-[0.97] disabled:opacity-50"
               >
                 连接正常，确认保存
               </button>

@@ -2,10 +2,25 @@
 <html lang="zh-CN">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <title>CrabRouter</title>
+    <script>
+      (function () {
+        try {
+          var saved = localStorage.getItem("crabrouter_theme");
+          var prefersDark =
+            window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
+          var isDark = saved ? saved === "dark" : prefersDark;
+          document.documentElement.classList.toggle("dark", isDark);
+          document.documentElement.dataset.theme = isDark ? "dark" : "light";
+          document.documentElement.style.colorScheme = isDark ? "dark" : "light";
+        } catch (_) {}
+      })();
+    </script>
   </head>
-  <body class="bg-slate-950 text-slate-100 antialiased">
+  <body
+    class="bg-[#fafafa] text-[#171717] dark:bg-[#000000] dark:text-[#ededed] antialiased selection:bg-[#0070f3]/20 selection:text-[#0070f3]"
+  >
     <div id="root"></div>
     <script type="module" src="/src/index.tsx"></script>
   </body>

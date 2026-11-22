@@ -26,56 +26,64 @@ export function LoginView(props: Props) {
   }
 
   return (
-    <div class="flex min-h-screen items-center justify-center bg-slate-950 p-6 text-slate-100">
-      <form
-        onSubmit={(e) => void submit(e)}
-        class="w-full max-w-sm rounded-2xl border border-slate-800 bg-slate-900/90 p-6 shadow-2xl"
-      >
+    <div class="min-h-screen vercel-grid-bg flex items-center justify-center px-4 bg-[#fafafa] dark:bg-black text-[#171717] dark:text-[#ededed]">
+      <div class="w-full max-w-sm rounded-2xl border border-[#eaeaea] dark:border-[#262626] bg-white dark:bg-[#0a0a0a] p-6 sm:p-7 shadow-sm space-y-6 animate-card-enter">
         <div class="flex items-center gap-3">
-          <span class="i-ri-router-line text-2xl text-orange-400" />
+          <div class="w-9 h-9 rounded-xl bg-[#171717] dark:bg-white text-white dark:text-[#0a0a0a] flex items-center justify-center shrink-0">
+            <span class="i-ri-router-fill text-lg" />
+          </div>
           <div>
-            <h1 class="text-base font-semibold">CrabRouter 管理登录</h1>
-            <p class="text-xs text-slate-400">请输入管理员账号与密码</p>
+            <h1 class="text-base font-semibold tracking-tight">CrabRouter</h1>
+            <p class="text-xs text-[#666666] dark:text-[#a1a1aa]">请输入管理员账号与密码登录</p>
           </div>
         </div>
 
-        <Show when={err()}>
-          {(msg) => (
-            <div class="mt-4 rounded-lg border border-red-500/40 bg-red-950/50 px-3 py-2 text-xs text-red-200">
-              {msg()}
-            </div>
-          )}
-        </Show>
-
-        <div class="mt-4 space-y-3">
-          <label class="block text-xs">
-            <span class="text-slate-400">用户名</span>
+        <form onSubmit={(e) => void submit(e)} class="space-y-4">
+          <div>
+            <label class="block text-xs font-medium mb-1.5 text-[#171717] dark:text-[#ededed]">
+              用户名
+            </label>
             <input
               type="text"
+              autocomplete="username"
               value={username()}
               onInput={(e) => setUsername(e.currentTarget.value)}
-              class="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
+              class="w-full h-9 bg-[#fafafa] dark:bg-[#000000] border border-[#eaeaea] dark:border-[#262626] rounded-lg px-3 text-sm text-[#171717] dark:text-[#ededed] outline-none focus:border-[#171717] dark:focus:border-[#ededed] transition-colors"
+              required
             />
-          </label>
-          <label class="block text-xs">
-            <span class="text-slate-400">密码</span>
+          </div>
+          <div>
+            <label class="block text-xs font-medium mb-1.5 text-[#171717] dark:text-[#ededed]">
+              密码
+            </label>
             <input
               type="password"
+              autocomplete="current-password"
               value={password()}
               onInput={(e) => setPassword(e.currentTarget.value)}
-              class="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
+              class="w-full h-9 bg-[#fafafa] dark:bg-[#000000] border border-[#eaeaea] dark:border-[#262626] rounded-lg px-3 text-sm text-[#171717] dark:text-[#ededed] outline-none focus:border-[#171717] dark:focus:border-[#ededed] transition-colors"
+              required
             />
-          </label>
-        </div>
+          </div>
 
-        <button
-          type="submit"
-          disabled={busy()}
-          class="mt-5 w-full rounded-lg bg-orange-600 py-2 text-xs font-semibold text-white hover:bg-orange-500 disabled:opacity-50"
-        >
-          {busy() ? "验证中..." : "登录控制台"}
-        </button>
-      </form>
+          <Show when={err()}>
+            {(msg) => (
+              <div class="rounded-lg border border-rose-500/20 bg-rose-500/10 text-rose-600 dark:text-rose-400 px-3 py-2 text-xs flex items-center gap-1.5">
+                <span class="i-ri-error-warning-line shrink-0" />
+                <span>{msg()}</span>
+              </div>
+            )}
+          </Show>
+
+          <button
+            type="submit"
+            disabled={busy()}
+            class="w-full h-9 rounded-lg text-sm font-medium bg-[#171717] hover:bg-[#383838] dark:bg-[#ededed] dark:hover:bg-[#d4d4d8] text-white dark:text-[#0a0a0a] cursor-pointer border-0 transition-all active:scale-[0.98] disabled:opacity-50"
+          >
+            {busy() ? "验证中..." : "登录控制台"}
+          </button>
+        </form>
+      </div>
     </div>
   );
 }

@@ -8,6 +8,17 @@ interface Props {
   onChange: (next: RouterConfig) => void;
 }
 
+const SECTION_CLS =
+  "rounded-xl border border-[#eaeaea] dark:border-[#262626] bg-white dark:bg-[#0a0a0a] p-4 sm:p-5 transition-colors hover:border-[#d4d4d8] dark:hover:border-[#3a3a3a]";
+const ROW_CLS =
+  "rounded-xl border border-[#eaeaea] dark:border-[#262626] bg-[#fafafa] dark:bg-[#111111] p-3 text-xs";
+const INPUT_CLS =
+  "w-full rounded-lg border border-[#eaeaea] dark:border-[#262626] bg-white dark:bg-[#000000] px-2.5 py-1.5 text-xs text-[#171717] dark:text-[#ededed] outline-none focus:border-[#171717] dark:focus:border-[#ededed] transition-colors";
+const BTN_OUTLINE =
+  "rounded-lg border border-[#eaeaea] dark:border-[#262626] bg-white dark:bg-[#111111] hover:bg-[#f4f4f5] dark:hover:bg-[#1a1a1a] px-3 py-1.5 text-xs font-medium text-[#171717] dark:text-[#ededed] cursor-pointer transition-all active:scale-[0.97]";
+const BTN_DELETE =
+  "text-xs font-medium text-rose-600 dark:text-rose-400 hover:text-rose-700 dark:hover:text-rose-300 bg-transparent border-0 cursor-pointer";
+
 export function FirewallPage(props: Props) {
   const zoneNames = () => props.draft.firewall.zones.map((z) => z.name);
 
@@ -55,11 +66,13 @@ export function FirewallPage(props: Props) {
   }
 
   return (
-    <div class="space-y-6">
-      <section class="rounded-xl border border-slate-800 bg-slate-900/60 p-4">
-        <h2 class="mb-3 text-sm font-semibold text-slate-200">全局防火墙与转发加速参数</h2>
+    <div class="space-y-5 sm:space-y-6 animate-view-enter">
+      <section class={SECTION_CLS}>
+        <h2 class="mb-3.5 text-sm font-medium text-[#171717] dark:text-[#ededed]">
+          全局防火墙与转发加速参数
+        </h2>
         <div class="grid gap-4 sm:grid-cols-4">
-          <label class="flex items-center gap-2 text-xs text-slate-300">
+          <label class="flex items-center gap-2 text-xs text-[#171717] dark:text-[#ededed]">
             <input
               type="checkbox"
               checked={props.draft.firewall.flowtable_offload}
@@ -71,7 +84,7 @@ export function FirewallPage(props: Props) {
             />
             启用 nftables Flowtable 加速
           </label>
-          <label class="flex items-center gap-2 text-xs text-slate-300">
+          <label class="flex items-center gap-2 text-xs text-[#171717] dark:text-[#ededed]">
             <input
               type="checkbox"
               checked={props.draft.firewall.mss_clamping}
@@ -83,7 +96,7 @@ export function FirewallPage(props: Props) {
             />
             启用 TCP MSS 钳制 (PPPoE)
           </label>
-          <label class="flex items-center gap-2 text-xs text-slate-300">
+          <label class="flex items-center gap-2 text-xs text-[#171717] dark:text-[#ededed]">
             <input
               type="checkbox"
               checked={props.draft.firewall.syn_flood_protect}
@@ -96,7 +109,7 @@ export function FirewallPage(props: Props) {
             启用 SYN Flood 限速防护
           </label>
           <label class="block text-xs">
-            <span class="text-slate-400">SYN 限速 (pkt/s)</span>
+            <span class="text-[#666666] dark:text-[#a1a1aa]">SYN 限速 (pkt/s)</span>
             <input
               type="number"
               min={1}
@@ -106,30 +119,28 @@ export function FirewallPage(props: Props) {
                 next.firewall.syn_flood_rate = Math.max(1, Number(e.currentTarget.value) || 25);
                 props.onChange(next);
               }}
-              class="mt-1 w-full rounded border border-slate-700 bg-slate-950 px-2.5 py-1 font-mono text-xs"
+              class={`mt-1 ${INPUT_CLS} font-mono`}
             />
           </label>
         </div>
       </section>
 
       {/* Firewall Zones */}
-      <section class="rounded-xl border border-slate-800 bg-slate-900/60 p-4">
-        <div class="mb-3 flex items-center justify-between">
-          <h2 class="text-sm font-semibold text-slate-200">安全区域 (Firewall Zones)</h2>
-          <button
-            type="button"
-            onClick={addZone}
-            class="rounded-lg border border-slate-700 bg-slate-800 px-3 py-1 text-xs hover:bg-slate-700"
-          >
+      <section class={SECTION_CLS}>
+        <div class="mb-3.5 flex items-center justify-between gap-2">
+          <h2 class="text-sm font-medium text-[#171717] dark:text-[#ededed]">
+            安全区域 (Firewall Zones)
+          </h2>
+          <button type="button" onClick={addZone} class={BTN_OUTLINE}>
             + 新增 Zone
           </button>
         </div>
-        <div class="space-y-3">
+        <div class="space-y-2.5">
           <For each={props.draft.firewall.zones}>
             {(zone, idx) => (
-              <div class="grid items-end gap-3 rounded-xl border border-slate-800 bg-slate-950/60 p-3 text-xs sm:grid-cols-7">
+              <div class={`grid items-end gap-3 sm:grid-cols-7 ${ROW_CLS}`}>
                 <label class="block">
-                  <span class="text-slate-400">Zone 名</span>
+                  <span class="text-[#666666] dark:text-[#a1a1aa]">Zone 名</span>
                   <input
                     type="text"
                     value={zone.name}
@@ -138,11 +149,11 @@ export function FirewallPage(props: Props) {
                       next.firewall.zones[idx()].name = e.currentTarget.value;
                       props.onChange(next);
                     }}
-                    class="mt-1 w-full rounded border border-slate-700 bg-slate-900 px-2 py-1 font-mono"
+                    class={`mt-1 ${INPUT_CLS} font-mono`}
                   />
                 </label>
                 <label class="block sm:col-span-2">
-                  <span class="text-slate-400">绑定接口 (逗号分隔)</span>
+                  <span class="text-[#666666] dark:text-[#a1a1aa]">绑定接口 (逗号分隔)</span>
                   <input
                     type="text"
                     value={zone.interfaces.join(", ")}
@@ -154,11 +165,11 @@ export function FirewallPage(props: Props) {
                         .filter(Boolean);
                       props.onChange(next);
                     }}
-                    class="mt-1 w-full rounded border border-slate-700 bg-slate-900 px-2 py-1 font-mono"
+                    class={`mt-1 ${INPUT_CLS} font-mono`}
                   />
                 </label>
                 <label class="block">
-                  <span class="text-slate-400">Input</span>
+                  <span class="text-[#666666] dark:text-[#a1a1aa]">Input</span>
                   <select
                     value={zone.input}
                     onChange={(e) => {
@@ -166,7 +177,7 @@ export function FirewallPage(props: Props) {
                       next.firewall.zones[idx()].input = e.currentTarget.value as FirewallAction;
                       props.onChange(next);
                     }}
-                    class="mt-1 w-full rounded border border-slate-700 bg-slate-900 px-2 py-1"
+                    class={`mt-1 ${INPUT_CLS}`}
                   >
                     <option value="accept">accept</option>
                     <option value="drop">drop</option>
@@ -174,7 +185,7 @@ export function FirewallPage(props: Props) {
                   </select>
                 </label>
                 <label class="block">
-                  <span class="text-slate-400">Forward</span>
+                  <span class="text-[#666666] dark:text-[#a1a1aa]">Forward</span>
                   <select
                     value={zone.forward}
                     onChange={(e) => {
@@ -182,14 +193,14 @@ export function FirewallPage(props: Props) {
                       next.firewall.zones[idx()].forward = e.currentTarget.value as FirewallAction;
                       props.onChange(next);
                     }}
-                    class="mt-1 w-full rounded border border-slate-700 bg-slate-900 px-2 py-1"
+                    class={`mt-1 ${INPUT_CLS}`}
                   >
                     <option value="accept">accept</option>
                     <option value="drop">drop</option>
                     <option value="reject">reject</option>
                   </select>
                 </label>
-                <label class="flex items-center gap-1.5 pb-1 text-slate-300">
+                <label class="flex items-center gap-1.5 pb-1.5 text-[#171717] dark:text-[#ededed]">
                   <input
                     type="checkbox"
                     checked={zone.masquerade}
@@ -208,7 +219,7 @@ export function FirewallPage(props: Props) {
                     next.firewall.zones.splice(idx(), 1);
                     props.onChange(next);
                   }}
-                  class="pb-1 text-right text-red-400 hover:text-red-300"
+                  class={`pb-1.5 text-right ${BTN_DELETE}`}
                 >
                   删除
                 </button>
@@ -219,26 +230,24 @@ export function FirewallPage(props: Props) {
       </section>
 
       {/* Custom ACL Rules */}
-      <section class="rounded-xl border border-slate-800 bg-slate-900/60 p-4">
-        <div class="mb-3 flex items-center justify-between">
+      <section class={SECTION_CLS}>
+        <div class="mb-3.5 flex flex-wrap items-center justify-between gap-2">
           <div>
-            <h2 class="text-sm font-semibold text-slate-200">自定义访问控制规则 (ACL)</h2>
-            <p class="text-xs text-slate-400">
+            <h2 class="text-sm font-medium text-[#171717] dark:text-[#ededed]">
+              自定义访问控制规则 (ACL)
+            </h2>
+            <p class="mt-0.5 text-xs text-[#666666] dark:text-[#a1a1aa]">
               目标 Zone 为空时作用于路由器本机 Input；指定目标 Zone 时作用于 Zone 间 Forward。
             </p>
           </div>
-          <button
-            type="button"
-            onClick={addAclRule}
-            class="rounded-lg border border-slate-700 bg-slate-800 px-3 py-1 text-xs hover:bg-slate-700"
-          >
+          <button type="button" onClick={addAclRule} class={BTN_OUTLINE}>
             + 新增 ACL 规则
           </button>
         </div>
-        <div class="space-y-2">
+        <div class="space-y-2.5">
           <For each={props.draft.firewall.rules}>
             {(rule, idx) => (
-              <div class="grid items-center gap-2 rounded-lg border border-slate-800 bg-slate-950/60 p-3 text-xs sm:grid-cols-8">
+              <div class={`grid items-center gap-2 sm:grid-cols-8 ${ROW_CLS}`}>
                 <label class="flex items-center gap-1.5">
                   <input
                     type="checkbox"
@@ -257,7 +266,7 @@ export function FirewallPage(props: Props) {
                       next.firewall.rules[idx()].name = e.currentTarget.value;
                       props.onChange(next);
                     }}
-                    class="w-full rounded border border-slate-700 bg-slate-900 px-2 py-1"
+                    class={INPUT_CLS}
                   />
                 </label>
                 <select
@@ -267,7 +276,7 @@ export function FirewallPage(props: Props) {
                     next.firewall.rules[idx()].src_zone = e.currentTarget.value;
                     props.onChange(next);
                   }}
-                  class="rounded border border-slate-700 bg-slate-900 px-2 py-1"
+                  class={INPUT_CLS}
                 >
                   <For each={zoneNames()}>{(z) => <option value={z}>源: {z}</option>}</For>
                 </select>
@@ -278,7 +287,7 @@ export function FirewallPage(props: Props) {
                     next.firewall.rules[idx()].dst_zone = e.currentTarget.value || null;
                     props.onChange(next);
                   }}
-                  class="rounded border border-slate-700 bg-slate-900 px-2 py-1"
+                  class={INPUT_CLS}
                 >
                   <option value="">本机 (Input)</option>
                   <For each={zoneNames()}>{(z) => <option value={z}>目标: {z}</option>}</For>
@@ -290,7 +299,7 @@ export function FirewallPage(props: Props) {
                     next.firewall.rules[idx()].proto = e.currentTarget.value as TransportProto;
                     props.onChange(next);
                   }}
-                  class="rounded border border-slate-700 bg-slate-900 px-2 py-1"
+                  class={INPUT_CLS}
                 >
                   <option value="tcp">TCP</option>
                   <option value="udp">UDP</option>
@@ -307,7 +316,7 @@ export function FirewallPage(props: Props) {
                     next.firewall.rules[idx()].src_ip = e.currentTarget.value || null;
                     props.onChange(next);
                   }}
-                  class="rounded border border-slate-700 bg-slate-900 px-2 py-1 font-mono"
+                  class={`${INPUT_CLS} font-mono`}
                 />
                 <input
                   type="text"
@@ -318,7 +327,7 @@ export function FirewallPage(props: Props) {
                     next.firewall.rules[idx()].dst_port = e.currentTarget.value || null;
                     props.onChange(next);
                   }}
-                  class="rounded border border-slate-700 bg-slate-900 px-2 py-1 font-mono"
+                  class={`${INPUT_CLS} font-mono`}
                 />
                 <select
                   value={rule.action}
@@ -327,7 +336,7 @@ export function FirewallPage(props: Props) {
                     next.firewall.rules[idx()].action = e.currentTarget.value as FirewallAction;
                     props.onChange(next);
                   }}
-                  class="rounded border border-slate-700 bg-slate-900 px-2 py-1"
+                  class={INPUT_CLS}
                 >
                   <option value="accept">放行 (accept)</option>
                   <option value="drop">丢弃 (drop)</option>
@@ -340,7 +349,7 @@ export function FirewallPage(props: Props) {
                     next.firewall.rules.splice(idx(), 1);
                     props.onChange(next);
                   }}
-                  class="text-right text-red-400 hover:text-red-300"
+                  class={`text-right ${BTN_DELETE}`}
                 >
                   删除
                 </button>
@@ -351,21 +360,17 @@ export function FirewallPage(props: Props) {
       </section>
 
       {/* Port Forwarding */}
-      <section class="rounded-xl border border-slate-800 bg-slate-900/60 p-4">
-        <div class="mb-3 flex items-center justify-between">
-          <h2 class="text-sm font-semibold text-slate-200">端口转发 (DNAT)</h2>
-          <button
-            type="button"
-            onClick={addPortForward}
-            class="rounded-lg border border-slate-700 bg-slate-800 px-3 py-1 text-xs hover:bg-slate-700"
-          >
+      <section class={SECTION_CLS}>
+        <div class="mb-3.5 flex items-center justify-between gap-2">
+          <h2 class="text-sm font-medium text-[#171717] dark:text-[#ededed]">端口转发 (DNAT)</h2>
+          <button type="button" onClick={addPortForward} class={BTN_OUTLINE}>
             + 新增转发
           </button>
         </div>
-        <div class="space-y-2">
+        <div class="space-y-2.5">
           <For each={props.draft.firewall.port_forwards}>
             {(fwd, idx) => (
-              <div class="grid items-center gap-2 rounded-lg border border-slate-800 bg-slate-950/60 p-3 text-xs sm:grid-cols-7">
+              <div class={`grid items-center gap-2 sm:grid-cols-7 ${ROW_CLS}`}>
                 <label class="flex items-center gap-1.5">
                   <input
                     type="checkbox"
@@ -384,7 +389,7 @@ export function FirewallPage(props: Props) {
                       next.firewall.port_forwards[idx()].name = e.currentTarget.value;
                       props.onChange(next);
                     }}
-                    class="w-full rounded border border-slate-700 bg-slate-900 px-2 py-1"
+                    class={INPUT_CLS}
                   />
                 </label>
                 <select
@@ -395,7 +400,7 @@ export function FirewallPage(props: Props) {
                       .value as TransportProto;
                     props.onChange(next);
                   }}
-                  class="rounded border border-slate-700 bg-slate-900 px-2 py-1"
+                  class={INPUT_CLS}
                 >
                   <option value="tcp">TCP</option>
                   <option value="udp">UDP</option>
@@ -408,7 +413,7 @@ export function FirewallPage(props: Props) {
                     next.firewall.port_forwards[idx()].src_zone = e.currentTarget.value;
                     props.onChange(next);
                   }}
-                  class="rounded border border-slate-700 bg-slate-900 px-2 py-1"
+                  class={INPUT_CLS}
                 >
                   <For each={zoneNames()}>{(z) => <option value={z}>{z}</option>}</For>
                 </select>
@@ -421,7 +426,7 @@ export function FirewallPage(props: Props) {
                       Number(e.currentTarget.value) || 1;
                     props.onChange(next);
                   }}
-                  class="rounded border border-slate-700 bg-slate-900 px-2 py-1 font-mono"
+                  class={`${INPUT_CLS} font-mono`}
                 />
                 <input
                   type="text"
@@ -431,7 +436,7 @@ export function FirewallPage(props: Props) {
                     next.firewall.port_forwards[idx()].dest_ip = e.currentTarget.value;
                     props.onChange(next);
                   }}
-                  class="rounded border border-slate-700 bg-slate-900 px-2 py-1 font-mono"
+                  class={`${INPUT_CLS} font-mono`}
                 />
                 <input
                   type="number"
@@ -442,7 +447,7 @@ export function FirewallPage(props: Props) {
                       Number(e.currentTarget.value) || 1;
                     props.onChange(next);
                   }}
-                  class="rounded border border-slate-700 bg-slate-900 px-2 py-1 font-mono"
+                  class={`${INPUT_CLS} font-mono`}
                 />
                 <button
                   type="button"
@@ -451,7 +456,7 @@ export function FirewallPage(props: Props) {
                     next.firewall.port_forwards.splice(idx(), 1);
                     props.onChange(next);
                   }}
-                  class="text-right text-red-400 hover:text-red-300"
+                  class={`text-right ${BTN_DELETE}`}
                 >
                   删除
                 </button>

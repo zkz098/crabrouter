@@ -1,5 +1,4 @@
 import {
-  For,
   Match,
   Show,
   Switch,
@@ -34,32 +33,16 @@ import { CommitConfirmModal } from "./components/CommitConfirmModal";
 import { ConntrackQosPage } from "./components/ConntrackQosPage";
 import { DiagnosticsPage } from "./components/DiagnosticsPage";
 import { FirewallPage } from "./components/FirewallPage";
+import { Header, type PageTab } from "./components/Header";
 import { LoginView } from "./components/LoginView";
+import { MobileNav } from "./components/MobileNav";
 import { NetworkPage } from "./components/NetworkPage";
 import { OtaPage } from "./components/OtaPage";
 import { OverviewPage } from "./components/OverviewPage";
 import { SetupWizard } from "./components/SetupWizard";
+import "./theme";
 import type { RouterConfig } from "./types/RouterConfig";
 import type { SystemMetricsSnapshot } from "./types/SystemMetricsSnapshot";
-
-type PageTab =
-  | "overview"
-  | "network"
-  | "firewall"
-  | "qos_conntrack"
-  | "clients"
-  | "ota"
-  | "diagnostics";
-
-const TABS: { id: PageTab; label: string; icon: string }[] = [
-  { id: "overview", label: "总览与预览", icon: "i-ri-dashboard-line" },
-  { id: "network", label: "接口 / WAN / VLAN", icon: "i-ri-node-tree" },
-  { id: "firewall", label: "防火墙 / NAT", icon: "i-ri-shield-line" },
-  { id: "qos_conntrack", label: "连接追踪 / QoS", icon: "i-ri-speed-up-line" },
-  { id: "clients", label: "终端 / DHCP / VPN", icon: "i-ri-device-line" },
-  { id: "ota", label: "固件升级 / OTA", icon: "i-ri-download-cloud-2-line" },
-  { id: "diagnostics", label: "诊断工具箱", icon: "i-ri-terminal-box-line" },
-];
 
 export default function App() {
   const [setupStatus, { refetch: refetchSetup }] = createResource(getSetupStatus);
@@ -83,6 +66,7 @@ export default function App() {
   const [hardwareHealth, { refetch: refetchHardware }] = createResource(isReady, getHardwareHealth);
 
   const [metrics, setMetrics] = createSignal<SystemMetricsSnapshot | null>(null);
+  const [wsConnected, setWsConnected] = createSignal(false);
   const [tab, setTab] = createSignal<PageTab>("overview");
   const [draft, setDraft] = createSignal<RouterConfig | null>(null);
   const [busy, setBusy] = createSignal(false);
@@ -91,9 +75,13 @@ export default function App() {
   createEffect(() => {
     if (!isReady()) {
       setMetrics(null);
+      setWsConnected(false);
       return;
     }
     const ws = openMetricsWebSocket();
+    ws.onopen = () => setWsConnected(true);
+    ws.onclose = () => setWsConnected(false);
+    ws.onerror = () => setWsConnected(false);
     ws.onmessage = (evt) => {
       try {
         const snap = JSON.parse(String(evt.data)) as SystemMetricsSnapshot;
@@ -211,7 +199,7 @@ export default function App() {
   return (
     <Switch
       fallback={
-        <div class="flex min-h-screen items-center justify-center bg-slate-950 text-xs text-slate-400">
+        <div class="min-h-screen vercel-grid-bg flex items-center justify-center bg-[#fafafa] dark:bg-black text-xs text-[#666666] dark:text-[#a1a1aa]">
           正在连接 CrabRouter 控制面...
         </div>
       }
@@ -238,75 +226,34 @@ export default function App() {
 
       <Match when={isReady() && draft()}>
         {(activeDraft) => (
-          <div class="min-h-screen bg-slate-950 text-slate-100">
-            <header class="border-b border-slate-800 bg-slate-900/80 backdrop-blur">
-              <div class="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 px-6 py-4">
-                <div class="flex items-center gap-3">
-                  <span class="i-ri-router-line text-2xl text-orange-400" />
-                  <div>
-                    <h1 class="text-lg font-semibold tracking-tight">
-                      {config()?.system.hostname ?? "CrabRouter"}
-                    </h1>
-                    <p class="text-xs text-slate-400">
-                      Debian 13 (Trixie) · Rust Control Plane · redb State Store
-                    </p>
-                  </div>
-                </div>
-                <div class="flex items-center gap-2 text-xs text-slate-300">
-                  <span class="rounded-full bg-slate-800 px-3 py-1">
-                    Gen #{status()?.active_generation ?? "-"}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => void refreshAll()}
-                    class="flex items-center gap-1 rounded-lg border border-slate-700 bg-slate-800 px-3 py-1.5 hover:bg-slate-700"
-                  >
-                    <span class="i-ri-refresh-line" />
-                    刷新
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => void handleLogout()}
-                    class="rounded-lg border border-slate-700 bg-slate-800 px-3 py-1.5 hover:bg-slate-700"
-                  >
-                    退出
-                  </button>
-                </div>
-              </div>
+          <div class="min-h-screen vercel-grid-bg bg-[#fafafa] dark:bg-black text-[#171717] dark:text-[#ededed] transition-colors">
+            <Header
+              hostname={config()?.system.hostname ?? "CrabRouter"}
+              generation={status()?.active_generation ?? "-"}
+              wsConnected={wsConnected()}
+              tab={tab()}
+              onSelectTab={setTab}
+              onRefresh={() => void refreshAll()}
+              onLogout={() => void handleLogout()}
+            />
 
-              <nav class="mx-auto flex max-w-6xl gap-1 overflow-x-auto px-6 pb-2">
-                <For each={TABS}>
-                  {(item) => (
-                    <button
-                      type="button"
-                      onClick={() => setTab(item.id)}
-                      class={
-                        tab() === item.id
-                          ? "flex items-center gap-1.5 rounded-lg bg-slate-800 px-3.5 py-2 text-xs font-semibold text-orange-400"
-                          : "flex items-center gap-1.5 rounded-lg px-3.5 py-2 text-xs text-slate-400 hover:bg-slate-800/50 hover:text-slate-200"
-                      }
-                    >
-                      <span class={item.icon} />
-                      {item.label}
-                    </button>
-                  )}
-                </For>
-              </nav>
-            </header>
-
-            <main class="mx-auto max-w-6xl space-y-6 px-6 py-6">
+            <main class="max-w-6xl mx-auto px-4 sm:px-6 pt-5 pb-24 md:py-7 space-y-6">
               <Show when={errorMsg()}>
                 {(msg) => (
-                  <div class="rounded-xl border border-red-500/40 bg-red-950/50 px-4 py-3 text-sm text-red-200">
-                    {msg()}
+                  <div class="rounded-xl border border-rose-500/25 bg-rose-500/10 px-4 py-3 text-xs text-rose-600 dark:text-rose-400 flex items-center gap-2 animate-toast-in">
+                    <span class="i-ri-error-warning-line text-sm shrink-0" />
+                    <span>{msg()}</span>
                   </div>
                 )}
               </Show>
 
               <Show when={isDirty() && !status()?.pending}>
-                <div class="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-orange-500/40 bg-orange-950/30 px-4 py-3">
-                  <div class="text-xs text-orange-200">
-                    当前草稿有尚未下发的修改。点击「应用变更」将通过 Commit-Confirm 安全窗口下发。
+                <div class="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 animate-toast-in">
+                  <div class="flex items-center gap-2 text-xs text-amber-800 dark:text-amber-200">
+                    <span class="i-ri-edit-circle-line text-sm text-amber-600 dark:text-amber-400 shrink-0" />
+                    <span>
+                      当前草稿有尚未下发的修改。点击「应用变更」将通过 Commit-Confirm 安全窗口下发。
+                    </span>
                   </div>
                   <div class="flex gap-2">
                     <button
@@ -318,7 +265,7 @@ export default function App() {
                           setDraft(structuredClone(base));
                         }
                       }}
-                      class="rounded-lg border border-slate-700 bg-slate-800 px-3 py-1.5 text-xs hover:bg-slate-700"
+                      class="rounded-lg border border-[#eaeaea] dark:border-[#262626] bg-white dark:bg-[#111111] hover:bg-[#f4f4f5] dark:hover:bg-[#1a1a1a] px-3 py-1.5 text-xs font-medium text-[#171717] dark:text-[#ededed] cursor-pointer transition-all active:scale-[0.97]"
                     >
                       放弃草稿
                     </button>
@@ -326,7 +273,7 @@ export default function App() {
                       type="button"
                       disabled={busy()}
                       onClick={() => void handleBeginCommit()}
-                      class="rounded-lg bg-orange-600 px-4 py-1.5 text-xs font-semibold text-white hover:bg-orange-500 disabled:opacity-50"
+                      class="rounded-lg bg-[#171717] hover:bg-[#383838] dark:bg-[#ededed] dark:hover:bg-[#d4d4d8] px-4 py-1.5 text-xs font-medium text-white dark:text-[#0a0a0a] border-0 cursor-pointer transition-all active:scale-[0.97] disabled:opacity-50"
                     >
                       {busy() ? "校验并下发中..." : "应用变更 (Commit-Confirm)"}
                     </button>
@@ -393,6 +340,8 @@ export default function App() {
                 </Match>
               </Switch>
             </main>
+
+            <MobileNav tab={tab()} onSelectTab={setTab} />
 
             <CommitConfirmModal
               pending={status()?.pending}

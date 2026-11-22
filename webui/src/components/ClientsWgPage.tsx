@@ -12,6 +12,19 @@ interface Props {
   onChange: (next: RouterConfig) => void;
 }
 
+const SECTION_CLS =
+  "rounded-xl border border-[#eaeaea] dark:border-[#262626] bg-white dark:bg-[#0a0a0a] p-4 sm:p-5 transition-colors hover:border-[#d4d4d8] dark:hover:border-[#3a3a3a]";
+const ROW_CLS =
+  "rounded-xl border border-[#eaeaea] dark:border-[#262626] bg-[#fafafa] dark:bg-[#111111] p-3 text-xs";
+const INPUT_CLS =
+  "w-full rounded-lg border border-[#eaeaea] dark:border-[#262626] bg-white dark:bg-[#000000] px-2.5 py-1.5 text-xs text-[#171717] dark:text-[#ededed] outline-none focus:border-[#171717] dark:focus:border-[#ededed] transition-colors";
+const BTN_OUTLINE =
+  "rounded-lg border border-[#eaeaea] dark:border-[#262626] bg-white dark:bg-[#111111] hover:bg-[#f4f4f5] dark:hover:bg-[#1a1a1a] px-3 py-1.5 text-xs font-medium text-[#171717] dark:text-[#ededed] cursor-pointer transition-all active:scale-[0.97]";
+const BTN_PRIMARY =
+  "rounded-lg bg-[#171717] hover:bg-[#383838] dark:bg-[#ededed] dark:hover:bg-[#d4d4d8] px-3.5 py-1.5 text-xs font-medium text-white dark:text-[#0a0a0a] border-0 cursor-pointer transition-all active:scale-[0.97] disabled:opacity-50";
+const BTN_DELETE =
+  "text-xs font-medium text-rose-600 dark:text-rose-400 hover:text-rose-700 dark:hover:text-rose-300 bg-transparent border-0 cursor-pointer";
+
 export function ClientsWgPage(props: Props) {
   const [serverPubKey, setServerPubKey] = createSignal("");
   const [qrDataUrl, setQrDataUrl] = createSignal<string | null>(null);
@@ -111,55 +124,61 @@ export function ClientsWgPage(props: Props) {
   }
 
   return (
-    <div class="space-y-6">
+    <div class="space-y-5 sm:space-y-6 animate-view-enter">
       {/* Online Clients */}
-      <section class="rounded-xl border border-slate-800 bg-slate-900/60 p-4">
-        <div class="mb-3 flex items-center justify-between">
-          <h2 class="text-sm font-semibold text-slate-200">在线终端列表 (DHCP 租约 & ARP 邻居)</h2>
-          <button
-            type="button"
-            onClick={() => props.onRefreshClients()}
-            class="rounded-lg border border-slate-700 bg-slate-800 px-3 py-1 text-xs hover:bg-slate-700"
-          >
+      <section class={SECTION_CLS}>
+        <div class="mb-3.5 flex items-center justify-between gap-2">
+          <h2 class="text-sm font-medium text-[#171717] dark:text-[#ededed]">
+            在线终端列表 (DHCP 租约 & ARP 邻居)
+          </h2>
+          <button type="button" onClick={() => props.onRefreshClients()} class={BTN_OUTLINE}>
             刷新列表
           </button>
         </div>
         <Show
           when={props.clients.length > 0}
           fallback={
-            <p class="text-xs text-slate-400">当前未读取到活动 DHCP 租约或 ARP 在线终端。</p>
+            <p class="text-xs text-[#666666] dark:text-[#a1a1aa]">
+              当前未读取到活动 DHCP 租约或 ARP 在线终端。
+            </p>
           }
         >
           <div class="overflow-x-auto">
             <table class="w-full text-left text-xs">
-              <thead class="border-b border-slate-800 text-slate-400">
+              <thead class="border-b border-[#eaeaea] dark:border-[#262626] text-[#666666] dark:text-[#a1a1aa]">
                 <tr>
-                  <th class="py-2 pr-4">IP 地址</th>
-                  <th class="py-2 pr-4">MAC 地址</th>
-                  <th class="py-2 pr-4">主机名</th>
-                  <th class="py-2 pr-4">绑定类型</th>
-                  <th class="py-2 text-right">操作</th>
+                  <th class="py-2 pr-4 font-medium">IP 地址</th>
+                  <th class="py-2 pr-4 font-medium">MAC 地址</th>
+                  <th class="py-2 pr-4 font-medium">主机名</th>
+                  <th class="py-2 pr-4 font-medium">绑定类型</th>
+                  <th class="py-2 text-right font-medium">操作</th>
                 </tr>
               </thead>
-              <tbody class="divide-y divide-slate-800/70">
+              <tbody class="divide-y divide-[#eaeaea] dark:divide-[#262626]">
                 <For each={props.clients}>
                   {(client) => (
-                    <tr>
-                      <td class="py-2 pr-4 font-mono text-slate-100">{client.ip}</td>
-                      <td class="py-2 pr-4 font-mono text-slate-400">{client.mac}</td>
-                      <td class="py-2 pr-4 text-slate-200">{client.hostname}</td>
-                      <td class="py-2 pr-4">
+                    <tr class="hover:bg-[#fafafa] dark:hover:bg-[#111111]/60 transition-colors">
+                      <td class="py-2.5 pr-4 font-mono text-[#171717] dark:text-[#ededed]">
+                        {client.ip}
+                      </td>
+                      <td class="py-2.5 pr-4 font-mono text-[#666666] dark:text-[#a1a1aa]">
+                        {client.mac}
+                      </td>
+                      <td class="py-2.5 pr-4 text-[#171717] dark:text-[#ededed]">
+                        {client.hostname}
+                      </td>
+                      <td class="py-2.5 pr-4">
                         <span
-                          class={
+                          class={`rounded-full border px-2 py-0.5 text-[11px] font-medium ${
                             client.is_static
-                              ? "rounded bg-sky-500/20 px-2 py-0.5 text-sky-300"
-                              : "rounded bg-slate-700 px-2 py-0.5 text-slate-300"
-                          }
+                              ? "border-sky-500/20 bg-sky-500/10 text-sky-700 dark:text-sky-400"
+                              : "border-zinc-500/20 bg-zinc-500/10 text-zinc-600 dark:text-zinc-400"
+                          }`}
                         >
                           {client.is_static ? "静态绑定" : "动态租约"}
                         </span>
                       </td>
-                      <td class="py-2 text-right">
+                      <td class="py-2.5 text-right">
                         <Show when={!client.is_static}>
                           <button
                             type="button"
@@ -170,7 +189,7 @@ export function ClientsWgPage(props: Props) {
                                 client.hostname === "-" ? "" : client.hostname,
                               )
                             }
-                            class="rounded border border-slate-700 bg-slate-800 px-2 py-0.5 text-xs hover:bg-slate-700"
+                            class="rounded-lg border border-[#eaeaea] dark:border-[#262626] bg-white dark:bg-[#111111] hover:bg-[#f4f4f5] dark:hover:bg-[#1a1a1a] px-2.5 py-1 text-xs font-medium text-[#171717] dark:text-[#ededed] cursor-pointer transition-colors"
                           >
                             转为静态
                           </button>
@@ -186,21 +205,21 @@ export function ClientsWgPage(props: Props) {
       </section>
 
       {/* DHCP Static Leases */}
-      <section class="rounded-xl border border-slate-800 bg-slate-900/60 p-4">
-        <div class="mb-3 flex items-center justify-between">
-          <h2 class="text-sm font-semibold text-slate-200">DHCP 静态地址绑定</h2>
+      <section class={SECTION_CLS}>
+        <div class="mb-3.5 flex items-center justify-between gap-2">
+          <h2 class="text-sm font-medium text-[#171717] dark:text-[#ededed]">DHCP 静态地址绑定</h2>
           <button
             type="button"
             onClick={() => addStaticLease("", "192.168.10.50", "")}
-            class="rounded-lg border border-slate-700 bg-slate-800 px-3 py-1 text-xs hover:bg-slate-700"
+            class={BTN_OUTLINE}
           >
             + 新增静态绑定
           </button>
         </div>
-        <div class="space-y-2">
+        <div class="space-y-2.5">
           <For each={primaryLan()?.static_leases ?? []}>
             {(lease, idx) => (
-              <div class="grid items-center gap-2 rounded-lg border border-slate-800 bg-slate-950/60 p-3 text-xs sm:grid-cols-5">
+              <div class={`grid items-center gap-2 sm:grid-cols-5 ${ROW_CLS}`}>
                 <input
                   type="text"
                   value={lease.name}
@@ -210,7 +229,7 @@ export function ClientsWgPage(props: Props) {
                     next.lans[0].static_leases[idx()].name = e.currentTarget.value;
                     props.onChange(next);
                   }}
-                  class="rounded border border-slate-700 bg-slate-900 px-2 py-1"
+                  class={INPUT_CLS}
                 />
                 <input
                   type="text"
@@ -221,7 +240,7 @@ export function ClientsWgPage(props: Props) {
                     next.lans[0].static_leases[idx()].mac = e.currentTarget.value;
                     props.onChange(next);
                   }}
-                  class="rounded border border-slate-700 bg-slate-900 px-2 py-1 font-mono"
+                  class={`${INPUT_CLS} font-mono`}
                 />
                 <input
                   type="text"
@@ -232,7 +251,7 @@ export function ClientsWgPage(props: Props) {
                     next.lans[0].static_leases[idx()].ip = e.currentTarget.value;
                     props.onChange(next);
                   }}
-                  class="rounded border border-slate-700 bg-slate-900 px-2 py-1 font-mono"
+                  class={`${INPUT_CLS} font-mono`}
                 />
                 <input
                   type="text"
@@ -243,7 +262,7 @@ export function ClientsWgPage(props: Props) {
                     next.lans[0].static_leases[idx()].hostname = e.currentTarget.value || null;
                     props.onChange(next);
                   }}
-                  class="rounded border border-slate-700 bg-slate-900 px-2 py-1 font-mono"
+                  class={`${INPUT_CLS} font-mono`}
                 />
                 <button
                   type="button"
@@ -252,7 +271,7 @@ export function ClientsWgPage(props: Props) {
                     next.lans[0].static_leases.splice(idx(), 1);
                     props.onChange(next);
                   }}
-                  class="text-right text-red-400 hover:text-red-300"
+                  class={`text-right ${BTN_DELETE}`}
                 >
                   删除
                 </button>
@@ -263,21 +282,23 @@ export function ClientsWgPage(props: Props) {
       </section>
 
       {/* WireGuard VPN */}
-      <section class="rounded-xl border border-slate-800 bg-slate-900/60 p-4">
-        <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
-          <h2 class="text-sm font-semibold text-slate-200">WireGuard VPN & 客户端二维码</h2>
+      <section class={SECTION_CLS}>
+        <div class="mb-3.5 flex flex-wrap items-center justify-between gap-2">
+          <h2 class="text-sm font-medium text-[#171717] dark:text-[#ededed]">
+            WireGuard VPN & 客户端二维码
+          </h2>
           <button
             type="button"
             disabled={busyKey()}
             onClick={() => void generatePeerWithQr()}
-            class="rounded-lg bg-orange-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-orange-500 disabled:opacity-50"
+            class={BTN_PRIMARY}
           >
-            {busyKey() ? "生成密钥中..." : "+ 新增 Peer 并生成客户端二维码"}
+            {busyKey() ? "生成密钥中..." : "+ 新增 Peer 并生成二维码"}
           </button>
         </div>
 
-        <div class="mb-4 grid gap-3 rounded-xl border border-slate-800 bg-slate-950/60 p-3 text-xs sm:grid-cols-5">
-          <label class="flex items-center gap-2 pt-4 text-slate-300">
+        <div class={`mb-4 grid gap-3 sm:grid-cols-5 ${ROW_CLS}`}>
+          <label class="flex items-center gap-2 pt-4 text-[#171717] dark:text-[#ededed]">
             <input
               type="checkbox"
               checked={props.draft.wireguard.enabled}
@@ -290,7 +311,7 @@ export function ClientsWgPage(props: Props) {
             启用 WireGuard
           </label>
           <label class="block">
-            <span class="text-slate-400">接口名</span>
+            <span class="text-[#666666] dark:text-[#a1a1aa]">接口名</span>
             <input
               type="text"
               value={props.draft.wireguard.interface}
@@ -299,11 +320,11 @@ export function ClientsWgPage(props: Props) {
                 next.wireguard.interface = e.currentTarget.value;
                 props.onChange(next);
               }}
-              class="mt-1 w-full rounded border border-slate-700 bg-slate-900 px-2 py-1 font-mono"
+              class={`mt-1 ${INPUT_CLS} font-mono`}
             />
           </label>
           <label class="block">
-            <span class="text-slate-400">UDP 监听端口</span>
+            <span class="text-[#666666] dark:text-[#a1a1aa]">UDP 监听端口</span>
             <input
               type="number"
               value={props.draft.wireguard.listen_port}
@@ -312,11 +333,11 @@ export function ClientsWgPage(props: Props) {
                 next.wireguard.listen_port = Number(e.currentTarget.value) || 51820;
                 props.onChange(next);
               }}
-              class="mt-1 w-full rounded border border-slate-700 bg-slate-900 px-2 py-1 font-mono"
+              class={`mt-1 ${INPUT_CLS} font-mono`}
             />
           </label>
           <label class="block">
-            <span class="text-slate-400">隧道地址 CIDR</span>
+            <span class="text-[#666666] dark:text-[#a1a1aa]">隧道地址 CIDR</span>
             <input
               type="text"
               value={props.draft.wireguard.address_cidr}
@@ -325,24 +346,24 @@ export function ClientsWgPage(props: Props) {
                 next.wireguard.address_cidr = e.currentTarget.value;
                 props.onChange(next);
               }}
-              class="mt-1 w-full rounded border border-slate-700 bg-slate-900 px-2 py-1 font-mono"
+              class={`mt-1 ${INPUT_CLS} font-mono`}
             />
           </label>
           <label class="block">
-            <span class="text-slate-400">公网域名/IP (用于二维码)</span>
+            <span class="text-[#666666] dark:text-[#a1a1aa]">公网域名/IP (用于二维码)</span>
             <input
               type="text"
               value={endpointHost()}
               onInput={(e) => setEndpointHost(e.currentTarget.value)}
-              class="mt-1 w-full rounded border border-slate-700 bg-slate-900 px-2 py-1 font-mono"
+              class={`mt-1 ${INPUT_CLS} font-mono`}
             />
           </label>
         </div>
 
-        <div class="space-y-2">
+        <div class="space-y-2.5">
           <For each={props.draft.wireguard.peers}>
             {(peer, idx) => (
-              <div class="grid items-center gap-2 rounded-lg border border-slate-800 bg-slate-950/60 p-3 text-xs sm:grid-cols-6">
+              <div class={`grid items-center gap-2 sm:grid-cols-6 ${ROW_CLS}`}>
                 <input
                   type="text"
                   value={peer.name}
@@ -351,7 +372,7 @@ export function ClientsWgPage(props: Props) {
                     next.wireguard.peers[idx()].name = e.currentTarget.value;
                     props.onChange(next);
                   }}
-                  class="rounded border border-slate-700 bg-slate-900 px-2 py-1"
+                  class={INPUT_CLS}
                 />
                 <input
                   type="text"
@@ -362,7 +383,7 @@ export function ClientsWgPage(props: Props) {
                     next.wireguard.peers[idx()].public_key = e.currentTarget.value;
                     props.onChange(next);
                   }}
-                  class="rounded border border-slate-700 bg-slate-900 px-2 py-1 font-mono sm:col-span-2"
+                  class={`${INPUT_CLS} font-mono sm:col-span-2`}
                 />
                 <input
                   type="text"
@@ -376,12 +397,12 @@ export function ClientsWgPage(props: Props) {
                       .filter(Boolean);
                     props.onChange(next);
                   }}
-                  class="rounded border border-slate-700 bg-slate-900 px-2 py-1 font-mono"
+                  class={`${INPUT_CLS} font-mono`}
                 />
                 <button
                   type="button"
                   onClick={() => void showExistingPeerQr(peer)}
-                  class="rounded border border-slate-700 bg-slate-800 px-2 py-1 hover:bg-slate-700"
+                  class={BTN_OUTLINE}
                 >
                   查看二维码
                 </button>
@@ -392,7 +413,7 @@ export function ClientsWgPage(props: Props) {
                     next.wireguard.peers.splice(idx(), 1);
                     props.onChange(next);
                   }}
-                  class="text-right text-red-400 hover:text-red-300"
+                  class={`text-right ${BTN_DELETE}`}
                 >
                   删除
                 </button>
@@ -403,22 +424,26 @@ export function ClientsWgPage(props: Props) {
 
         <Show when={qrDataUrl()}>
           {(url) => (
-            <div class="mt-4 flex flex-wrap items-start gap-4 rounded-xl border border-orange-500/40 bg-slate-950 p-4">
-              <img src={url()} alt="WireGuard QR" class="rounded-lg bg-white p-1" />
-              <div class="flex-1 space-y-2">
+            <div class="mt-4 flex flex-wrap items-start gap-4 rounded-xl border border-[#0070f3]/30 bg-[#fafafa] dark:bg-[#111111] p-4 animate-card-enter">
+              <img
+                src={url()}
+                alt="WireGuard QR"
+                class="rounded-lg bg-white p-1.5 border border-[#eaeaea]"
+              />
+              <div class="flex-1 space-y-2 min-w-56">
                 <div class="flex items-center justify-between">
-                  <span class="text-xs font-semibold text-orange-300">
+                  <span class="text-xs font-medium text-[#0070f3] dark:text-sky-400">
                     客户端配置 ({qrPeerName()})
                   </span>
                   <button
                     type="button"
                     onClick={() => setQrDataUrl(null)}
-                    class="text-xs text-slate-400 hover:text-slate-200"
+                    class="text-xs text-[#666666] dark:text-[#a1a1aa] hover:text-[#171717] dark:hover:text-[#ededed] bg-transparent border-0 cursor-pointer"
                   >
                     关闭
                   </button>
                 </div>
-                <pre class="overflow-auto rounded-lg border border-slate-800 bg-slate-900 p-3 font-mono text-xs text-slate-300">
+                <pre class="overflow-auto rounded-xl border border-[#eaeaea] dark:border-[#262626] bg-white dark:bg-[#000000] p-3 font-mono text-xs text-[#171717] dark:text-[#ededed]">
                   {qrConfigText()}
                 </pre>
               </div>

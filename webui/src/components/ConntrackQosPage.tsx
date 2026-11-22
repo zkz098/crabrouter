@@ -24,6 +24,15 @@ interface Props {
   onChange: (next: RouterConfig) => void;
 }
 
+const SECTION_CLS =
+  "rounded-xl border border-[#eaeaea] dark:border-[#262626] bg-white dark:bg-[#0a0a0a] p-4 sm:p-5 transition-colors hover:border-[#d4d4d8] dark:hover:border-[#3a3a3a]";
+const ROW_CLS =
+  "rounded-xl border border-[#eaeaea] dark:border-[#262626] bg-[#fafafa] dark:bg-[#111111] p-4";
+const INPUT_CLS =
+  "mt-1 w-full rounded-lg border border-[#eaeaea] dark:border-[#262626] bg-white dark:bg-[#000000] px-2.5 py-1.5 text-xs text-[#171717] dark:text-[#ededed] outline-none focus:border-[#171717] dark:focus:border-[#ededed] transition-colors";
+const BTN_OUTLINE =
+  "rounded-lg border border-[#eaeaea] dark:border-[#262626] bg-white dark:bg-[#111111] hover:bg-[#f4f4f5] dark:hover:bg-[#1a1a1a] px-3 py-1.5 text-xs font-medium text-[#171717] dark:text-[#ededed] cursor-pointer transition-all active:scale-[0.97] disabled:opacity-40";
+
 const conntrackFeatures = tableFeatures({
   rowSortingFeature,
   rowPaginationFeature,
@@ -175,10 +184,12 @@ export function ConntrackQosPage(props: Props) {
         const row = info.row.original;
         return (
           <div class="flex items-center gap-1.5">
-            <span class="rounded bg-slate-800 px-2 py-0.5 font-mono text-[11px] font-semibold uppercase text-orange-300">
+            <span class="rounded-md border border-[#eaeaea] dark:border-[#262626] bg-[#fafafa] dark:bg-[#111111] px-2 py-0.5 font-mono text-[11px] font-semibold uppercase text-[#171717] dark:text-[#ededed]">
               {row.proto}
             </span>
-            <span class="font-mono text-[11px] text-slate-400">{row.family}</span>
+            <span class="font-mono text-[11px] text-[#666666] dark:text-[#a1a1aa]">
+              {row.family}
+            </span>
           </div>
         );
       },
@@ -189,11 +200,11 @@ export function ConntrackQosPage(props: Props) {
         const row = info.row.original;
         return (
           <div class="flex flex-wrap items-center gap-1">
-            <span class="rounded bg-emerald-500/15 px-2 py-0.5 font-mono text-[11px] text-emerald-300">
+            <span class="rounded-full border border-emerald-500/20 bg-emerald-500/10 px-2 py-0.5 font-mono text-[11px] text-emerald-700 dark:text-emerald-400">
               {row.state}
             </span>
             <Show when={row.offloaded}>
-              <span class="rounded bg-sky-500/20 px-1.5 py-0.5 font-mono text-[10px] text-sky-300">
+              <span class="rounded-full border border-sky-500/20 bg-sky-500/10 px-1.5 py-0.5 font-mono text-[10px] text-sky-700 dark:text-sky-400">
                 FLOWTABLE
               </span>
             </Show>
@@ -207,9 +218,11 @@ export function ConntrackQosPage(props: Props) {
       cell: (info) => {
         const row = info.row.original;
         return (
-          <span class="font-mono text-xs text-slate-200">
+          <span class="font-mono text-xs text-[#171717] dark:text-[#ededed]">
             {row.src}
-            <Show when={row.sport}>{(p) => <span class="text-sky-300">:{p()}</span>}</Show>
+            <Show when={row.sport}>
+              {(p) => <span class="text-[#0070f3] dark:text-sky-400">:{p()}</span>}
+            </Show>
           </span>
         );
       },
@@ -220,9 +233,11 @@ export function ConntrackQosPage(props: Props) {
       cell: (info) => {
         const row = info.row.original;
         return (
-          <span class="font-mono text-xs text-slate-200">
+          <span class="font-mono text-xs text-[#171717] dark:text-[#ededed]">
             {row.dst}
-            <Show when={row.dport}>{(p) => <span class="text-orange-300">:{p()}</span>}</Show>
+            <Show when={row.dport}>
+              {(p) => <span class="text-amber-600 dark:text-amber-400">:{p()}</span>}
+            </Show>
           </span>
         );
       },
@@ -232,9 +247,13 @@ export function ConntrackQosPage(props: Props) {
       cell: (info) => {
         const row = info.row.original;
         return (
-          <div class="font-mono text-xs">
-            <span class="text-orange-300">{formatBytes(row.orig_bytes)}</span>
-            <span class="ml-1 text-[11px] text-slate-500">({row.orig_packets} pkts)</span>
+          <div class="font-mono text-xs tabular-nums">
+            <span class="text-emerald-600 dark:text-emerald-400">
+              {formatBytes(row.orig_bytes)}
+            </span>
+            <span class="ml-1 text-[11px] text-[#8f8f8f] dark:text-[#71717a]">
+              ({row.orig_packets} pkts)
+            </span>
           </div>
         );
       },
@@ -244,9 +263,11 @@ export function ConntrackQosPage(props: Props) {
       cell: (info) => {
         const row = info.row.original;
         return (
-          <div class="font-mono text-xs">
-            <span class="text-sky-300">{formatBytes(row.reply_bytes)}</span>
-            <span class="ml-1 text-[11px] text-slate-500">({row.reply_packets} pkts)</span>
+          <div class="font-mono text-xs tabular-nums">
+            <span class="text-sky-600 dark:text-sky-400">{formatBytes(row.reply_bytes)}</span>
+            <span class="ml-1 text-[11px] text-[#8f8f8f] dark:text-[#71717a]">
+              ({row.reply_packets} pkts)
+            </span>
           </div>
         );
       },
@@ -254,7 +275,9 @@ export function ConntrackQosPage(props: Props) {
     columnHelper.accessor("timeout_secs", {
       header: "TTL",
       cell: (info) => (
-        <span class="font-mono text-xs text-slate-400">{info.row.original.timeout_secs}s</span>
+        <span class="font-mono text-xs tabular-nums text-[#666666] dark:text-[#a1a1aa]">
+          {info.row.original.timeout_secs}s
+        </span>
       ),
     }),
     columnHelper.display({
@@ -268,7 +291,7 @@ export function ConntrackQosPage(props: Props) {
             type="button"
             disabled={killingKey() === key()}
             onClick={() => void handleKillFlow(row)}
-            class="rounded border border-red-500/40 bg-red-500/10 px-2 py-0.5 text-[11px] text-red-300 hover:bg-red-500/20 disabled:opacity-40"
+            class="rounded-md border border-rose-500/25 bg-rose-500/10 hover:bg-rose-500/20 px-2 py-0.5 text-[11px] font-medium text-rose-600 dark:text-rose-400 cursor-pointer disabled:opacity-40 transition-colors"
           >
             {killingKey() === key() ? "断开中..." : "断开"}
           </button>
@@ -301,21 +324,21 @@ export function ConntrackQosPage(props: Props) {
   const offloadedCount = () => props.entries.filter((e) => e.offloaded).length;
 
   return (
-    <div class="space-y-6">
-      {/* Section 1: QoS Smart Queue Management (tc + CAKE / fq_codel) */}
-      <section class="rounded-xl border border-slate-800 bg-slate-900/60 p-4">
-        <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
+    <div class="space-y-5 sm:space-y-6 animate-view-enter">
+      {/* Section 1: QoS Smart Queue Management */}
+      <section class={SECTION_CLS}>
+        <div class="mb-3.5 flex flex-wrap items-center justify-between gap-2">
           <div>
-            <h2 class="text-sm font-semibold text-slate-200">
+            <h2 class="text-sm font-medium text-[#171717] dark:text-[#ededed]">
               QoS 智能队列管理 (tc + CAKE / fq_codel 抗 Bufferbloat)
             </h2>
-            <p class="mt-0.5 text-xs text-slate-400">
+            <p class="mt-0.5 text-xs text-[#666666] dark:text-[#a1a1aa]">
               缓解满载下载/上传时的排队延迟激增（Bufferbloat），支持 NAT
               主机公平队列、链路帧开销补偿与 IFB 下行整形。
             </p>
           </div>
           <div class="flex items-center gap-3">
-            <label class="flex items-center gap-2 text-xs font-medium text-slate-200">
+            <label class="flex items-center gap-2 text-xs font-medium text-[#171717] dark:text-[#ededed]">
               <input
                 type="checkbox"
                 checked={props.draft.qos.enabled}
@@ -323,11 +346,7 @@ export function ConntrackQosPage(props: Props) {
               />
               启用 QoS 流量整形
             </label>
-            <button
-              type="button"
-              onClick={addQosInterface}
-              class="rounded-lg border border-slate-700 bg-slate-800 px-3 py-1 text-xs hover:bg-slate-700"
-            >
+            <button type="button" onClick={addQosInterface} class={BTN_OUTLINE}>
               + 添加接口队列
             </button>
           </div>
@@ -336,7 +355,7 @@ export function ConntrackQosPage(props: Props) {
         <Show
           when={props.draft.qos.interfaces.length > 0}
           fallback={
-            <p class="rounded-lg border border-dashed border-slate-800 bg-slate-950/50 p-4 text-center text-xs text-slate-400">
+            <p class="rounded-xl border border-dashed border-[#eaeaea] dark:border-[#262626] bg-[#fafafa] dark:bg-[#111111]/60 p-4 text-center text-xs text-[#666666] dark:text-[#a1a1aa]">
               尚未配置接口队列规则。勾选「启用 QoS 流量整形」或点击「+ 添加接口队列」开始配置。
             </p>
           }
@@ -344,13 +363,13 @@ export function ConntrackQosPage(props: Props) {
           <div class="space-y-3">
             <For each={props.draft.qos.interfaces}>
               {(rule, idx) => (
-                <div class="rounded-xl border border-slate-800 bg-slate-950/60 p-4">
+                <div class={ROW_CLS}>
                   <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
                     <div class="flex items-center gap-3">
-                      <span class="font-mono text-sm font-semibold text-orange-300">
+                      <span class="font-mono text-sm font-semibold text-[#0070f3] dark:text-sky-400">
                         {rule.interface}
                       </span>
-                      <label class="flex items-center gap-1.5 text-xs text-slate-300">
+                      <label class="flex items-center gap-1.5 text-xs text-[#171717] dark:text-[#ededed]">
                         <input
                           type="checkbox"
                           checked={rule.enabled}
@@ -364,7 +383,7 @@ export function ConntrackQosPage(props: Props) {
                     <button
                       type="button"
                       onClick={() => removeQosInterface(idx())}
-                      class="text-xs text-red-400 hover:text-red-300"
+                      class="text-xs font-medium text-rose-600 dark:text-rose-400 hover:text-rose-700 dark:hover:text-rose-300 bg-transparent border-0 cursor-pointer"
                     >
                       删除
                     </button>
@@ -372,19 +391,21 @@ export function ConntrackQosPage(props: Props) {
 
                   <div class="grid gap-3 sm:grid-cols-3 lg:grid-cols-6">
                     <label class="block text-xs">
-                      <span class="text-slate-400">绑定接口 (如 eth0 / ppp0)</span>
+                      <span class="text-[#666666] dark:text-[#a1a1aa]">
+                        绑定接口 (如 eth0 / ppp0)
+                      </span>
                       <input
                         type="text"
                         value={rule.interface}
                         onInput={(e) =>
                           updateQosInterface(idx(), { interface: e.currentTarget.value })
                         }
-                        class="mt-1 w-full rounded-lg border border-slate-700 bg-slate-900 px-2.5 py-1.5 font-mono text-xs"
+                        class={`${INPUT_CLS} font-mono`}
                       />
                     </label>
 
                     <label class="block text-xs">
-                      <span class="text-slate-400">队列算法 (Qdisc)</span>
+                      <span class="text-[#666666] dark:text-[#a1a1aa]">队列算法 (Qdisc)</span>
                       <select
                         value={rule.algorithm}
                         onChange={(e) =>
@@ -392,7 +413,7 @@ export function ConntrackQosPage(props: Props) {
                             algorithm: e.currentTarget.value as QdiscAlgo,
                           })
                         }
-                        class="mt-1 w-full rounded-lg border border-slate-700 bg-slate-900 px-2.5 py-1.5 text-xs"
+                        class={INPUT_CLS}
                       >
                         <option value="cake">CAKE (推荐 · Cobalt + Per-Host)</option>
                         <option value="fq_codel">HTB + fq_codel (经典低开销)</option>
@@ -400,7 +421,9 @@ export function ConntrackQosPage(props: Props) {
                     </label>
 
                     <label class="block text-xs">
-                      <span class="text-slate-400">上行限速 (Kbit/s, 0=不限)</span>
+                      <span class="text-[#666666] dark:text-[#a1a1aa]">
+                        上行限速 (Kbit/s, 0=不限)
+                      </span>
                       <input
                         type="number"
                         min={0}
@@ -411,12 +434,14 @@ export function ConntrackQosPage(props: Props) {
                             upload_kbps: Math.max(0, Number(e.currentTarget.value) || 0),
                           })
                         }
-                        class="mt-1 w-full rounded-lg border border-slate-700 bg-slate-900 px-2.5 py-1.5 font-mono text-xs"
+                        class={`${INPUT_CLS} font-mono`}
                       />
                     </label>
 
                     <label class="block text-xs">
-                      <span class="text-slate-400">下行限速 (Kbit/s, 0=不开启 IFB)</span>
+                      <span class="text-[#666666] dark:text-[#a1a1aa]">
+                        下行限速 (Kbit/s, 0=不开启 IFB)
+                      </span>
                       <input
                         type="number"
                         min={0}
@@ -427,12 +452,14 @@ export function ConntrackQosPage(props: Props) {
                             download_kbps: Math.max(0, Number(e.currentTarget.value) || 0),
                           })
                         }
-                        class="mt-1 w-full rounded-lg border border-slate-700 bg-slate-900 px-2.5 py-1.5 font-mono text-xs"
+                        class={`${INPUT_CLS} font-mono`}
                       />
                     </label>
 
                     <label class="block text-xs">
-                      <span class="text-slate-400">链路开销 (Bytes, 18=以太/26=PPPoE)</span>
+                      <span class="text-[#666666] dark:text-[#a1a1aa]">
+                        链路开销 (Bytes, 18=以太/26=PPPoE)
+                      </span>
                       <input
                         type="number"
                         min={-64}
@@ -443,13 +470,15 @@ export function ConntrackQosPage(props: Props) {
                             overhead_bytes: Number(e.currentTarget.value) || 0,
                           })
                         }
-                        class="mt-1 w-full rounded-lg border border-slate-700 bg-slate-900 px-2.5 py-1.5 font-mono text-xs"
+                        class={`${INPUT_CLS} font-mono`}
                       />
                     </label>
 
                     <Show when={rule.algorithm === "cake"}>
                       <label class="block text-xs">
-                        <span class="text-slate-400">CAKE Diffserv 优先级分桶</span>
+                        <span class="text-[#666666] dark:text-[#a1a1aa]">
+                          CAKE Diffserv 优先级分桶
+                        </span>
                         <select
                           value={rule.diffserv}
                           onChange={(e) =>
@@ -457,7 +486,7 @@ export function ConntrackQosPage(props: Props) {
                               diffserv: e.currentTarget.value as CakeDiffserv,
                             })
                           }
-                          class="mt-1 w-full rounded-lg border border-slate-700 bg-slate-900 px-2.5 py-1.5 text-xs"
+                          class={INPUT_CLS}
                         >
                           <option value="diffserv4">diffserv4 (4 队列: 语音/视频/标准/后台)</option>
                           <option value="diffserv3">diffserv3 (3 队列: 语音/标准/后台)</option>
@@ -468,7 +497,7 @@ export function ConntrackQosPage(props: Props) {
                   </div>
 
                   <Show when={rule.algorithm === "cake"}>
-                    <div class="mt-3 flex flex-wrap gap-4 border-t border-slate-800/80 pt-2.5 text-xs text-slate-300">
+                    <div class="mt-3 flex flex-wrap gap-4 border-t border-[#eaeaea] dark:border-[#262626] pt-2.5 text-xs text-[#171717] dark:text-[#ededed]">
                       <label class="flex items-center gap-2">
                         <input
                           type="checkbox"
@@ -498,23 +527,35 @@ export function ConntrackQosPage(props: Props) {
         </Show>
       </section>
 
-      {/* Section 2: Real-Time Netlink Conntrack Table (@tanstack/solid-table) */}
-      <section class="rounded-xl border border-slate-800 bg-slate-900/60 p-4">
+      {/* Section 2: Real-Time Netlink Conntrack Table */}
+      <section class={SECTION_CLS}>
         <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h2 class="text-sm font-semibold text-slate-200">
-              内核 Conntrack 实时连接追踪表 (@tanstack/solid-table)
+            <h2 class="text-sm font-medium text-[#171717] dark:text-[#ededed]">
+              内核 Conntrack 实时连接追踪表
             </h2>
-            <p class="mt-0.5 text-xs text-slate-400">
-              当前活跃连接 <span class="font-mono text-orange-300">{props.entries.length}</span> 条
-              （筛选后 <span class="font-mono text-sky-300">{filteredData().length}</span> 条） ·
-              Flowtable 加速 <span class="font-mono text-emerald-300">{offloadedCount()}</span> 条 ·
-              累计跟踪流量 <span class="font-mono text-slate-200">{formatBytes(totalBytes())}</span>
+            <p class="mt-0.5 text-xs text-[#666666] dark:text-[#a1a1aa] tabular-nums">
+              当前活跃连接{" "}
+              <span class="font-mono font-medium text-[#171717] dark:text-[#ededed]">
+                {props.entries.length}
+              </span>{" "}
+              条（筛选后{" "}
+              <span class="font-mono font-medium text-[#0070f3] dark:text-sky-400">
+                {filteredData().length}
+              </span>{" "}
+              条）· Flowtable 加速{" "}
+              <span class="font-mono font-medium text-emerald-600 dark:text-emerald-400">
+                {offloadedCount()}
+              </span>{" "}
+              条 · 累计跟踪流量{" "}
+              <span class="font-mono font-medium text-[#171717] dark:text-[#ededed]">
+                {formatBytes(totalBytes())}
+              </span>
             </p>
           </div>
 
           <div class="flex flex-wrap items-center gap-2 text-xs">
-            <label class="flex items-center gap-1.5 rounded-lg border border-slate-700 bg-slate-950 px-2.5 py-1.5 text-slate-300">
+            <label class="flex items-center gap-1.5 rounded-lg border border-[#eaeaea] dark:border-[#262626] bg-[#fafafa] dark:bg-[#111111] px-2.5 py-1.5 text-[#171717] dark:text-[#ededed]">
               <input
                 type="checkbox"
                 checked={autoRefresh()}
@@ -522,11 +563,7 @@ export function ConntrackQosPage(props: Props) {
               />
               3s 自动刷新
             </label>
-            <button
-              type="button"
-              onClick={() => props.onRefresh()}
-              class="rounded-lg border border-slate-700 bg-slate-800 px-3 py-1.5 hover:bg-slate-700"
-            >
+            <button type="button" onClick={() => props.onRefresh()} class={BTN_OUTLINE}>
               立即刷新
             </button>
           </div>
@@ -534,58 +571,65 @@ export function ConntrackQosPage(props: Props) {
 
         <Show when={actionMsg()}>
           {(msg) => (
-            <div class="mb-3 rounded-lg border border-sky-500/30 bg-sky-950/30 px-3 py-2 text-xs text-sky-200">
+            <div class="mb-3 rounded-lg border border-sky-500/25 bg-sky-500/10 px-3 py-2 text-xs text-sky-700 dark:text-sky-300">
               {msg()}
             </div>
           )}
         </Show>
 
         <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
-          <input
-            type="text"
-            value={globalFilter()}
-            placeholder="搜索源/目的 IP、端口、状态 (如 192.168.10. / :443 / ESTABLISHED)..."
-            onInput={(e) => setGlobalFilter(e.currentTarget.value)}
-            class="min-w-64 flex-1 rounded-lg border border-slate-700 bg-slate-950 px-3 py-1.5 font-mono text-xs text-slate-200"
-          />
+          <div class="relative min-w-64 flex-1">
+            <span class="i-ri-search-line absolute left-3 top-1/2 -translate-y-1/2 text-[#8f8f8f] dark:text-[#71717a] text-sm pointer-events-none" />
+            <input
+              type="text"
+              value={globalFilter()}
+              placeholder="搜索源/目的 IP、端口、状态 (如 192.168.10. / :443 / ESTABLISHED)..."
+              onInput={(e) => setGlobalFilter(e.currentTarget.value)}
+              class="w-full h-9 rounded-lg border border-[#eaeaea] dark:border-[#262626] bg-[#fafafa] dark:bg-[#000000] pl-9 pr-3 font-mono text-xs text-[#171717] dark:text-[#ededed] placeholder:text-[#8f8f8f] dark:placeholder:text-[#71717a] outline-none focus:border-[#171717] dark:focus:border-[#ededed] transition-colors"
+            />
+          </div>
 
           <div class="flex flex-wrap gap-1.5 text-xs">
-            <For each={["all", "tcp", "udp", "icmp"]}>
-              {(p) => (
-                <button
-                  type="button"
-                  onClick={() => setProtoFilter(p)}
-                  class={
-                    protoFilter() === p
-                      ? "rounded-lg bg-orange-600 px-2.5 py-1 font-semibold uppercase text-white"
-                      : "rounded-lg border border-slate-800 bg-slate-950 px-2.5 py-1 uppercase text-slate-400 hover:text-slate-200"
-                  }
-                >
-                  {p}
-                </button>
-              )}
-            </For>
-            <For each={["all", "ipv4", "ipv6"]}>
-              {(f) => (
-                <button
-                  type="button"
-                  onClick={() => setFamilyFilter(f)}
-                  class={
-                    familyFilter() === f
-                      ? "rounded-lg bg-sky-600 px-2.5 py-1 font-semibold uppercase text-white"
-                      : "rounded-lg border border-slate-800 bg-slate-950 px-2.5 py-1 uppercase text-slate-400 hover:text-slate-200"
-                  }
-                >
-                  {f}
-                </button>
-              )}
-            </For>
+            <div class="flex items-center gap-0.5 rounded-xl border border-[#eaeaea] dark:border-[#222222] bg-[#f4f4f5] dark:bg-[#111111] p-1">
+              <For each={["all", "tcp", "udp", "icmp"]}>
+                {(p) => (
+                  <button
+                    type="button"
+                    onClick={() => setProtoFilter(p)}
+                    class={`rounded-lg px-2.5 py-1 text-xs font-medium uppercase cursor-pointer border-0 transition-all ${
+                      protoFilter() === p
+                        ? "bg-white dark:bg-[#1f1f1f] text-[#171717] dark:text-white shadow-sm ring-1 ring-black/5 dark:ring-white/10"
+                        : "bg-transparent text-[#666666] dark:text-[#8f8f8f] hover:text-[#171717] dark:hover:text-[#ededed]"
+                    }`}
+                  >
+                    {p}
+                  </button>
+                )}
+              </For>
+            </div>
+            <div class="flex items-center gap-0.5 rounded-xl border border-[#eaeaea] dark:border-[#222222] bg-[#f4f4f5] dark:bg-[#111111] p-1">
+              <For each={["all", "ipv4", "ipv6"]}>
+                {(f) => (
+                  <button
+                    type="button"
+                    onClick={() => setFamilyFilter(f)}
+                    class={`rounded-lg px-2.5 py-1 text-xs font-medium uppercase cursor-pointer border-0 transition-all ${
+                      familyFilter() === f
+                        ? "bg-white dark:bg-[#1f1f1f] text-[#171717] dark:text-white shadow-sm ring-1 ring-black/5 dark:ring-white/10"
+                        : "bg-transparent text-[#666666] dark:text-[#8f8f8f] hover:text-[#171717] dark:hover:text-[#ededed]"
+                    }`}
+                  >
+                    {f}
+                  </button>
+                )}
+              </For>
+            </div>
           </div>
         </div>
 
-        <div class="overflow-x-auto rounded-lg border border-slate-800 bg-slate-950/70">
+        <div class="overflow-x-auto rounded-xl border border-[#eaeaea] dark:border-[#262626] bg-white dark:bg-[#0a0a0a]">
           <table class="w-full text-left text-xs">
-            <thead class="border-b border-slate-800 bg-slate-900/80 text-slate-400">
+            <thead class="border-b border-[#eaeaea] dark:border-[#262626] bg-[#fafafa] dark:bg-[#111111] text-[#666666] dark:text-[#a1a1aa]">
               <For each={table.getHeaderGroups()}>
                 {(headerGroup) => (
                   <tr>
@@ -593,7 +637,7 @@ export function ConntrackQosPage(props: Props) {
                       {(header) => (
                         <th
                           onClick={header.column.getToggleSortingHandler()}
-                          class="cursor-pointer select-none px-3 py-2.5 font-medium hover:text-slate-200"
+                          class="cursor-pointer select-none px-3 py-2.5 font-medium hover:text-[#171717] dark:hover:text-[#ededed]"
                         >
                           <div class="flex items-center gap-1">
                             <Show when={!header.isPlaceholder}>
@@ -613,12 +657,15 @@ export function ConntrackQosPage(props: Props) {
                 )}
               </For>
             </thead>
-            <tbody class="divide-y divide-slate-800/70">
+            <tbody class="divide-y divide-[#eaeaea] dark:divide-[#262626]">
               <Show
                 when={table.getRowModel().rows.length > 0}
                 fallback={
                   <tr>
-                    <td colspan={columns.length} class="py-6 text-center text-slate-500">
+                    <td
+                      colspan={columns.length}
+                      class="py-8 text-center text-[#8f8f8f] dark:text-[#71717a]"
+                    >
                       未找到匹配的连接追踪条目
                     </td>
                   </tr>
@@ -626,7 +673,7 @@ export function ConntrackQosPage(props: Props) {
               >
                 <For each={table.getRowModel().rows}>
                   {(row) => (
-                    <tr class="hover:bg-slate-900/50">
+                    <tr class="hover:bg-[#fafafa] dark:hover:bg-[#111111]/60 transition-colors">
                       <For each={row.getAllCells()}>
                         {(cell) => (
                           <td class="px-3 py-2">
@@ -642,8 +689,8 @@ export function ConntrackQosPage(props: Props) {
           </table>
         </div>
 
-        <div class="mt-3 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-400">
-          <div>
+        <div class="mt-3 flex flex-wrap items-center justify-between gap-2 text-xs text-[#666666] dark:text-[#a1a1aa]">
+          <div class="tabular-nums">
             第 {table.atoms.pagination.get().pageIndex + 1} / {Math.max(1, table.getPageCount())} 页
           </div>
           <div class="flex gap-2">
@@ -651,7 +698,7 @@ export function ConntrackQosPage(props: Props) {
               type="button"
               disabled={!table.getCanPreviousPage()}
               onClick={() => table.previousPage()}
-              class="rounded border border-slate-700 bg-slate-800 px-2.5 py-1 text-slate-200 hover:bg-slate-700 disabled:opacity-40"
+              class={BTN_OUTLINE}
             >
               上一页
             </button>
@@ -659,7 +706,7 @@ export function ConntrackQosPage(props: Props) {
               type="button"
               disabled={!table.getCanNextPage()}
               onClick={() => table.nextPage()}
-              class="rounded border border-slate-700 bg-slate-800 px-2.5 py-1 text-slate-200 hover:bg-slate-700 disabled:opacity-40"
+              class={BTN_OUTLINE}
             >
               下一页
             </button>
