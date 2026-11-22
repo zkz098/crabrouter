@@ -1,6 +1,7 @@
 import { For, Show, createSignal } from "solid-js";
 import type { ConfigSnapshotSummary } from "../types/ConfigSnapshotSummary";
 import type { CrabDnsAggregateStatus } from "../types/CrabDnsAggregateStatus";
+import type { HardwareHealthSnapshot } from "../types/HardwareHealthSnapshot";
 import type { HostInterfaceSnapshot } from "../types/HostInterfaceSnapshot";
 import type { RenderedConfigsPreview } from "../types/RenderedConfigsPreview";
 import type { RouterConfig } from "../types/RouterConfig";
@@ -25,6 +26,7 @@ interface Props {
   wanStates: WanRuntimeState[];
   serviceStatuses: SystemdUnitStatus[];
   dnsStatus: CrabDnsAggregateStatus | undefined;
+  hardware: HardwareHealthSnapshot | undefined;
   metrics: SystemMetricsSnapshot | null;
   preview: RenderedConfigsPreview | undefined;
   history: ConfigSnapshotSummary[];
@@ -92,6 +94,30 @@ export function OverviewPage(props: Props) {
 
   return (
     <div class="space-y-6">
+      <Show when={(props.hardware?.alerts.length ?? 0) > 0}>
+        <section class="space-y-2">
+          <For each={props.hardware?.alerts}>
+            {(alert) => (
+              <div
+                class={
+                  alert.severity === "critical"
+                    ? "flex items-center justify-between rounded-xl border border-red-500/40 bg-red-950/40 px-4 py-2.5 text-xs text-red-200"
+                    : "flex items-center justify-between rounded-xl border border-amber-500/40 bg-amber-950/40 px-4 py-2.5 text-xs text-amber-200"
+                }
+              >
+                <div>
+                  <span class="font-mono font-semibold">[{alert.source}]</span>{" "}
+                  <span>{alert.message}</span>
+                </div>
+                <span class="rounded bg-slate-900/80 px-2 py-0.5 font-mono text-[11px] uppercase">
+                  {alert.severity}
+                </span>
+              </div>
+            )}
+          </For>
+        </section>
+      </Show>
+
       {/* Real-time WebSocket Telemetry Cards */}
       <section class="grid gap-4 md:grid-cols-4">
         <div class="rounded-xl border border-slate-800 bg-slate-900/60 p-4">

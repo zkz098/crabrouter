@@ -13,6 +13,8 @@
   },
   "dependencies": {
     "@tanstack/solid-table": "^9.3.1",
+    "@xterm/addon-fit": "^0.11.0",
+    "@xterm/xterm": "^6.0.0",
     "qrcode": "^1.5.4",
     "solid-js": "^1.9.19"
   },

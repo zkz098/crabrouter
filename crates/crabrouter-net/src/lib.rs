@@ -1,6 +1,7 @@
 pub mod conntrack;
 pub mod dhcpcd;
 pub mod events;
+pub mod hardware;
 pub mod ipv6_pd;
 pub mod netlink;
 pub mod nftables;
@@ -24,6 +25,10 @@ pub enum NetError {
 pub use conntrack::{kill_conntrack_flow, parse_conntrack_table, read_conntrack_table};
 pub use dhcpcd::{WanLeaseEvent, render_dhcpcd_conf, render_dhcpcd_hook_script, sync_dhcpcd_files};
 pub use events::{WanEventBus, WanStateObserver, spawn_network_event_engine};
+pub use hardware::{
+    collect_hardware_health, evaluate_hardware_alerts, parse_nvme_smart_log_json,
+    parse_sensors_json, parse_smartctl_json,
+};
 pub use ipv6_pd::{
     DownstreamIpv6Target, apply_ipv6_pd_slices_netlink, resolve_downstream_ipv6_targets,
     slice_delegated_ipv6_prefix,

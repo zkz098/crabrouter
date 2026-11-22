@@ -16,6 +16,7 @@ import {
   getConfigHistory,
   getConntrack,
   getDnsStatus,
+  getHardwareHealth,
   getInterfaces,
   getOtaStatus,
   getPreview,
@@ -79,6 +80,7 @@ export default function App() {
   const [conntrack, { refetch: refetchConntrack }] = createResource(isReady, getConntrack);
   const [history, { refetch: refetchHistory }] = createResource(isReady, getConfigHistory);
   const [otaStatus, { refetch: refetchOta }] = createResource(isReady, getOtaStatus);
+  const [hardwareHealth, { refetch: refetchHardware }] = createResource(isReady, getHardwareHealth);
 
   const [metrics, setMetrics] = createSignal<SystemMetricsSnapshot | null>(null);
   const [tab, setTab] = createSignal<PageTab>("overview");
@@ -132,6 +134,7 @@ export default function App() {
       refetchConntrack(),
       refetchHistory(),
       refetchOta(),
+      refetchHardware(),
     ]);
     const latest = config();
     if (latest) {
@@ -339,6 +342,7 @@ export default function App() {
                     wanStates={wanStates() ?? []}
                     serviceStatuses={serviceStatuses() ?? []}
                     dnsStatus={dnsStatus()}
+                    hardware={hardwareHealth()}
                     metrics={metrics()}
                     preview={preview()}
                     history={history() ?? []}
@@ -382,7 +386,10 @@ export default function App() {
                   />
                 </Match>
                 <Match when={tab() === "diagnostics"}>
-                  <DiagnosticsPage />
+                  <DiagnosticsPage
+                    hardware={hardwareHealth()}
+                    onRefreshHardware={() => void refetchHardware()}
+                  />
                 </Match>
               </Switch>
             </main>

@@ -7,6 +7,7 @@ import type { ConntrackKillResponse } from "./types/ConntrackKillResponse";
 import type { CrabDnsAggregateStatus } from "./types/CrabDnsAggregateStatus";
 import type { DhcpLeaseEntry } from "./types/DhcpLeaseEntry";
 import type { DiagCommandResult } from "./types/DiagCommandResult";
+import type { HardwareHealthSnapshot } from "./types/HardwareHealthSnapshot";
 import type { HostInterfaceSnapshot } from "./types/HostInterfaceSnapshot";
 import type { Iperf3Request } from "./types/Iperf3Request";
 import type { LogEvent } from "./types/LogEvent";
@@ -174,6 +175,15 @@ export function runIperf3(req: Iperf3Request): Promise<DiagCommandResult> {
 
 export function getLogSnapshot(): Promise<LogEvent[]> {
   return fetchJson<LogEvent[]>("/api/diag/logs");
+}
+
+export function getHardwareHealth(): Promise<HardwareHealthSnapshot> {
+  return fetchJson<HardwareHealthSnapshot>("/api/hardware/health");
+}
+
+export function openTerminalWebSocket(): WebSocket {
+  const proto = window.location.protocol === "https:" ? "wss:" : "ws:";
+  return new WebSocket(`${proto}//${window.location.host}/api/terminal/ws`);
 }
 
 export function openLogWebSocket(): WebSocket {

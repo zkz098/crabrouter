@@ -506,6 +506,7 @@ dependencies = [
  "ipnet",
  "rtnetlink",
  "serde",
+ "serde_json",
  "thiserror",
  "tokio",
  "tracing",

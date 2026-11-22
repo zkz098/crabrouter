@@ -281,6 +281,69 @@ pub struct ConntrackKillRequest {
     pub dport: Option<u16>,
 }
 
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, Default, TS,
+)]
+#[serde(rename_all = "snake_case")]
+#[ts(export)]
+pub enum HealthSeverity {
+    #[default]
+    Ok,
+    Warning,
+    Critical,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct ThermalSensorReading {
+    pub chip: String,
+    pub label: String,
+    pub temp_celsius: f32,
+    pub high_celsius: Option<f32>,
+    pub crit_celsius: Option<f32>,
+    pub severity: HealthSeverity,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct DiskHealthReport {
+    pub device: String,
+    pub model: String,
+    pub serial: Option<String>,
+    pub protocol: String,
+    pub passed: bool,
+    pub temperature_celsius: Option<f32>,
+    /// Percentage of rated SSD life used (`0..=100`).
+    pub percentage_used: Option<u8>,
+    /// Available spare flash capacity percentage (`0..=100`).
+    pub available_spare_pct: Option<u8>,
+    #[ts(type = "number | null")]
+    pub power_on_hours: Option<u64>,
+    #[ts(type = "number | null")]
+    pub unsafe_shutdowns: Option<u64>,
+    #[ts(type = "number | null")]
+    pub media_errors: Option<u64>,
+    pub severity: HealthSeverity,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct HardwareAlert {
+    pub severity: HealthSeverity,
+    pub source: String,
+    pub message: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct HardwareHealthSnapshot {
+    pub collected_at: String,
+    pub overall_severity: HealthSeverity,
+    pub sensors: Vec<ThermalSensorReading>,
+    pub disks: Vec<DiskHealthReport>,
+    pub alerts: Vec<HardwareAlert>,
+}
+
 const fn default_overhead_bytes() -> i16 {
     18
 }

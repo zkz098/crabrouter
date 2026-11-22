@@ -8,13 +8,13 @@ use axum::http::{HeaderMap, StatusCode, header};
 use axum::response::{IntoResponse, Response};
 use crabrouter_core::{CommitStatus, ConfigSnapshotSummary, CoreError};
 use crabrouter_model::{
-    ConntrackEntry, ConntrackKillRequest, DhcpLeaseEntry, HostInterfaceSnapshot, LanConfig,
-    RouterConfig, WanConfig, WanRuntimeState,
+    ConntrackEntry, ConntrackKillRequest, DhcpLeaseEntry, HardwareHealthSnapshot,
+    HostInterfaceSnapshot, LanConfig, RouterConfig, WanConfig, WanRuntimeState,
 };
 use crabrouter_net::{
-    WanLeaseEvent, kill_conntrack_flow, read_conntrack_table, read_host_interfaces,
-    render_dhcpcd_conf, render_nftables_ruleset, render_pppd_peer, render_systemd_link_files,
-    render_tc_qos_script, render_udev_net_rules,
+    WanLeaseEvent, collect_hardware_health, kill_conntrack_flow, read_conntrack_table,
+    read_host_interfaces, render_dhcpcd_conf, render_nftables_ruleset, render_pppd_peer,
+    render_systemd_link_files, render_tc_qos_script, render_udev_net_rules,
 };
 use crabrouter_services::{
     SystemdUnitStatus, generate_wireguard_keypair as svc_gen_wg_keypair, read_online_clients,
@@ -494,6 +494,15 @@ pub async fn kill_conntrack(
     require_auth_if_initialized(&state, &headers)?;
     let deleted = kill_conntrack_flow(&req, state.dry_run).await?;
     Ok(Json(ConntrackKillResponse { deleted }))
+}
+
+pub async fn hardware_health(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> Result<Json<HardwareHealthSnapshot>, ApiError> {
+    require_auth_if_initialized(&state, &headers)?;
+    let snap = collect_hardware_health(state.dry_run).await?;
+    Ok(Json(snap))
 }
 
 pub async fn generate_wireguard_keypair(

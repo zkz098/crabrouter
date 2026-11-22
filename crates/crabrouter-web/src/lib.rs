@@ -3,6 +3,7 @@ pub mod crabdns_proxy;
 pub mod logs;
 pub mod metrics;
 pub mod ota_api;
+pub mod terminal;
 
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -87,6 +88,8 @@ pub fn build_router(
         .route("/api/diag/iperf3", post(api::diag_iperf3))
         .route("/api/diag/logs", get(api::diag_logs_snapshot))
         .route("/api/diag/logs/ws", get(api::diag_logs_ws))
+        .route("/api/hardware/health", get(api::hardware_health))
+        .route("/api/terminal/ws", get(terminal::terminal_ws))
         .route("/api/metrics/ws", get(metrics::metrics_ws))
         .route("/api/ota/status", get(ota_api::ota_status))
         .route("/api/ota/check", post(ota_api::ota_check))

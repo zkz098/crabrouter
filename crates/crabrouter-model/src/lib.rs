@@ -12,7 +12,8 @@ pub use firewall::{
 };
 pub use network::{
     CakeDiffserv, ConntrackEntry, ConntrackKillRequest, DhcpLeaseEntry, DhcpStaticLease,
-    HostInterfaceSnapshot, InterfacePin, InterfaceRole, Ipv6PdSlice, LanConfig, PolicyRuleConfig,
-    QdiscAlgo, QosConfig, QosInterfaceConfig, StaticRouteConfig, VlanConfig, WanConfig, WanProto,
+    DiskHealthReport, HardwareAlert, HardwareHealthSnapshot, HealthSeverity, HostInterfaceSnapshot,
+    InterfacePin, InterfaceRole, Ipv6PdSlice, LanConfig, PolicyRuleConfig, QdiscAlgo, QosConfig,
+    QosInterfaceConfig, StaticRouteConfig, ThermalSensorReading, VlanConfig, WanConfig, WanProto,
     WanRuntimeState,
 };

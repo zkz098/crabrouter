@@ -68,9 +68,9 @@
 - [x] **连接追踪与 QoS**
   - [x] 通过 Netlink 读取内核 `conntrack` 实时连接表并在 WebUI 展示与搜索（接入 `@tanstack/solid-table`）（[conntrack.rs](crates/crabrouter-net/src/conntrack.rs)、[ConntrackQosPage.tsx](webui/src/components/ConntrackQosPage.tsx)）
   - [x] 集成 `tc` + `CAKE` / `fq_codel` 队列管理，解决高负载 Bufferbloat（[qos.rs](crates/crabrouter-net/src/qos.rs)）
-- [ ] **Web 终端 & 硬件监控**
-  - [ ] WebUI 集成 `xterm.js` + 后端 PTY WebSocket
-  - [ ] 采集 `smartctl` / `nvme` SSD 健康度与 `lm-sensors` 温度并增加异常告警
+- [x] **Web 终端 & 硬件监控**
+  - [x] WebUI 集成 `xterm.js` + 后端 PTY WebSocket（[terminal.rs](crates/crabrouter-web/src/terminal.rs)、[DiagnosticsPage.tsx](webui/src/components/DiagnosticsPage.tsx)）
+  - [x] 采集 `smartctl` / `nvme` SSD 健康度与 `lm-sensors` 温度并增加异常告警（[hardware.rs](crates/crabrouter-net/src/hardware.rs)）
 - [ ] **eBPF / XDP 进阶加速（可选）**
   - [ ] 评估基于 `aya` 将 `crabdns` 域名分流结果写入内核 eBPF Map，实现 TC/XDP 级策略分流与精细化流量统计
 
