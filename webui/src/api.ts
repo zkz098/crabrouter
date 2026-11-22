@@ -1,0 +1,153 @@
+import type { AuthTokenResponse } from "./types/AuthTokenResponse";
+import type { CommitStatus } from "./types/CommitStatus";
+import type { ConfigSnapshotSummary } from "./types/ConfigSnapshotSummary";
+import type { DhcpLeaseEntry } from "./types/DhcpLeaseEntry";
+import type { DiagCommandResult } from "./types/DiagCommandResult";
+import type { HostInterfaceSnapshot } from "./types/HostInterfaceSnapshot";
+import type { Iperf3Request } from "./types/Iperf3Request";
+import type { LogEvent } from "./types/LogEvent";
+import type { LoginRequest } from "./types/LoginRequest";
+import type { PingRequest } from "./types/PingRequest";
+import type { RenderedConfigsPreview } from "./types/RenderedConfigsPreview";
+import type { RouterConfig } from "./types/RouterConfig";
+import type { SetupInitRequest } from "./types/SetupInitRequest";
+import type { SetupStatusResponse } from "./types/SetupStatusResponse";
+import type { TracerouteRequest } from "./types/TracerouteRequest";
+import type { WanRuntimeState } from "./types/WanRuntimeState";
+import type { WireGuardKeypairResponse } from "./types/WireGuardKeypairResponse";
+
+async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
+  const res = await fetch(url, {
+    credentials: "same-origin",
+    ...init,
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    try {
+      const parsed = JSON.parse(text) as { error?: string };
+      if (parsed.error) {
+        throw new Error(parsed.error);
+      }
+    } catch {
+      // fall back to raw response text
+    }
+    throw new Error(text || `HTTP ${res.status}`);
+  }
+  if (res.status === 204) {
+    return undefined as T;
+  }
+  return (await res.json()) as T;
+}
+
+export function getSetupStatus(): Promise<SetupStatusResponse> {
+  return fetchJson<SetupStatusResponse>("/api/setup/status");
+}
+
+export function initSetup(payload: SetupInitRequest): Promise<AuthTokenResponse> {
+  return fetchJson<AuthTokenResponse>("/api/setup/init", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+}
+
+export function login(payload: LoginRequest): Promise<AuthTokenResponse> {
+  return fetchJson<AuthTokenResponse>("/api/auth/login", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+}
+
+export function logout(): Promise<void> {
+  return fetchJson<void>("/api/auth/logout", { method: "POST" });
+}
+
+export function getStatus(): Promise<CommitStatus> {
+  return fetchJson<CommitStatus>("/api/status");
+}
+
+export function getInterfaces(): Promise<HostInterfaceSnapshot[]> {
+  return fetchJson<HostInterfaceSnapshot[]>("/api/interfaces");
+}
+
+export function getWanStatus(): Promise<WanRuntimeState[]> {
+  return fetchJson<WanRuntimeState[]>("/api/wans/status");
+}
+
+export function getClients(): Promise<DhcpLeaseEntry[]> {
+  return fetchJson<DhcpLeaseEntry[]>("/api/clients");
+}
+
+export function getConfig(): Promise<RouterConfig> {
+  return fetchJson<RouterConfig>("/api/config");
+}
+
+export function getPreview(): Promise<RenderedConfigsPreview> {
+  return fetchJson<RenderedConfigsPreview>("/api/config/preview");
+}
+
+export function beginCommit(next: RouterConfig): Promise<CommitStatus> {
+  return fetchJson<CommitStatus>("/api/config/commit", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(next),
+  });
+}
+
+export function confirmCommit(): Promise<CommitStatus> {
+  return fetchJson<CommitStatus>("/api/config/confirm", { method: "POST" });
+}
+
+export function rollbackCommit(): Promise<CommitStatus> {
+  return fetchJson<CommitStatus>("/api/config/rollback", { method: "POST" });
+}
+
+export function getConfigHistory(): Promise<ConfigSnapshotSummary[]> {
+  return fetchJson<ConfigSnapshotSummary[]>("/api/config/history");
+}
+
+export function restoreConfigSnapshot(generation: number): Promise<CommitStatus> {
+  return fetchJson<CommitStatus>(`/api/config/history/${generation}/restore`, {
+    method: "POST",
+  });
+}
+
+export function generateWireGuardKeypair(): Promise<WireGuardKeypairResponse> {
+  return fetchJson<WireGuardKeypairResponse>("/api/wireguard/keypair", {
+    method: "POST",
+  });
+}
+
+export function runPing(req: PingRequest): Promise<DiagCommandResult> {
+  return fetchJson<DiagCommandResult>("/api/diag/ping", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(req),
+  });
+}
+
+export function runTraceroute(req: TracerouteRequest): Promise<DiagCommandResult> {
+  return fetchJson<DiagCommandResult>("/api/diag/traceroute", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(req),
+  });
+}
+
+export function runIperf3(req: Iperf3Request): Promise<DiagCommandResult> {
+  return fetchJson<DiagCommandResult>("/api/diag/iperf3", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(req),
+  });
+}
+
+export function getLogSnapshot(): Promise<LogEvent[]> {
+  return fetchJson<LogEvent[]>("/api/diag/logs");
+}
+
+export function openLogWebSocket(): WebSocket {
+  const proto = window.location.protocol === "https:" ? "wss:" : "ws:";
+  return new WebSocket(`${proto}//${window.location.host}/api/diag/logs/ws`);
+}

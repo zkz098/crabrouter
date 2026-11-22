@@ -1,0 +1,195 @@
+use serde::{Deserialize, Serialize};
+use ts_rs::TS;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default, TS)]
+#[serde(rename_all = "snake_case")]
+#[ts(export)]
+pub enum InterfaceRole {
+    Wan,
+    #[default]
+    Lan,
+    Disabled,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default, TS)]
+#[serde(rename_all = "snake_case")]
+#[ts(export)]
+pub enum WanProto {
+    #[default]
+    Dhcp,
+    Static,
+    Pppoe,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct WanConfig {
+    pub name: String,
+    pub device: String,
+    pub proto: WanProto,
+    #[serde(default)]
+    pub static_cidr: Option<String>,
+    #[serde(default)]
+    pub gateway: Option<String>,
+    #[serde(default)]
+    pub pppoe_username: Option<String>,
+    #[serde(default)]
+    pub pppoe_password: Option<String>,
+    #[serde(default = "default_mtu")]
+    pub mtu: u16,
+    #[serde(default = "default_true")]
+    pub ipv6_pd: bool,
+    #[serde(default = "default_metric")]
+    pub metric: u32,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct DhcpStaticLease {
+    pub name: String,
+    pub mac: String,
+    pub ip: String,
+    #[serde(default)]
+    pub hostname: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct LanConfig {
+    pub name: String,
+    pub bridge: String,
+    pub ports: Vec<String>,
+    pub cidr: String,
+    #[serde(default = "default_domain")]
+    pub domain: String,
+    #[serde(default = "default_true")]
+    pub dhcp_enabled: bool,
+    #[serde(default = "default_dhcp_start")]
+    pub dhcp_start_offset: u32,
+    #[serde(default = "default_dhcp_limit")]
+    pub dhcp_limit: u32,
+    #[serde(default = "default_lease_time")]
+    pub dhcp_lease_secs: u32,
+    #[serde(default)]
+    pub static_leases: Vec<DhcpStaticLease>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct VlanConfig {
+    pub parent: String,
+    pub id: u16,
+    pub role: InterfaceRole,
+    #[serde(default)]
+    pub cidr: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct InterfacePin {
+    pub mac: String,
+    pub name: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct StaticRouteConfig {
+    #[serde(default = "default_main_table")]
+    pub table_id: u32,
+    pub destination: String,
+    #[serde(default)]
+    pub gateway: Option<String>,
+    #[serde(default)]
+    pub device: Option<String>,
+    #[serde(default)]
+    pub metric: Option<u32>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct PolicyRuleConfig {
+    pub priority: u32,
+    #[serde(default)]
+    pub src: Option<String>,
+    #[serde(default)]
+    pub dst: Option<String>,
+    #[serde(default)]
+    pub iif: Option<String>,
+    pub table_id: u32,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct HostInterfaceSnapshot {
+    pub name: String,
+    pub mac: Option<String>,
+    pub oper_state: String,
+    pub mtu: u32,
+    pub speed_mbps: Option<u32>,
+    #[ts(type = "number")]
+    pub rx_bytes: u64,
+    #[ts(type = "number")]
+    pub tx_bytes: u64,
+    #[ts(type = "number")]
+    pub rx_packets: u64,
+    #[ts(type = "number")]
+    pub tx_packets: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct DhcpLeaseEntry {
+    #[ts(type = "number")]
+    pub expires_at: u64,
+    pub mac: String,
+    pub ip: String,
+    pub hostname: String,
+    pub client_id: Option<String>,
+    pub is_static: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct WanRuntimeState {
+    pub wan_name: String,
+    pub device: String,
+    pub proto: WanProto,
+    pub state: String,
+    pub ip: Option<String>,
+    pub gateway: Option<String>,
+    pub dns_servers: Vec<String>,
+    pub ifindex: Option<u32>,
+    pub updated_at: String,
+}
+
+const fn default_mtu() -> u16 {
+    1500
+}
+
+const fn default_true() -> bool {
+    true
+}
+
+const fn default_metric() -> u32 {
+    100
+}
+
+const fn default_main_table() -> u32 {
+    254
+}
+
+fn default_domain() -> String {
+    "lan".to_string()
+}
+
+const fn default_dhcp_start() -> u32 {
+    100
+}
+
+const fn default_dhcp_limit() -> u32 {
+    150
+}
+
+const fn default_lease_time() -> u32 {
+    43_200
+}

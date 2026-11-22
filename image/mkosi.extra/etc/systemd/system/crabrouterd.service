@@ -1,0 +1,17 @@
+[Unit]
+Description=CrabRouter Control Plane Daemon
+After=network-pre.target systemd-udev-settle.service
+Before=network.target
+Wants=network-pre.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/crabrouterd --config /var/lib/crabrouter/router.toml
+Restart=always
+RestartSec=2
+LimitNOFILE=65536
+CapabilityBoundingSet=CAP_NET_ADMIN CAP_NET_RAW CAP_NET_BIND_SERVICE CAP_SYS_ADMIN
+AmbientCapabilities=CAP_NET_ADMIN CAP_NET_RAW CAP_NET_BIND_SERVICE
+
+[Install]
+WantedBy=multi-user.target

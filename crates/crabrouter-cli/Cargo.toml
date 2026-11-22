@@ -1,0 +1,17 @@
+[package]
+name = "crabrouter-cli"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+anyhow.workspace = true
+clap.workspace = true
+crabrouter-core.workspace = true
+crabrouter-net.workspace = true
+crabrouter-services.workspace = true
+serde_json.workspace = true

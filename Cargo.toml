@@ -1,0 +1,63 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/crabrouter-model",
+    "crates/crabrouter-net",
+    "crates/crabrouter-services",
+    "crates/crabrouter-core",
+    "crates/crabrouter-web",
+    "crates/crabrouter-daemon",
+    "crates/crabrouter-cli",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+license = "GPL-3.0-or-later"
+repository = "https://github.com/zkz098/crabrouter"
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+
+[workspace.lints.clippy]
+all = { level = "warn", priority = -1 }
+pedantic = { level = "warn", priority = -1 }
+module_name_repetitions = "allow"
+missing_errors_doc = "allow"
+missing_panics_doc = "allow"
+must_use_candidate = "allow"
+cast_possible_truncation = "allow"
+cast_lossless = "allow"
+
+[workspace.dependencies]
+crabrouter-model = { path = "crates/crabrouter-model" }
+crabrouter-net = { path = "crates/crabrouter-net" }
+crabrouter-services = { path = "crates/crabrouter-services" }
+crabrouter-core = { path = "crates/crabrouter-core" }
+crabrouter-web = { path = "crates/crabrouter-web" }
+
+tokio = { version = "1", features = ["full"] }
+arc-swap = "1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+toml = "1"
+axum = { version = "0.8", features = ["ws"] }
+tower-http = { version = "0.7", features = ["cors"] }
+rust-embed = "8"
+mime_guess = "2"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+thiserror = "2"
+anyhow = "1"
+clap = { version = "4", features = ["derive"] }
+chrono = { version = "0.4", features = ["serde"] }
+ipnet = { version = "2", features = ["serde"] }
+ts-rs = { version = "12", features = ["chrono-impl"] }
+mimalloc = "0.1"
+rtnetlink = "0.24"
+futures-util = "0.3"
+redb = "5"
+argon2 = "0.5"
+x25519-dalek = { version = "3.0", features = ["static_secrets", "getrandom"] }
+base64 = "0.22"
+getrandom = "0.3"

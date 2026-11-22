@@ -1,0 +1,14 @@
+[Transfer]
+ProtectVersion=%A
+
+[Source]
+Type=url-file
+Path=https://updates.example.com/crabrouter
+MatchPattern=crabrouter_@v.root-x86-64.raw
+
+[Target]
+Type=partition
+Path=auto
+MatchPattern=crabrouter_root_@v
+PartitionFlags=0
+ReadOnly=1

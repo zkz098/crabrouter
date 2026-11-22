@@ -1,0 +1,13 @@
+/target
+/data
+/image/mkosi.output
+/image/mkosi.cache
+/webui/node_modules
+/webui/dist
+*.db
+*.redb
+*.log
+*.img
+*.efi
+*.raw
+.DS_Store

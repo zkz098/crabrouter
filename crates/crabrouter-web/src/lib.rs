@@ -1,0 +1,99 @@
+pub mod api;
+pub mod logs;
+
+use std::path::PathBuf;
+use std::sync::Arc;
+
+use axum::Router;
+use axum::body::Body;
+use axum::http::{StatusCode, Uri, header};
+use axum::response::{IntoResponse, Response};
+use axum::routing::{get, post};
+use crabrouter_core::RouterEngine;
+use crabrouter_net::WanEventBus;
+use rust_embed::RustEmbed;
+use tower_http::cors::CorsLayer;
+
+pub use logs::{LogEvent, LogHub};
+
+#[derive(RustEmbed, Clone)]
+#[folder = "../../webui/dist"]
+struct WebAssets;
+
+#[derive(Clone)]
+pub struct AppState {
+    pub engine: Arc<RouterEngine>,
+    pub wan_bus: WanEventBus,
+    pub logs: LogHub,
+    pub lease_path: PathBuf,
+}
+
+pub fn build_router(
+    engine: Arc<RouterEngine>,
+    wan_bus: WanEventBus,
+    logs: LogHub,
+    lease_path: PathBuf,
+) -> Router {
+    let state = AppState {
+        engine,
+        wan_bus,
+        logs,
+        lease_path,
+    };
+
+    Router::new()
+        .route("/api/health", get(api::health))
+        .route("/api/setup/status", get(api::setup_status_with_headers))
+        .route("/api/setup/init", post(api::setup_init))
+        .route("/api/auth/login", post(api::auth_login))
+        .route("/api/auth/logout", post(api::auth_logout))
+        .route("/api/status", get(api::status))
+        .route("/api/interfaces", get(api::interfaces))
+        .route("/api/wans/status", get(api::wan_status))
+        .route("/api/net/wan-event", post(api::ingest_wan_event))
+        .route("/api/clients", get(api::online_clients))
+        .route("/api/config", get(api::get_config))
+        .route("/api/config/preview", get(api::preview_rendered))
+        .route("/api/config/commit", post(api::begin_commit))
+        .route("/api/config/confirm", post(api::confirm_commit))
+        .route("/api/config/rollback", post(api::rollback_commit))
+        .route("/api/config/history", get(api::config_history))
+        .route(
+            "/api/config/history/{generation}/restore",
+            post(api::restore_history),
+        )
+        .route(
+            "/api/wireguard/keypair",
+            post(api::generate_wireguard_keypair),
+        )
+        .route("/api/diag/ping", post(api::diag_ping))
+        .route("/api/diag/traceroute", post(api::diag_traceroute))
+        .route("/api/diag/iperf3", post(api::diag_iperf3))
+        .route("/api/diag/logs", get(api::diag_logs_snapshot))
+        .route("/api/diag/logs/ws", get(api::diag_logs_ws))
+        .with_state(state)
+        .layer(CorsLayer::permissive())
+        .fallback(static_handler)
+}
+
+async fn static_handler(uri: Uri) -> impl IntoResponse {
+    let path = uri.path().trim_start_matches('/');
+    let path = if path.is_empty() { "index.html" } else { path };
+
+    if let Some(content) = WebAssets::get(path) {
+        let mime = mime_guess::from_path(path).first_or_octet_stream();
+        return Response::builder()
+            .header(header::CONTENT_TYPE, mime.as_ref())
+            .body(Body::from(content.data.into_owned()))
+            .unwrap_or_else(|_| StatusCode::INTERNAL_SERVER_ERROR.into_response());
+    }
+
+    if let Some(index) = WebAssets::get("index.html") {
+        return Response::builder()
+            .header(header::CONTENT_TYPE, "text/html; charset=utf-8")
+            .body(Body::from(index.data.into_owned()))
+            .unwrap_or_else(|_| StatusCode::INTERNAL_SERVER_ERROR.into_response());
+    }
+
+    StatusCode::NOT_FOUND.into_response()
+}

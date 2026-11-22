@@ -1,0 +1,37 @@
+# Generated for cargo-warden quality gates
+
+[dag]
+roots = [
+    "crates/crabrouter-model/src",
+    "crates/crabrouter-net/src",
+    "crates/crabrouter-services/src",
+    "crates/crabrouter-core/src",
+    "crates/crabrouter-web/src",
+    "crates/crabrouter-daemon/src",
+    "crates/crabrouter-cli/src",
+]
+forbid_imports = []
+
+[complexity]
+max = 25
+paths = ["crates"]
+ignore_tests = true
+ignore = ["target"]
+respect_gitignore = true
+
+[file_length]
+max_lines = 800
+extensions = ["rs"]
+paths = ["crates"]
+ignore = ["target", "tests"]
+mode = "physical"
+respect_gitignore = true
+
+[check]
+fmt = true
+clippy = true
+doc = false
+
+[gate]
+include_checks = true
+test_groups = []
