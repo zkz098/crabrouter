@@ -133,6 +133,75 @@ pub fn parse_conntrack_table(raw: &str) -> Vec<ConntrackEntry> {
     entries
 }
 
+#[derive(Default)]
+struct ParsedConntrackTokens {
+    state: String,
+    src_orig: Option<String>,
+    dst_orig: Option<String>,
+    sport_orig: Option<u16>,
+    dport_orig: Option<u16>,
+    packets_vals: Vec<u64>,
+    bytes_vals: Vec<u64>,
+    mark: u32,
+    assured: bool,
+    offloaded: bool,
+}
+
+impl ParsedConntrackTokens {
+    fn feed(&mut self, tok: &str) {
+        match tok {
+            "[ASSURED]" => {
+                self.assured = true;
+                return;
+            }
+            "[OFFLOAD]" | "[HW_OFFLOAD]" => {
+                self.offloaded = true;
+                return;
+            }
+            _ => {}
+        }
+        if !tok.contains('=') && !tok.starts_with('[') && self.state.is_empty() {
+            self.state = tok.to_string();
+            return;
+        }
+        if let Some((k, v)) = tok.split_once('=') {
+            self.feed_kv(k, v);
+        }
+    }
+
+    fn feed_kv(&mut self, k: &str, v: &str) {
+        match k {
+            "src" if self.src_orig.is_none() => self.src_orig = Some(v.to_string()),
+            "dst" if self.dst_orig.is_none() => self.dst_orig = Some(v.to_string()),
+            "sport" if self.sport_orig.is_none() => self.sport_orig = v.parse::<u16>().ok(),
+            "dport" if self.dport_orig.is_none() => self.dport_orig = v.parse::<u16>().ok(),
+            "packets" => {
+                if let Ok(n) = v.parse::<u64>() {
+                    self.packets_vals.push(n);
+                }
+            }
+            "bytes" => {
+                if let Ok(n) = v.parse::<u64>() {
+                    self.bytes_vals.push(n);
+                }
+            }
+            "mark" => self.mark = v.parse::<u32>().unwrap_or(0),
+            _ => {}
+        }
+    }
+
+    fn resolve_state(&self) -> String {
+        if !self.state.is_empty() {
+            return self.state.clone();
+        }
+        if self.assured {
+            "ASSURED".to_string()
+        } else {
+            "ACTIVE".to_string()
+        }
+    }
+}
+
 fn parse_conntrack_line(line: &str) -> Option<ConntrackEntry> {
     let tokens: Vec<&str> = line.split_whitespace().collect();
     if tokens.len() < 6 {
@@ -155,77 +224,19 @@ fn parse_conntrack_line(line: &str) -> Option<ConntrackEntry> {
         .and_then(|s| s.parse::<u64>().ok())
         .unwrap_or(0);
 
-    let mut state = String::new();
-    let mut src_orig: Option<String> = None;
-    let mut dst_orig: Option<String> = None;
-    let mut sport_orig: Option<u16> = None;
-    let mut dport_orig: Option<u16> = None;
-    let mut packets_vals: Vec<u64> = Vec::with_capacity(2);
-    let mut bytes_vals: Vec<u64> = Vec::with_capacity(2);
-    let mut mark: u32 = 0;
-    let mut assured = false;
-    let mut offloaded = false;
-
+    let mut parsed = ParsedConntrackTokens::default();
     for &tok in tokens.iter().skip(proto_idx + 3) {
-        if tok == "[ASSURED]" {
-            assured = true;
-            continue;
-        }
-        if tok == "[OFFLOAD]" || tok == "[HW_OFFLOAD]" {
-            offloaded = true;
-            continue;
-        }
-        if !tok.contains('=') && !tok.starts_with('[') && state.is_empty() {
-            state = tok.to_string();
-            continue;
-        }
-        let Some((k, v)) = tok.split_once('=') else {
-            continue;
-        };
-        match k {
-            "src" if src_orig.is_none() => {
-                src_orig = Some(v.to_string());
-            }
-            "dst" if dst_orig.is_none() => {
-                dst_orig = Some(v.to_string());
-            }
-            "sport" if sport_orig.is_none() => {
-                sport_orig = v.parse::<u16>().ok();
-            }
-            "dport" if dport_orig.is_none() => {
-                dport_orig = v.parse::<u16>().ok();
-            }
-            "packets" => {
-                if let Ok(n) = v.parse::<u64>() {
-                    packets_vals.push(n);
-                }
-            }
-            "bytes" => {
-                if let Ok(n) = v.parse::<u64>() {
-                    bytes_vals.push(n);
-                }
-            }
-            "mark" => {
-                mark = v.parse::<u32>().unwrap_or(0);
-            }
-            _ => {}
-        }
+        parsed.feed(tok);
     }
 
-    let src = src_orig?;
-    let dst = dst_orig?;
+    let state = parsed.resolve_state();
+    let src = parsed.src_orig?;
+    let dst = parsed.dst_orig?;
     let inferred_family = if src.contains(':') {
         "ipv6".to_string()
     } else {
         family
     };
-    if state.is_empty() {
-        state = if assured {
-            "ASSURED".to_string()
-        } else {
-            "ACTIVE".to_string()
-        };
-    }
 
     Some(ConntrackEntry {
         family: inferred_family,
@@ -233,16 +244,16 @@ fn parse_conntrack_line(line: &str) -> Option<ConntrackEntry> {
         state,
         src,
         dst,
-        sport: sport_orig,
-        dport: dport_orig,
+        sport: parsed.sport_orig,
+        dport: parsed.dport_orig,
         timeout_secs,
-        orig_packets: packets_vals.first().copied().unwrap_or(0),
-        orig_bytes: bytes_vals.first().copied().unwrap_or(0),
-        reply_packets: packets_vals.get(1).copied().unwrap_or(0),
-        reply_bytes: bytes_vals.get(1).copied().unwrap_or(0),
-        mark,
-        assured,
-        offloaded,
+        orig_packets: parsed.packets_vals.first().copied().unwrap_or(0),
+        orig_bytes: parsed.bytes_vals.first().copied().unwrap_or(0),
+        reply_packets: parsed.packets_vals.get(1).copied().unwrap_or(0),
+        reply_bytes: parsed.bytes_vals.get(1).copied().unwrap_or(0),
+        mark: parsed.mark,
+        assured: parsed.assured,
+        offloaded: parsed.offloaded,
     })
 }
 

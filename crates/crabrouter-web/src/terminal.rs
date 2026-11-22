@@ -62,55 +62,69 @@ async fn handle_terminal_ws(mut socket: WebSocket) {
     loop {
         tokio::select! {
             read_res = stdout.read(&mut read_buf) => {
-                match read_res {
-                    Ok(0) | Err(_) => {
-                        let _ = socket
-                            .send(Message::Text("\r\n\x1b[33m[session closed]\x1b[0m\r\n".into()))
-                            .await;
-                        break;
-                    }
-                    Ok(n) => {
-                        let chunk = String::from_utf8_lossy(&read_buf[..n]).into_owned();
-                        if socket.send(Message::Text(chunk.into())).await.is_err() {
-                            break;
-                        }
-                    }
+                if !forward_pty_stdout(&mut socket, read_res, &read_buf).await {
+                    break;
                 }
             }
             ws_msg = socket.recv() => {
-                match ws_msg {
-                    Some(Ok(Message::Text(txt))) => {
-                        if let Ok(frame) = serde_json::from_str::<TerminalClientFrame>(&txt) {
-                            match frame {
-                                TerminalClientFrame::Input { data } => {
-                                    if stdin.write_all(data.as_bytes()).await.is_err() {
-                                        break;
-                                    }
-                                    let _ = stdin.flush().await;
-                                }
-                                TerminalClientFrame::Resize { cols, rows } => {
-                                    tracing::debug!(cols, rows, "xterm PTY resize received");
-                                }
-                            }
-                        } else if stdin.write_all(txt.as_bytes()).await.is_err() {
-                            break;
-                        }
-                    }
-                    Some(Ok(Message::Binary(bin))) => {
-                        if stdin.write_all(&bin).await.is_err() {
-                            break;
-                        }
-                    }
-                    Some(Ok(Message::Close(_)) | Err(_)) | None => {
-                        break;
-                    }
-                    _ => {}
+                if !handle_ws_frame(ws_msg, &mut stdin).await {
+                    break;
                 }
             }
         }
     }
 
     let _ = child.kill().await;
+}
+
+async fn forward_pty_stdout(
+    socket: &mut WebSocket,
+    read_res: std::io::Result<usize>,
+    read_buf: &[u8],
+) -> bool {
+    match read_res {
+        Ok(0) | Err(_) => {
+            let _ = socket
+                .send(Message::Text(
+                    "\r\n\x1b[33m[session closed]\x1b[0m\r\n".into(),
+                ))
+                .await;
+            false
+        }
+        Ok(n) => {
+            let chunk = String::from_utf8_lossy(&read_buf[..n]).into_owned();
+            socket.send(Message::Text(chunk.into())).await.is_ok()
+        }
+    }
+}
+
+async fn handle_ws_frame(
+    ws_msg: Option<Result<Message, axum::Error>>,
+    stdin: &mut tokio::process::ChildStdin,
+) -> bool {
+    match ws_msg {
+        Some(Ok(Message::Text(txt))) => {
+            if let Ok(frame) = serde_json::from_str::<TerminalClientFrame>(&txt) {
+                match frame {
+                    TerminalClientFrame::Input { data } => {
+                        if stdin.write_all(data.as_bytes()).await.is_err() {
+                            return false;
+                        }
+                        let _ = stdin.flush().await;
+                    }
+                    TerminalClientFrame::Resize { cols, rows } => {
+                        tracing::debug!(cols, rows, "xterm PTY resize received");
+                    }
+                }
+            } else if stdin.write_all(txt.as_bytes()).await.is_err() {
+                return false;
+            }
+            true
+        }
+        Some(Ok(Message::Binary(bin))) => stdin.write_all(&bin).await.is_ok(),
+        Some(Ok(Message::Close(_)) | Err(_)) | None => false,
+        _ => true,
+    }
 }
 
 fn spawn_pty_shell() -> std::io::Result<Child> {

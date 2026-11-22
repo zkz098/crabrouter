@@ -23,19 +23,15 @@ jobs:
         with:
           components: clippy, rustfmt
       - uses: Swatinem/rust-cache@v2
-      - name: Build & check WebUI
+      - name: Install cargo-warden
+        run: cargo install cargo-warden --locked
+      - name: Build WebUI assets
         run: |
           cd webui
           pnpm install --frozen-lockfile
-          pnpm fmt:check
-          pnpm typecheck
-          pnpm lint
           pnpm build
-      - name: Run Rust test, clippy, and fmt gates
-        run: |
-          cargo test --workspace
-          cargo clippy --workspace --all-targets -- -D warnings
-          cargo fmt --all -- --check
+      - name: Run cargo-warden quality gate
+        run: cargo warden gate --format github-actions
 
   build-image:
     needs: check

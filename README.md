@@ -25,7 +25,10 @@ cd webui && pnpm install && pnpm build && cd ..
 # 2. Run tests & export TypeScript types
 cargo test --workspace
 
-# 3. Start daemon in local dry-run mode (WebUI on http://127.0.0.1:8080)
+# 3. Run full quality gate via cargo-warden (DAG, complexity, file-length, hygiene, manifest, fmt, clippy, test, doc, webui-check)
+cargo warden gate
+
+# 4. Start daemon in local dry-run mode (WebUI on http://127.0.0.1:8080)
 cargo run -p crabrouter-daemon -- --dry-run
 ```
 

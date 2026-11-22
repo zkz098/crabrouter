@@ -619,16 +619,8 @@ async fn handle_log_ws(mut socket: WebSocket, state: AppState) {
     loop {
         tokio::select! {
             recv = rx.recv() => {
-                match recv {
-                    Ok(entry) => {
-                        if let Ok(json) = serde_json::to_string(&entry)
-                            && socket.send(Message::Text(json.into())).await.is_err()
-                        {
-                            break;
-                        }
-                    }
-                    Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => {}
-                    Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
+                if !forward_log_broadcast(&mut socket, recv).await {
+                    break;
                 }
             }
             msg = socket.recv() => {
@@ -637,6 +629,24 @@ async fn handle_log_ws(mut socket: WebSocket, state: AppState) {
                 }
             }
         }
+    }
+}
+
+async fn forward_log_broadcast(
+    socket: &mut WebSocket,
+    recv: Result<LogEvent, tokio::sync::broadcast::error::RecvError>,
+) -> bool {
+    match recv {
+        Ok(entry) => {
+            if let Ok(json) = serde_json::to_string(&entry)
+                && socket.send(Message::Text(json.into())).await.is_err()
+            {
+                return false;
+            }
+            true
+        }
+        Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => true,
+        Err(tokio::sync::broadcast::error::RecvError::Closed) => false,
     }
 }
 

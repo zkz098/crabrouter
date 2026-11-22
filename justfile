@@ -1,21 +1,28 @@
-default: check
+default: gate
 
 # Install and build SolidJS WebUI assets
 build-ui:
     cd webui && pnpm install && pnpm build
 
-# Typecheck & lint WebUI
-check-ui:
-    cd webui && pnpm typecheck && pnpm lint && pnpm fmt:check
+# Run static checks + fmt + clippy orchestrated by cargo-warden
+check:
+    cargo warden check
 
-# Run Rust tests (also exports ts-rs TypeScript bindings)
-test:
-    cargo test --workspace
+# Run full verification gate orchestrated by cargo-warden (check + nextest + doc + webui-check)
+gate:
+    cargo warden gate
 
-# Run full quality gates
-check: test
-    cargo clippy --workspace --all-targets -- -D warnings
-    cargo fmt --all -- --check
+# Run deep verification gate including machete, deny, and audit
+gate-full:
+    cargo warden gate --full
+
+# Auto-fix formatting and clippy/WebUI lints via cargo-warden
+fix:
+    cargo warden gate --fix
+
+# Diagnose cargo-warden environment, toolchain, and Git hooks
+doctor:
+    cargo warden doctor
 
 # Build release binaries with embedded WebUI
 build: build-ui

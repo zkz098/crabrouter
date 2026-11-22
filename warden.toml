@@ -1,4 +1,4 @@
-# Generated for cargo-warden quality gates
+# cargo-warden quality gates configuration for CrabRouter
 
 [dag]
 roots = [
@@ -12,8 +12,48 @@ roots = [
 ]
 forbid_imports = []
 
+[dag.workspace]
+enabled = true
+include_dev_dependencies = true
+include_build_dependencies = true
+forbid_deps = ["crabrouter-daemon", "crabrouter-cli"]
+
+[[dag.workspace.layers]]
+name = "model"
+crates = ["crabrouter-model"]
+allow = []
+
+[[dag.workspace.layers]]
+name = "infra"
+crates = ["crabrouter-net", "crabrouter-services"]
+allow = ["model"]
+
+[[dag.workspace.layers]]
+name = "core"
+crates = ["crabrouter-core"]
+allow = ["model", "infra"]
+
+[[dag.workspace.layers]]
+name = "web"
+crates = ["crabrouter-web"]
+allow = ["model", "infra", "core"]
+
+[[dag.workspace.layers]]
+name = "app"
+crates = ["crabrouter-daemon", "crabrouter-cli"]
+allow = ["model", "infra", "core", "web"]
+
+[ci_parity]
+workflow = ".github/workflows/image.yml"
+test_patterns = ["cargo warden gate", "cargo test", "nextest"]
+ignore_crates = []
+fanout_crates = []
+
 [complexity]
 max = 25
+max_function_lines = 120
+max_nesting = 5
+max_params = 7
 paths = ["crates"]
 ignore_tests = true
 ignore = ["target"]
@@ -27,11 +67,44 @@ ignore = ["target", "tests"]
 mode = "physical"
 respect_gitignore = true
 
+[hygiene]
+paths = ["crates"]
+ignore_tests = true
+ignore = ["target"]
+respect_gitignore = true
+forbid_unsafe = true
+require_safety_comment = true
+forbid_unwrap = true
+forbid_dbg = true
+forbid_todo = true
+forbid_println = true
+
+[[hygiene.overrides]]
+paths = ["crates/crabrouter-cli/**"]
+forbid_println = false
+
+[manifest]
+inherit_fields = ["version", "edition", "license", "repository"]
+enforce_workspace_deps = true
+forbid_git_deps = true
+forbid_external_path_deps = true
+check_features = true
+
 [check]
 fmt = true
 clippy = true
 doc = false
+parallel = true
+warn_unused_suppressions = true
 
 [gate]
 include_checks = true
+parallel = true
 test_groups = []
+
+[[gate.custom_steps]]
+name = "webui-check"
+command = "pnpm fmt:check && pnpm typecheck && pnpm lint"
+cwd = "webui"
+read_only = true
+fix_command = "pnpm fmt && pnpm typecheck && pnpm lint"
