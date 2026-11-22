@@ -30,6 +30,11 @@ jobs:
           cd webui
           pnpm install --frozen-lockfile
           pnpm build
+      - name: Enable unprivileged userns & netns tools for E2E
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y nftables iproute2 iputils-ping
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 || true
       - name: Run cargo-warden quality gate
         run: cargo warden gate --format github-actions
 
@@ -69,6 +74,12 @@ jobs:
           sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 || true
           chmod +x image/mkosi.postinst image/scripts/*.sh
           bash image/scripts/build-image.sh
+      - name: Run QEMU/KVM UEFI boot & API E2E test
+        run: |
+          if [[ -e /dev/kvm ]]; then
+            sudo chmod a+rw /dev/kvm || true
+          fi
+          CRABROUTER_QEMU_TIMEOUT=300 bash image/scripts/e2e-qemu-test.sh
       - name: Compress image artifacts with zstd
         run: |
           cd image/mkosi.output
