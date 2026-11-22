@@ -12,7 +12,7 @@ echo "==> 1. Building WebUI & release Rust binaries"
 (cd "$REPO_ROOT/webui" && pnpm install --frozen-lockfile && pnpm build)
 (cd "$REPO_ROOT" && cargo build --release -p crabrouter-daemon -p crabrouter-cli)
 
-mkdir -p "$EXTRA_BIN" "$REPART_DST"
+mkdir -p "$EXTRA_BIN" "$REPART_DST" "$IMAGE_DIR/mkosi.packages"
 install -m 0755 "$REPO_ROOT/target/release/crabrouter-daemon" "$EXTRA_BIN/crabrouterd"
 install -m 0755 "$REPO_ROOT/target/release/crabrouter-cli" "$EXTRA_BIN/crabctl"
 cp "$IMAGE_DIR"/mkosi.repart/*.conf "$REPART_DST/"
