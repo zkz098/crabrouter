@@ -4,7 +4,7 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 IMAGE_DIR="$REPO_ROOT/image"
 EXTRA_BIN="$IMAGE_DIR/mkosi.extra/usr/local/bin"
-REPART_DST="$IMAGE_DIR/mkosi.extra/usr/lib/repart.d"
+REPART_DST="$IMAGE_DIR/mkosi.extra/usr/share/crabrouter/repart.d"
 OUT_DIR="$IMAGE_DIR/mkosi.output"
 VERSION="${CRABROUTER_VERSION:-0.1.0}"
 
@@ -12,10 +12,11 @@ echo "==> 1. Building WebUI & release Rust binaries"
 (cd "$REPO_ROOT/webui" && pnpm install --frozen-lockfile && pnpm build)
 (cd "$REPO_ROOT" && cargo build --release -p crabrouter-daemon -p crabrouter-cli)
 
-mkdir -p "$EXTRA_BIN" "$REPART_DST" "$IMAGE_DIR/mkosi.packages"
+mkdir -p "$EXTRA_BIN" "$REPART_DST"
 install -m 0755 "$REPO_ROOT/target/release/crabrouter-daemon" "$EXTRA_BIN/crabrouterd"
 install -m 0755 "$REPO_ROOT/target/release/crabrouter-cli" "$EXTRA_BIN/crabctl"
 cp "$IMAGE_DIR"/mkosi.repart/*.conf "$REPART_DST/"
+sed -i -E '/^(CopyFiles|ExcludeFiles)=/d' "$REPART_DST/"*.conf
 
 if [[ -d "${CRABDNS_DIR:-$HOME/projects/crabdns}" ]]; then
   bash "$IMAGE_DIR/scripts/bundle-crabdns.sh"
@@ -42,7 +43,7 @@ fi
 
 if [[ "${BUILD_ISO:-1}" == "1" ]] && command -v xorriso >/dev/null 2>&1 && command -v mcopy >/dev/null 2>&1 && command -v mkfs.vfat >/dev/null 2>&1; then
   echo "==> 4. Building UEFI Live/Installer ISO for Hyper-V / bare-metal USB"
-  (cd "$IMAGE_DIR" && mkosi --format=uki --output=crabrouter-live --image-version="$VERSION" --force)
+  (cd "$IMAGE_DIR" && mkosi --format=uki --split-artifacts=no --output=crabrouter-live --image-version="$VERSION" --force)
   LIVE_EFI="$(find "$OUT_DIR" -maxdepth 1 -name 'crabrouter-live*.efi' | head -n 1 || true)"
   if [[ -n "$LIVE_EFI" ]]; then
     ISO_STAGE="$(mktemp -d)"

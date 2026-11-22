@@ -2,6 +2,7 @@
 Description=CrabDNS Frontline Filtering & Encrypted DNS Service
 After=network-online.target dnsmasq.service
 Wants=network-online.target
+ConditionFileIsExecutable=/usr/local/bin/crabdns
 
 [Service]
 Type=simple

@@ -205,14 +205,14 @@ mod tests {
         assert!(
             build_install_plan(
                 Path::new("/tmp/disk.img"),
-                Path::new("/usr/lib/repart.d"),
+                Path::new("/usr/share/crabrouter/repart.d"),
                 None
             )
             .is_err()
         );
         let plan = build_install_plan(
             Path::new("/dev/nvme0n1"),
-            Path::new("/usr/lib/repart.d"),
+            Path::new("/usr/share/crabrouter/repart.d"),
             None,
         )
         .unwrap();

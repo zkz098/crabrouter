@@ -43,7 +43,7 @@ impl Default for NetworkPaths {
             udev_rules_path: PathBuf::from("/etc/udev/rules.d/70-crabrouter-net.rules"),
             ppp_dir: PathBuf::from("/etc/ppp"),
             dhcpcd_conf_path: PathBuf::from("/etc/dhcpcd.d/crabrouter.conf"),
-            dhcpcd_hook_path: PathBuf::from("/lib/dhcpcd/dhcpcd-hooks/90-crabrouter"),
+            dhcpcd_hook_path: PathBuf::from("/etc/dhcpcd.exit-hook"),
             hook_endpoint_url: "http://127.0.0.1:8080/api/net/wan-event".to_string(),
         }
     }

@@ -38,7 +38,7 @@ enum Commands {
     Install {
         #[arg(long)]
         target: PathBuf,
-        #[arg(long, default_value = "/usr/lib/repart.d")]
+        #[arg(long, default_value = "/usr/share/crabrouter/repart.d")]
         repart_dir: PathBuf,
         #[arg(long)]
         root_image: Option<PathBuf>,

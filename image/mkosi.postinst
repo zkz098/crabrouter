@@ -2,7 +2,9 @@
 set -euo pipefail
 
 if [[ -n "${BUILDROOT:-}" ]]; then
+  systemctl --root="$BUILDROOT" enable crabrouter-etc-overlay.service || true
   systemctl --root="$BUILDROOT" enable crabrouterd.service || true
+  systemctl --root="$BUILDROOT" enable crabrouter-dhcpcd.service || true
   systemctl --root="$BUILDROOT" enable crabdns.service || true
   systemctl --root="$BUILDROOT" enable dnsmasq.service || true
   systemctl --root="$BUILDROOT" enable crabrouter-boot-bless.service || true

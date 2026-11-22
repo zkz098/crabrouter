@@ -1,0 +1,8 @@
+enable crabrouter-etc-overlay.service
+enable crabrouterd.service
+enable crabrouter-dhcpcd.service
+enable crabdns.service
+enable dnsmasq.service
+enable crabrouter-boot-bless.service
+enable systemd-boot-check-no-failures.service
+enable systemd-sysupdate.timer

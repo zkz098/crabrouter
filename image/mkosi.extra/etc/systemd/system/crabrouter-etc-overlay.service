@@ -1,0 +1,15 @@
+[Unit]
+Description=Mount persistent writable /etc overlay on /var
+DefaultDependencies=no
+After=var.mount
+Before=local-fs.target systemd-tmpfiles-setup.service
+ConditionPathIsMountPoint=/var
+ConditionPathIsReadWrite=!/etc
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/bin/sh -c 'mkdir -p /var/lib/crabrouter/etc-overlay/upper /var/lib/crabrouter/etc-overlay/work && modprobe -q overlay || true && mount -t overlay overlay -o lowerdir=/etc,upperdir=/var/lib/crabrouter/etc-overlay/upper,workdir=/var/lib/crabrouter/etc-overlay/work /etc'
+
+[Install]
+WantedBy=local-fs.target

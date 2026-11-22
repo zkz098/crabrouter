@@ -2,7 +2,8 @@
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-IMAGE_PATH="${1:-$REPO_ROOT/image/mkosi.output/crabrouter.raw}"
+IMAGE_PATH="${1:-$(find "$REPO_ROOT/image/mkosi.output" -maxdepth 1 -name 'crabrouter*.raw' ! -name '*.root-*' | head -n 1 || true)}"
+IMAGE_PATH="${IMAGE_PATH:-$REPO_ROOT/image/mkosi.output/crabrouter.raw}"
 OVMF_CODE="${OVMF_CODE:-/usr/share/OVMF/OVMF_CODE_4M.fd}"
 if [[ ! -f "$OVMF_CODE" ]]; then
   OVMF_CODE="/usr/share/OVMF/OVMF_CODE.fd"
@@ -29,7 +30,7 @@ exec qemu-system-x86_64 \
   -nographic \
   -drive "if=pflash,format=raw,readonly=on,file=$OVMF_CODE" \
   -drive "file=$IMAGE_PATH,format=raw,if=virtio" \
-  -netdev "user,id=wan0,hostfwd=tcp:127.0.0.1:8080-:8080,hostfwd=tcp:127.0.0.1:8443-:8443,hostfwd=tcp:127.0.0.1:2222-:22" \
+  -netdev user,id=wan0 \
   -device virtio-net-pci,netdev=wan0 \
-  -netdev user,id=lan0 \
+  -netdev "user,id=lan0,net=192.168.10.0/24,hostfwd=tcp:127.0.0.1:8080-192.168.10.1:8080,hostfwd=tcp:127.0.0.1:8443-192.168.10.1:8443,hostfwd=tcp:127.0.0.1:2222-192.168.10.1:22" \
   -device virtio-net-pci,netdev=lan0

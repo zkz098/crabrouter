@@ -68,7 +68,8 @@ pub fn render_dhcpcd_conf(cfg: &RouterConfig) -> String {
     out
 }
 
-/// Renders `/lib/dhcpcd/dhcpcd-hooks/90-crabrouter` posting lease changes to `crabrouterd`.
+/// Renders `/etc/dhcpcd.exit-hook` (sourced by `dhcpcd-run-hooks`) posting lease changes to
+/// `crabrouterd`. Kept under `/etc` because `/usr` is a read-only squashfs on the appliance.
 pub fn render_dhcpcd_hook_script(endpoint_url: &str) -> String {
     format!(
         "#!/bin/sh\n\
