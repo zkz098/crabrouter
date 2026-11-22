@@ -1,5 +1,6 @@
 import { For, Show, createSignal } from "solid-js";
 import { initSetup } from "../api";
+import { t, toggleLocale } from "../i18n";
 import type { HostInterfaceSnapshot } from "../types/HostInterfaceSnapshot";
 import type { LanConfig } from "../types/LanConfig";
 import type { RouterConfig } from "../types/RouterConfig";
@@ -66,12 +67,12 @@ export function SetupWizard(props: Props) {
   async function handleFinish() {
     setErr(null);
     if (password().length < 6) {
-      setErr("管理员密码至少需要 6 位字符");
+      setErr(t("setupErrPasswordLen"));
       setStep(1);
       return;
     }
     if (password() !== confirmPassword()) {
-      setErr("两次输入的密码不一致");
+      setErr(t("setupErrPasswordMismatch"));
       setStep(1);
       return;
     }
@@ -133,30 +134,40 @@ export function SetupWizard(props: Props) {
   return (
     <div class="min-h-screen vercel-grid-bg flex items-center justify-center px-4 py-8 bg-[#fafafa] dark:bg-black text-[#171717] dark:text-[#ededed]">
       <div class="w-full max-w-2xl rounded-2xl border border-[#eaeaea] dark:border-[#262626] bg-white dark:bg-[#0a0a0a] p-6 sm:p-7 shadow-sm animate-card-enter">
-        <div class="flex items-center justify-between border-b border-[#eaeaea] dark:border-[#262626] pb-4">
+        <div class="flex flex-wrap items-center justify-between gap-3 border-b border-[#eaeaea] dark:border-[#262626] pb-4">
           <div class="flex items-center gap-3">
             <div class="w-9 h-9 rounded-xl bg-[#171717] dark:bg-white text-white dark:text-[#0a0a0a] flex items-center justify-center shrink-0">
               <span class="i-ri-router-fill text-lg" />
             </div>
             <div>
-              <h1 class="text-base font-semibold tracking-tight">CrabRouter 首次初始化向导</h1>
+              <h1 class="text-base font-semibold tracking-tight">{t("setupTitle")}</h1>
               <p class="text-xs text-[#666666] dark:text-[#a1a1aa]">
-                步骤 {step()} / 4 · 设置管理员凭据、WAN/LAN 端口映射与拨号参数
+                {t("setupStepOf").replace("{step}", String(step()))}
               </p>
             </div>
           </div>
-          <div class="flex gap-1.5">
-            <For each={[1, 2, 3, 4]}>
-              {(s) => (
-                <div
-                  class={`h-1.5 w-7 rounded-full transition-colors ${
-                    step() >= s
-                      ? "bg-[#171717] dark:bg-[#ededed]"
-                      : "bg-[#eaeaea] dark:bg-[#262626]"
-                  }`}
-                />
-              )}
-            </For>
+          <div class="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={toggleLocale}
+              class="h-7 px-2 rounded-lg text-xs font-medium bg-white dark:bg-[#111111] hover:bg-[#f4f4f5] dark:hover:bg-[#1a1a1a] text-[#171717] dark:text-[#ededed] border border-[#eaeaea] dark:border-[#262626] flex items-center gap-1 cursor-pointer transition-colors"
+            >
+              <span class="i-ri-translate-2 text-xs text-[#666666] dark:text-[#a1a1aa]" />
+              <span>{t("langToggle")}</span>
+            </button>
+            <div class="flex gap-1.5">
+              <For each={[1, 2, 3, 4]}>
+                {(s) => (
+                  <div
+                    class={`h-1.5 w-6 rounded-full transition-colors ${
+                      step() >= s
+                        ? "bg-[#171717] dark:bg-[#ededed]"
+                        : "bg-[#eaeaea] dark:bg-[#262626]"
+                    }`}
+                  />
+                )}
+              </For>
+            </div>
           </div>
         </div>
 
@@ -173,7 +184,9 @@ export function SetupWizard(props: Props) {
           <Show when={step() === 1}>
             <div class="grid gap-4 sm:grid-cols-2">
               <label class="block text-xs">
-                <span class="font-medium text-[#171717] dark:text-[#ededed]">路由器主机名</span>
+                <span class="font-medium text-[#171717] dark:text-[#ededed]">
+                  {t("setupHostname")}
+                </span>
                 <input
                   type="text"
                   value={hostname()}
@@ -182,7 +195,9 @@ export function SetupWizard(props: Props) {
                 />
               </label>
               <label class="block text-xs">
-                <span class="font-medium text-[#171717] dark:text-[#ededed]">系统时区</span>
+                <span class="font-medium text-[#171717] dark:text-[#ededed]">
+                  {t("setupTimezone")}
+                </span>
                 <input
                   type="text"
                   value={timezone()}
@@ -191,7 +206,9 @@ export function SetupWizard(props: Props) {
                 />
               </label>
               <label class="block text-xs sm:col-span-2">
-                <span class="font-medium text-[#171717] dark:text-[#ededed]">管理员用户名</span>
+                <span class="font-medium text-[#171717] dark:text-[#ededed]">
+                  {t("setupAdminUser")}
+                </span>
                 <input
                   type="text"
                   value={username()}
@@ -201,7 +218,7 @@ export function SetupWizard(props: Props) {
               </label>
               <label class="block text-xs">
                 <span class="font-medium text-[#171717] dark:text-[#ededed]">
-                  管理员密码（至少 6 位）
+                  {t("setupAdminPass")}
                 </span>
                 <input
                   type="password"
@@ -211,7 +228,9 @@ export function SetupWizard(props: Props) {
                 />
               </label>
               <label class="block text-xs">
-                <span class="font-medium text-[#171717] dark:text-[#ededed]">确认密码</span>
+                <span class="font-medium text-[#171717] dark:text-[#ededed]">
+                  {t("setupConfirmPass")}
+                </span>
                 <input
                   type="password"
                   value={confirmPassword()}
@@ -226,7 +245,7 @@ export function SetupWizard(props: Props) {
             <div class="space-y-4">
               <div>
                 <h2 class="text-xs font-medium text-[#171717] dark:text-[#ededed]">
-                  选择 WAN 外网接口
+                  {t("setupSelectWan")}
                 </h2>
                 <div class="mt-2 grid gap-2 sm:grid-cols-3">
                   <For each={availableNames()}>
@@ -242,7 +261,7 @@ export function SetupWizard(props: Props) {
                       >
                         <div class="font-mono font-semibold">{iface}</div>
                         <div class="mt-0.5 text-[11px] text-[#666666] dark:text-[#a1a1aa]">
-                          {wanDevice() === iface ? "已选为 WAN" : "点击设为 WAN"}
+                          {wanDevice() === iface ? t("setupWanSelected") : t("setupWanClick")}
                         </div>
                       </button>
                     )}
@@ -252,7 +271,7 @@ export function SetupWizard(props: Props) {
 
               <div>
                 <h2 class="text-xs font-medium text-[#171717] dark:text-[#ededed]">
-                  选择 LAN 网桥 (br-lan) 成员口
+                  {t("setupSelectLan")}
                 </h2>
                 <div class="mt-2 grid gap-2 sm:grid-cols-3">
                   <For each={availableNames()}>
@@ -274,7 +293,11 @@ export function SetupWizard(props: Props) {
                         >
                           <div class="font-mono font-semibold">{iface}</div>
                           <div class="mt-0.5 text-[11px] text-[#666666] dark:text-[#a1a1aa]">
-                            {isWan() ? "已分配给 WAN" : isLan() ? "属于 br-lan" : "未分配"}
+                            {isWan()
+                              ? t("setupAssignedWan")
+                              : isLan()
+                                ? t("setupInLanBridge")
+                                : t("setupUnassigned")}
                           </div>
                         </button>
                       );
@@ -289,7 +312,7 @@ export function SetupWizard(props: Props) {
             <div class="space-y-4">
               <div>
                 <span class="text-xs font-medium text-[#171717] dark:text-[#ededed]">
-                  WAN 接入协议
+                  {t("setupWanProto")}
                 </span>
                 <div class="mt-1.5 grid grid-cols-3 gap-2">
                   <For each={["dhcp", "pppoe", "static"] as WanProto[]}>
@@ -313,7 +336,9 @@ export function SetupWizard(props: Props) {
               <Show when={wanProto() === "pppoe"}>
                 <div class="grid gap-3 sm:grid-cols-2">
                   <label class="block text-xs">
-                    <span class="font-medium text-[#171717] dark:text-[#ededed]">宽带拨号账号</span>
+                    <span class="font-medium text-[#171717] dark:text-[#ededed]">
+                      {t("setupPppoeUser")}
+                    </span>
                     <input
                       type="text"
                       value={pppoeUser()}
@@ -322,7 +347,9 @@ export function SetupWizard(props: Props) {
                     />
                   </label>
                   <label class="block text-xs">
-                    <span class="font-medium text-[#171717] dark:text-[#ededed]">宽带拨号密码</span>
+                    <span class="font-medium text-[#171717] dark:text-[#ededed]">
+                      {t("setupPppoePass")}
+                    </span>
                     <input
                       type="password"
                       value={pppoePass()}
@@ -337,7 +364,7 @@ export function SetupWizard(props: Props) {
                 <div class="grid gap-3 sm:grid-cols-2">
                   <label class="block text-xs">
                     <span class="font-medium text-[#171717] dark:text-[#ededed]">
-                      WAN IP/掩码 (CIDR)
+                      {t("setupStaticCidr")}
                     </span>
                     <input
                       type="text"
@@ -347,7 +374,9 @@ export function SetupWizard(props: Props) {
                     />
                   </label>
                   <label class="block text-xs">
-                    <span class="font-medium text-[#171717] dark:text-[#ededed]">默认网关</span>
+                    <span class="font-medium text-[#171717] dark:text-[#ededed]">
+                      {t("setupGateway")}
+                    </span>
                     <input
                       type="text"
                       value={gateway()}
@@ -361,7 +390,7 @@ export function SetupWizard(props: Props) {
               <div class="grid gap-3 sm:grid-cols-2">
                 <label class="block text-xs">
                   <span class="font-medium text-[#171717] dark:text-[#ededed]">
-                    LAN 管理 IP/网段 (CIDR)
+                    {t("setupLanCidr")}
                   </span>
                   <input
                     type="text"
@@ -371,7 +400,9 @@ export function SetupWizard(props: Props) {
                   />
                 </label>
                 <label class="block text-xs">
-                  <span class="font-medium text-[#171717] dark:text-[#ededed]">内网域名后缀</span>
+                  <span class="font-medium text-[#171717] dark:text-[#ededed]">
+                    {t("setupLanDomain")}
+                  </span>
                   <input
                     type="text"
                     value={lanDomain()}
@@ -386,25 +417,25 @@ export function SetupWizard(props: Props) {
           <Show when={step() === 4}>
             <div class="space-y-2.5 rounded-xl border border-[#eaeaea] dark:border-[#262626] bg-[#fafafa] dark:bg-[#111111] p-4 text-xs">
               <div class="flex justify-between py-1">
-                <span class="text-[#666666] dark:text-[#a1a1aa]">主机名 / 管理员</span>
+                <span class="text-[#666666] dark:text-[#a1a1aa]">{t("setupSummaryHostAdmin")}</span>
                 <span class="font-mono font-medium">
                   {hostname()} ({username()})
                 </span>
               </div>
               <div class="flex justify-between py-1">
-                <span class="text-[#666666] dark:text-[#a1a1aa]">WAN 接口与协议</span>
+                <span class="text-[#666666] dark:text-[#a1a1aa]">{t("setupSummaryWan")}</span>
                 <span class="font-mono font-medium text-[#0070f3] dark:text-sky-400">
                   {wanDevice()} ({wanProto().toUpperCase()})
                 </span>
               </div>
               <div class="flex justify-between py-1">
-                <span class="text-[#666666] dark:text-[#a1a1aa]">LAN 网桥成员</span>
+                <span class="text-[#666666] dark:text-[#a1a1aa]">{t("setupSummaryLanPorts")}</span>
                 <span class="font-mono font-medium text-emerald-600 dark:text-emerald-400">
-                  br-lan ← [{lanPorts().join(", ") || "无"}]
+                  br-lan ← [{lanPorts().join(", ") || t("commonNone")}]
                 </span>
               </div>
               <div class="flex justify-between py-1">
-                <span class="text-[#666666] dark:text-[#a1a1aa]">LAN 网段 / 本地域</span>
+                <span class="text-[#666666] dark:text-[#a1a1aa]">{t("setupSummaryLanSubnet")}</span>
                 <span class="font-mono font-medium">
                   {lanCidr()} (.{lanDomain()})
                 </span>
@@ -420,7 +451,7 @@ export function SetupWizard(props: Props) {
             onClick={() => setStep((s) => Math.max(1, s - 1))}
             class="h-9 rounded-lg border border-[#eaeaea] dark:border-[#262626] bg-white dark:bg-[#111111] hover:bg-[#f4f4f5] dark:hover:bg-[#1a1a1a] px-4 text-xs font-medium text-[#171717] dark:text-[#ededed] cursor-pointer transition-all disabled:opacity-40"
           >
-            上一步
+            {t("setupPrev")}
           </button>
           <Show
             when={step() < 4}
@@ -431,7 +462,7 @@ export function SetupWizard(props: Props) {
                 onClick={() => void handleFinish()}
                 class="h-9 rounded-lg bg-[#171717] hover:bg-[#383838] dark:bg-[#ededed] dark:hover:bg-[#d4d4d8] px-5 text-xs font-medium text-white dark:text-[#0a0a0a] border-0 cursor-pointer transition-all active:scale-[0.98] disabled:opacity-50"
               >
-                {submitting() ? "正在初始化..." : "完成初始化并应用"}
+                {submitting() ? t("setupFinishing") : t("setupFinish")}
               </button>
             }
           >
@@ -440,7 +471,7 @@ export function SetupWizard(props: Props) {
               onClick={() => setStep((s) => Math.min(4, s + 1))}
               class="h-9 rounded-lg bg-[#171717] hover:bg-[#383838] dark:bg-[#ededed] dark:hover:bg-[#d4d4d8] px-5 text-xs font-medium text-white dark:text-[#0a0a0a] border-0 cursor-pointer transition-all active:scale-[0.98]"
             >
-              下一步
+              {t("setupNext")}
             </button>
           </Show>
         </div>

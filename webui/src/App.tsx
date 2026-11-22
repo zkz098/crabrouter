@@ -40,6 +40,7 @@ import { NetworkPage } from "./components/NetworkPage";
 import { OtaPage } from "./components/OtaPage";
 import { OverviewPage } from "./components/OverviewPage";
 import { SetupWizard } from "./components/SetupWizard";
+import { t } from "./i18n";
 import "./theme";
 import type { RouterConfig } from "./types/RouterConfig";
 import type { SystemMetricsSnapshot } from "./types/SystemMetricsSnapshot";
@@ -200,7 +201,7 @@ export default function App() {
     <Switch
       fallback={
         <div class="min-h-screen vercel-grid-bg flex items-center justify-center bg-[#fafafa] dark:bg-black text-xs text-[#666666] dark:text-[#a1a1aa]">
-          正在连接 CrabRouter 控制面...
+          {t("connectingControlPlane")}
         </div>
       }
     >
@@ -251,9 +252,7 @@ export default function App() {
                 <div class="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 animate-toast-in">
                   <div class="flex items-center gap-2 text-xs text-amber-800 dark:text-amber-200">
                     <span class="i-ri-edit-circle-line text-sm text-amber-600 dark:text-amber-400 shrink-0" />
-                    <span>
-                      当前草稿有尚未下发的修改。点击「应用变更」将通过 Commit-Confirm 安全窗口下发。
-                    </span>
+                    <span>{t("dirtyDraftBanner")}</span>
                   </div>
                   <div class="flex gap-2">
                     <button
@@ -267,7 +266,7 @@ export default function App() {
                       }}
                       class="rounded-lg border border-[#eaeaea] dark:border-[#262626] bg-white dark:bg-[#111111] hover:bg-[#f4f4f5] dark:hover:bg-[#1a1a1a] px-3 py-1.5 text-xs font-medium text-[#171717] dark:text-[#ededed] cursor-pointer transition-all active:scale-[0.97]"
                     >
-                      放弃草稿
+                      {t("discardDraft")}
                     </button>
                     <button
                       type="button"
@@ -275,7 +274,7 @@ export default function App() {
                       onClick={() => void handleBeginCommit()}
                       class="rounded-lg bg-[#171717] hover:bg-[#383838] dark:bg-[#ededed] dark:hover:bg-[#d4d4d8] px-4 py-1.5 text-xs font-medium text-white dark:text-[#0a0a0a] border-0 cursor-pointer transition-all active:scale-[0.97] disabled:opacity-50"
                     >
-                      {busy() ? "校验并下发中..." : "应用变更 (Commit-Confirm)"}
+                      {busy() ? t("applyingChanges") : t("applyChanges")}
                     </button>
                   </div>
                 </div>

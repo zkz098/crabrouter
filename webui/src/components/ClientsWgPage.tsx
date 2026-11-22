@@ -1,6 +1,7 @@
 import QRCode from "qrcode";
 import { For, Show, createSignal } from "solid-js";
 import { generateWireGuardKeypair } from "../api";
+import { t } from "../i18n";
 import type { DhcpLeaseEntry } from "../types/DhcpLeaseEntry";
 import type { RouterConfig } from "../types/RouterConfig";
 import type { WireGuardPeer } from "../types/WireGuardPeer";
@@ -129,29 +130,25 @@ export function ClientsWgPage(props: Props) {
       <section class={SECTION_CLS}>
         <div class="mb-3.5 flex items-center justify-between gap-2">
           <h2 class="text-sm font-medium text-[#171717] dark:text-[#ededed]">
-            在线终端列表 (DHCP 租约 & ARP 邻居)
+            {t("clOnlineTitle")}
           </h2>
           <button type="button" onClick={() => props.onRefreshClients()} class={BTN_OUTLINE}>
-            刷新列表
+            {t("clRefreshList")}
           </button>
         </div>
         <Show
           when={props.clients.length > 0}
-          fallback={
-            <p class="text-xs text-[#666666] dark:text-[#a1a1aa]">
-              当前未读取到活动 DHCP 租约或 ARP 在线终端。
-            </p>
-          }
+          fallback={<p class="text-xs text-[#666666] dark:text-[#a1a1aa]">{t("clNoClients")}</p>}
         >
           <div class="overflow-x-auto">
             <table class="w-full text-left text-xs">
               <thead class="border-b border-[#eaeaea] dark:border-[#262626] text-[#666666] dark:text-[#a1a1aa]">
                 <tr>
-                  <th class="py-2 pr-4 font-medium">IP 地址</th>
-                  <th class="py-2 pr-4 font-medium">MAC 地址</th>
-                  <th class="py-2 pr-4 font-medium">主机名</th>
-                  <th class="py-2 pr-4 font-medium">绑定类型</th>
-                  <th class="py-2 text-right font-medium">操作</th>
+                  <th class="py-2 pr-4 font-medium">{t("clColIp")}</th>
+                  <th class="py-2 pr-4 font-medium">{t("clColMac")}</th>
+                  <th class="py-2 pr-4 font-medium">{t("clColHostname")}</th>
+                  <th class="py-2 pr-4 font-medium">{t("clColLeaseType")}</th>
+                  <th class="py-2 text-right font-medium">{t("clColAction")}</th>
                 </tr>
               </thead>
               <tbody class="divide-y divide-[#eaeaea] dark:divide-[#262626]">
@@ -175,7 +172,7 @@ export function ClientsWgPage(props: Props) {
                               : "border-zinc-500/20 bg-zinc-500/10 text-zinc-600 dark:text-zinc-400"
                           }`}
                         >
-                          {client.is_static ? "静态绑定" : "动态租约"}
+                          {client.is_static ? t("clStatic") : t("clDynamic")}
                         </span>
                       </td>
                       <td class="py-2.5 text-right">
@@ -191,7 +188,7 @@ export function ClientsWgPage(props: Props) {
                             }
                             class="rounded-lg border border-[#eaeaea] dark:border-[#262626] bg-white dark:bg-[#111111] hover:bg-[#f4f4f5] dark:hover:bg-[#1a1a1a] px-2.5 py-1 text-xs font-medium text-[#171717] dark:text-[#ededed] cursor-pointer transition-colors"
                           >
-                            转为静态
+                            {t("clMakeStatic")}
                           </button>
                         </Show>
                       </td>
@@ -207,13 +204,15 @@ export function ClientsWgPage(props: Props) {
       {/* DHCP Static Leases */}
       <section class={SECTION_CLS}>
         <div class="mb-3.5 flex items-center justify-between gap-2">
-          <h2 class="text-sm font-medium text-[#171717] dark:text-[#ededed]">DHCP 静态地址绑定</h2>
+          <h2 class="text-sm font-medium text-[#171717] dark:text-[#ededed]">
+            {t("clStaticLeasesTitle")}
+          </h2>
           <button
             type="button"
             onClick={() => addStaticLease("", "192.168.10.50", "")}
             class={BTN_OUTLINE}
           >
-            + 新增静态绑定
+            {t("clAddStaticLease")}
           </button>
         </div>
         <div class="space-y-2.5">
@@ -223,7 +222,7 @@ export function ClientsWgPage(props: Props) {
                 <input
                   type="text"
                   value={lease.name}
-                  placeholder="备注名"
+                  placeholder={t("clNotePlaceholder")}
                   onInput={(e) => {
                     const next = structuredClone(props.draft);
                     next.lans[0].static_leases[idx()].name = e.currentTarget.value;
@@ -256,7 +255,7 @@ export function ClientsWgPage(props: Props) {
                 <input
                   type="text"
                   value={lease.hostname ?? ""}
-                  placeholder="主机名 (可选)"
+                  placeholder={t("clHostnameOptional")}
                   onInput={(e) => {
                     const next = structuredClone(props.draft);
                     next.lans[0].static_leases[idx()].hostname = e.currentTarget.value || null;
@@ -273,7 +272,7 @@ export function ClientsWgPage(props: Props) {
                   }}
                   class={`text-right ${BTN_DELETE}`}
                 >
-                  删除
+                  {t("commonDelete")}
                 </button>
               </div>
             )}
@@ -284,16 +283,14 @@ export function ClientsWgPage(props: Props) {
       {/* WireGuard VPN */}
       <section class={SECTION_CLS}>
         <div class="mb-3.5 flex flex-wrap items-center justify-between gap-2">
-          <h2 class="text-sm font-medium text-[#171717] dark:text-[#ededed]">
-            WireGuard VPN & 客户端二维码
-          </h2>
+          <h2 class="text-sm font-medium text-[#171717] dark:text-[#ededed]">{t("clWgTitle")}</h2>
           <button
             type="button"
             disabled={busyKey()}
             onClick={() => void generatePeerWithQr()}
             class={BTN_PRIMARY}
           >
-            {busyKey() ? "生成密钥中..." : "+ 新增 Peer 并生成二维码"}
+            {busyKey() ? t("clWgGenerating") : t("clWgAddPeer")}
           </button>
         </div>
 
@@ -308,10 +305,10 @@ export function ClientsWgPage(props: Props) {
                 props.onChange(next);
               }}
             />
-            启用 WireGuard
+            {t("clWgEnable")}
           </label>
           <label class="block">
-            <span class="text-[#666666] dark:text-[#a1a1aa]">接口名</span>
+            <span class="text-[#666666] dark:text-[#a1a1aa]">{t("clWgIface")}</span>
             <input
               type="text"
               value={props.draft.wireguard.interface}
@@ -324,7 +321,7 @@ export function ClientsWgPage(props: Props) {
             />
           </label>
           <label class="block">
-            <span class="text-[#666666] dark:text-[#a1a1aa]">UDP 监听端口</span>
+            <span class="text-[#666666] dark:text-[#a1a1aa]">{t("clWgPort")}</span>
             <input
               type="number"
               value={props.draft.wireguard.listen_port}
@@ -337,7 +334,7 @@ export function ClientsWgPage(props: Props) {
             />
           </label>
           <label class="block">
-            <span class="text-[#666666] dark:text-[#a1a1aa]">隧道地址 CIDR</span>
+            <span class="text-[#666666] dark:text-[#a1a1aa]">{t("clWgCidr")}</span>
             <input
               type="text"
               value={props.draft.wireguard.address_cidr}
@@ -350,7 +347,7 @@ export function ClientsWgPage(props: Props) {
             />
           </label>
           <label class="block">
-            <span class="text-[#666666] dark:text-[#a1a1aa]">公网域名/IP (用于二维码)</span>
+            <span class="text-[#666666] dark:text-[#a1a1aa]">{t("clWgEndpoint")}</span>
             <input
               type="text"
               value={endpointHost()}
@@ -404,7 +401,7 @@ export function ClientsWgPage(props: Props) {
                   onClick={() => void showExistingPeerQr(peer)}
                   class={BTN_OUTLINE}
                 >
-                  查看二维码
+                  {t("clWgShowQr")}
                 </button>
                 <button
                   type="button"
@@ -415,7 +412,7 @@ export function ClientsWgPage(props: Props) {
                   }}
                   class={`text-right ${BTN_DELETE}`}
                 >
-                  删除
+                  {t("commonDelete")}
                 </button>
               </div>
             )}
@@ -433,14 +430,14 @@ export function ClientsWgPage(props: Props) {
               <div class="flex-1 space-y-2 min-w-56">
                 <div class="flex items-center justify-between">
                   <span class="text-xs font-medium text-[#0070f3] dark:text-sky-400">
-                    客户端配置 ({qrPeerName()})
+                    {t("clWgClientConfig")} ({qrPeerName()})
                   </span>
                   <button
                     type="button"
                     onClick={() => setQrDataUrl(null)}
                     class="text-xs text-[#666666] dark:text-[#a1a1aa] hover:text-[#171717] dark:hover:text-[#ededed] bg-transparent border-0 cursor-pointer"
                   >
-                    关闭
+                    {t("commonClose")}
                   </button>
                 </div>
                 <pre class="overflow-auto rounded-xl border border-[#eaeaea] dark:border-[#262626] bg-white dark:bg-[#000000] p-3 font-mono text-xs text-[#171717] dark:text-[#ededed]">

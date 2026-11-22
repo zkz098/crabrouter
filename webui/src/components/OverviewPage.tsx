@@ -1,4 +1,5 @@
 import { For, Show, createSignal } from "solid-js";
+import { t } from "../i18n";
 import type { ConfigSnapshotSummary } from "../types/ConfigSnapshotSummary";
 import type { CrabDnsAggregateStatus } from "../types/CrabDnsAggregateStatus";
 import type { HardwareHealthSnapshot } from "../types/HardwareHealthSnapshot";
@@ -54,7 +55,7 @@ export function OverviewPage(props: Props) {
   const previewText = () => {
     const p = props.preview;
     if (!p) {
-      return "加载中...";
+      return t("commonLoading");
     }
     switch (tab()) {
       case "nftables":
@@ -74,11 +75,11 @@ export function OverviewPage(props: Props) {
       case "systemd_link":
         return p.systemd_links.length > 0
           ? p.systemd_links.map((f) => `# === ${f.name} ===\n${f.content}`).join("\n")
-          : "# 未配置 MAC 固化规则";
+          : "# No MAC pinning rules configured";
       case "pppd":
         return p.pppd_peers.length > 0
           ? p.pppd_peers.map((f) => `# === ${f.name} ===\n${f.content}`).join("\n")
-          : "# 未配置 PPPoE WAN";
+          : "# No PPPoE WAN configured";
     }
   };
 
@@ -122,7 +123,9 @@ export function OverviewPage(props: Props) {
       <section class="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
         <div class="animate-card-enter rounded-xl border border-[#eaeaea] dark:border-[#262626] bg-white dark:bg-[#0a0a0a] p-4 sm:p-5 transition-all duration-200 hover:border-[#d4d4d8] dark:hover:border-[#404040]">
           <div class="flex items-center justify-between gap-2">
-            <span class="text-xs font-medium text-[#666666] dark:text-[#a1a1aa]">CPU 使用率</span>
+            <span class="text-xs font-medium text-[#666666] dark:text-[#a1a1aa]">
+              {t("ovCpuUsage")}
+            </span>
             <div class="w-8 h-8 rounded-lg flex items-center justify-center shrink-0 text-sky-600 dark:text-sky-400 bg-sky-500/10">
               <span class="i-ri-cpu-line text-base" />
             </div>
@@ -131,7 +134,7 @@ export function OverviewPage(props: Props) {
             {props.metrics ? `${props.metrics.cpu_usage_pct.toFixed(1)}%` : "-"}
           </div>
           <div class="mt-1 text-xs text-[#666666] dark:text-[#a1a1aa] tabular-nums">
-            1m 负载: {props.metrics ? props.metrics.load_avg_1m.toFixed(2) : "-"}
+            {t("ovLoad1m")}: {props.metrics ? props.metrics.load_avg_1m.toFixed(2) : "-"}
             {props.metrics?.temperature_celsius
               ? ` · ${props.metrics.temperature_celsius.toFixed(1)}°C`
               : ""}
@@ -143,7 +146,9 @@ export function OverviewPage(props: Props) {
           style={{ "animation-delay": "60ms" }}
         >
           <div class="flex items-center justify-between gap-2">
-            <span class="text-xs font-medium text-[#666666] dark:text-[#a1a1aa]">内存占用</span>
+            <span class="text-xs font-medium text-[#666666] dark:text-[#a1a1aa]">
+              {t("ovMemoryUsage")}
+            </span>
             <div class="w-8 h-8 rounded-lg flex items-center justify-center shrink-0 text-amber-600 dark:text-amber-400 bg-amber-500/10">
               <span class="i-ri-ram-line text-base" />
             </div>
@@ -154,7 +159,7 @@ export function OverviewPage(props: Props) {
           <div class="mt-1 text-xs text-[#666666] dark:text-[#a1a1aa] tabular-nums truncate">
             {props.metrics
               ? `${formatBytes(props.metrics.memory_used_bytes)} / ${formatBytes(props.metrics.memory_total_bytes)}`
-              : "等待遥测..."}
+              : t("ovWaitingTelemetry")}
           </div>
         </div>
 
@@ -164,7 +169,7 @@ export function OverviewPage(props: Props) {
         >
           <div class="flex items-center justify-between gap-2">
             <span class="text-xs font-medium text-[#666666] dark:text-[#a1a1aa]">
-              前台 DNS (CrabDNS)
+              {t("ovFrontendDns")}
             </span>
             <div class="w-8 h-8 rounded-lg flex items-center justify-center shrink-0 text-emerald-600 dark:text-emerald-400 bg-emerald-500/10">
               <span class="i-ri-shield-check-line text-base" />
@@ -180,13 +185,13 @@ export function OverviewPage(props: Props) {
               rel="noreferrer"
               class="rounded-lg border border-[#eaeaea] dark:border-[#262626] bg-[#fafafa] dark:bg-[#111111] hover:bg-[#f4f4f5] dark:hover:bg-[#1a1a1a] px-2 py-1 text-[11px] font-medium text-[#171717] dark:text-[#ededed] transition-colors whitespace-nowrap"
             >
-              面板 →
+              {t("ovOpenPanel")}
             </a>
           </div>
           <div class="mt-1 text-xs text-[#666666] dark:text-[#a1a1aa] truncate">
             {props.dnsStatus?.reachable
-              ? `运行正常 (127.0.0.1:${props.dnsStatus.web_port})`
-              : `后端 :${props.config.dns.crabdns_web_port} 未运行`}
+              ? `${t("ovDnsRunning")} (127.0.0.1:${props.dnsStatus.web_port})`
+              : `${t("ovDnsNotRunning")} (:${props.config.dns.crabdns_web_port})`}
           </div>
         </div>
 
@@ -196,7 +201,7 @@ export function OverviewPage(props: Props) {
         >
           <div class="flex items-center justify-between gap-2">
             <span class="text-xs font-medium text-[#666666] dark:text-[#a1a1aa]">
-              DHCP & 内网解析
+              {t("ovDhcpLocalDns")}
             </span>
             <div class="w-8 h-8 rounded-lg flex items-center justify-center shrink-0 text-violet-600 dark:text-violet-400 bg-violet-500/10">
               <span class="i-ri-server-line text-base" />
@@ -206,7 +211,8 @@ export function OverviewPage(props: Props) {
             :{props.config.dns.dnsmasq_dns_port}
           </div>
           <div class="mt-1 text-xs text-[#666666] dark:text-[#a1a1aa] tabular-nums">
-            cache-size=0 · 回滚超时 {props.config.system.commit_confirm_timeout_secs}s
+            cache-size=0 · {t("ovRollbackTimeout")}{" "}
+            {props.config.system.commit_confirm_timeout_secs}s
           </div>
         </div>
       </section>
@@ -215,7 +221,7 @@ export function OverviewPage(props: Props) {
       <section class="grid gap-4 md:grid-cols-2">
         <div class="rounded-xl border border-[#eaeaea] dark:border-[#262626] bg-white dark:bg-[#0a0a0a] p-4 sm:p-5 transition-colors hover:border-[#d4d4d8] dark:hover:border-[#3a3a3a]">
           <h2 class="mb-3.5 text-sm font-medium text-[#171717] dark:text-[#ededed]">
-            系统服务状态 (systemd D-Bus)
+            {t("ovSystemServices")}
           </h2>
           <div class="grid gap-2 sm:grid-cols-2">
             <For each={props.serviceStatuses}>
@@ -241,7 +247,7 @@ export function OverviewPage(props: Props) {
 
         <div class="rounded-xl border border-[#eaeaea] dark:border-[#262626] bg-white dark:bg-[#0a0a0a] p-4 sm:p-5 transition-colors hover:border-[#d4d4d8] dark:hover:border-[#3a3a3a]">
           <h2 class="mb-3.5 text-sm font-medium text-[#171717] dark:text-[#ededed]">
-            管理面安全与 HTTPS 设置
+            {t("ovMgmtSecurity")}
           </h2>
           <div class="grid gap-3 text-xs sm:grid-cols-2">
             <label class="flex items-center gap-2 text-[#171717] dark:text-[#ededed]">
@@ -254,7 +260,7 @@ export function OverviewPage(props: Props) {
                   props.onChangeConfig(next);
                 }}
               />
-              仅监听 LAN 管理网段与回环
+              {t("ovWebLanOnly")}
             </label>
             <label class="flex items-center gap-2 text-[#171717] dark:text-[#ededed]">
               <input
@@ -266,10 +272,10 @@ export function OverviewPage(props: Props) {
                   props.onChangeConfig(next);
                 }}
               />
-              启用 HTTPS (rustls)
+              {t("ovWebHttps")}
             </label>
             <label class="block">
-              <span class="text-[#666666] dark:text-[#a1a1aa]">HTTPS 监听地址</span>
+              <span class="text-[#666666] dark:text-[#a1a1aa]">{t("ovHttpsListen")}</span>
               <input
                 type="text"
                 value={props.config.system.web_https_listen}
@@ -282,7 +288,7 @@ export function OverviewPage(props: Props) {
               />
             </label>
             <label class="block">
-              <span class="text-[#666666] dark:text-[#a1a1aa]">Commit-Confirm 超时 (秒)</span>
+              <span class="text-[#666666] dark:text-[#a1a1aa]">{t("ovCommitTimeout")}</span>
               <input
                 type="number"
                 min={5}
@@ -305,7 +311,7 @@ export function OverviewPage(props: Props) {
       <Show when={props.wanStates.length > 0}>
         <section class="rounded-xl border border-[#eaeaea] dark:border-[#262626] bg-white dark:bg-[#0a0a0a] p-4 sm:p-5 transition-colors hover:border-[#d4d4d8] dark:hover:border-[#3a3a3a]">
           <h2 class="mb-3.5 text-sm font-medium text-[#171717] dark:text-[#ededed]">
-            WAN 实时拨号与租约状态
+            {t("ovWanStatus")}
           </h2>
           <div class="grid gap-3 md:grid-cols-2">
             <For each={props.wanStates}>
@@ -321,7 +327,9 @@ export function OverviewPage(props: Props) {
                   </div>
                   <div class="mt-2 grid grid-cols-2 gap-1 text-[#666666] dark:text-[#a1a1aa] font-mono">
                     <div>IPv4: {w.ip ?? "-"}</div>
-                    <div>网关: {w.gateway ?? "-"}</div>
+                    <div>
+                      {t("ovGateway")}: {w.gateway ?? "-"}
+                    </div>
                     <div>IPv6: {w.ipv6_addr ?? "-"}</div>
                     <div>IPv6-PD: {w.ipv6_pd_prefix ?? "-"}</div>
                   </div>
@@ -345,18 +353,18 @@ export function OverviewPage(props: Props) {
 
       <section class="rounded-xl border border-[#eaeaea] dark:border-[#262626] bg-white dark:bg-[#0a0a0a] p-4 sm:p-5 transition-colors hover:border-[#d4d4d8] dark:hover:border-[#3a3a3a]">
         <h2 class="mb-3.5 text-sm font-medium text-[#171717] dark:text-[#ededed]">
-          主机网络接口与实时速率
+          {t("ovHostInterfaces")}
         </h2>
         <div class="overflow-x-auto">
           <table class="w-full text-left text-xs">
             <thead class="border-b border-[#eaeaea] dark:border-[#262626] text-[#666666] dark:text-[#a1a1aa]">
               <tr>
-                <th class="py-2 pr-4 font-medium">接口</th>
-                <th class="py-2 pr-4 font-medium">状态</th>
+                <th class="py-2 pr-4 font-medium">{t("ovColInterface")}</th>
+                <th class="py-2 pr-4 font-medium">{t("ovColState")}</th>
                 <th class="py-2 pr-4 font-medium">MAC</th>
-                <th class="py-2 pr-4 font-medium">速率</th>
-                <th class="py-2 pr-4 font-medium">RX 实时 / 累计</th>
-                <th class="py-2 font-medium">TX 实时 / 累计</th>
+                <th class="py-2 pr-4 font-medium">{t("ovColSpeed")}</th>
+                <th class="py-2 pr-4 font-medium">{t("ovColRx")}</th>
+                <th class="py-2 font-medium">{t("ovColTx")}</th>
               </tr>
             </thead>
             <tbody class="divide-y divide-[#eaeaea] dark:divide-[#262626]">
@@ -412,7 +420,9 @@ export function OverviewPage(props: Props) {
 
       <section class="rounded-xl border border-[#eaeaea] dark:border-[#262626] bg-white dark:bg-[#0a0a0a] p-4 sm:p-5 transition-colors hover:border-[#d4d4d8] dark:hover:border-[#3a3a3a]">
         <div class="mb-3.5 flex flex-wrap items-center justify-between gap-2">
-          <h2 class="text-sm font-medium text-[#171717] dark:text-[#ededed]">下发配置实时预览</h2>
+          <h2 class="text-sm font-medium text-[#171717] dark:text-[#ededed]">
+            {t("ovConfigPreview")}
+          </h2>
           <div class="flex flex-wrap gap-1 rounded-xl border border-[#eaeaea] dark:border-[#222222] bg-[#f4f4f5] dark:bg-[#111111] p-1 text-xs">
             <For
               each={
@@ -452,13 +462,11 @@ export function OverviewPage(props: Props) {
 
       <section class="rounded-xl border border-[#eaeaea] dark:border-[#262626] bg-white dark:bg-[#0a0a0a] p-4 sm:p-5 transition-colors hover:border-[#d4d4d8] dark:hover:border-[#3a3a3a]">
         <h2 class="mb-3.5 text-sm font-medium text-[#171717] dark:text-[#ededed]">
-          配置版本快照（redb 持久化历史）
+          {t("ovConfigHistory")}
         </h2>
         <Show
           when={props.history.length > 0}
-          fallback={
-            <p class="text-xs text-[#666666] dark:text-[#a1a1aa]">暂无已确认的变更快照。</p>
-          }
+          fallback={<p class="text-xs text-[#666666] dark:text-[#a1a1aa]">{t("ovNoHistory")}</p>}
         >
           <div class="space-y-2">
             <For each={props.history}>
@@ -476,7 +484,7 @@ export function OverviewPage(props: Props) {
                     onClick={() => props.onRestoreHistory(snap.generation)}
                     class="rounded-lg border border-[#eaeaea] dark:border-[#262626] bg-white dark:bg-[#1a1a1a] hover:bg-[#f4f4f5] dark:hover:bg-[#222222] px-3 py-1 text-xs font-medium text-[#171717] dark:text-[#ededed] cursor-pointer transition-colors"
                   >
-                    回滚到此版本
+                    {t("ovRestoreSnapshot")}
                   </button>
                 </div>
               )}

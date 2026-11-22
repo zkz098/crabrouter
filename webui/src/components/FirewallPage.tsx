@@ -1,4 +1,5 @@
 import { For } from "solid-js";
+import { t } from "../i18n";
 import type { FirewallAction } from "../types/FirewallAction";
 import type { RouterConfig } from "../types/RouterConfig";
 import type { TransportProto } from "../types/TransportProto";
@@ -69,7 +70,7 @@ export function FirewallPage(props: Props) {
     <div class="space-y-5 sm:space-y-6 animate-view-enter">
       <section class={SECTION_CLS}>
         <h2 class="mb-3.5 text-sm font-medium text-[#171717] dark:text-[#ededed]">
-          全局防火墙与转发加速参数
+          {t("fwGlobalTitle")}
         </h2>
         <div class="grid gap-4 sm:grid-cols-4">
           <label class="flex items-center gap-2 text-xs text-[#171717] dark:text-[#ededed]">
@@ -82,7 +83,7 @@ export function FirewallPage(props: Props) {
                 props.onChange(next);
               }}
             />
-            启用 nftables Flowtable 加速
+            {t("fwFlowtable")}
           </label>
           <label class="flex items-center gap-2 text-xs text-[#171717] dark:text-[#ededed]">
             <input
@@ -94,7 +95,7 @@ export function FirewallPage(props: Props) {
                 props.onChange(next);
               }}
             />
-            启用 TCP MSS 钳制 (PPPoE)
+            {t("fwMssClamp")}
           </label>
           <label class="flex items-center gap-2 text-xs text-[#171717] dark:text-[#ededed]">
             <input
@@ -106,10 +107,10 @@ export function FirewallPage(props: Props) {
                 props.onChange(next);
               }}
             />
-            启用 SYN Flood 限速防护
+            {t("fwSynFlood")}
           </label>
           <label class="block text-xs">
-            <span class="text-[#666666] dark:text-[#a1a1aa]">SYN 限速 (pkt/s)</span>
+            <span class="text-[#666666] dark:text-[#a1a1aa]">{t("fwSynRate")}</span>
             <input
               type="number"
               min={1}
@@ -129,10 +130,10 @@ export function FirewallPage(props: Props) {
       <section class={SECTION_CLS}>
         <div class="mb-3.5 flex items-center justify-between gap-2">
           <h2 class="text-sm font-medium text-[#171717] dark:text-[#ededed]">
-            安全区域 (Firewall Zones)
+            {t("fwZonesTitle")}
           </h2>
           <button type="button" onClick={addZone} class={BTN_OUTLINE}>
-            + 新增 Zone
+            {t("fwAddZone")}
           </button>
         </div>
         <div class="space-y-2.5">
@@ -140,7 +141,7 @@ export function FirewallPage(props: Props) {
             {(zone, idx) => (
               <div class={`grid items-end gap-3 sm:grid-cols-7 ${ROW_CLS}`}>
                 <label class="block">
-                  <span class="text-[#666666] dark:text-[#a1a1aa]">Zone 名</span>
+                  <span class="text-[#666666] dark:text-[#a1a1aa]">{t("fwZoneName")}</span>
                   <input
                     type="text"
                     value={zone.name}
@@ -153,7 +154,7 @@ export function FirewallPage(props: Props) {
                   />
                 </label>
                 <label class="block sm:col-span-2">
-                  <span class="text-[#666666] dark:text-[#a1a1aa]">绑定接口 (逗号分隔)</span>
+                  <span class="text-[#666666] dark:text-[#a1a1aa]">{t("fwZoneIfaces")}</span>
                   <input
                     type="text"
                     value={zone.interfaces.join(", ")}
@@ -210,7 +211,7 @@ export function FirewallPage(props: Props) {
                       props.onChange(next);
                     }}
                   />
-                  NAT 伪装
+                  {t("fwNatMasq")}
                 </label>
                 <button
                   type="button"
@@ -221,7 +222,7 @@ export function FirewallPage(props: Props) {
                   }}
                   class={`pb-1.5 text-right ${BTN_DELETE}`}
                 >
-                  删除
+                  {t("commonDelete")}
                 </button>
               </div>
             )}
@@ -234,14 +235,12 @@ export function FirewallPage(props: Props) {
         <div class="mb-3.5 flex flex-wrap items-center justify-between gap-2">
           <div>
             <h2 class="text-sm font-medium text-[#171717] dark:text-[#ededed]">
-              自定义访问控制规则 (ACL)
+              {t("fwAclTitle")}
             </h2>
-            <p class="mt-0.5 text-xs text-[#666666] dark:text-[#a1a1aa]">
-              目标 Zone 为空时作用于路由器本机 Input；指定目标 Zone 时作用于 Zone 间 Forward。
-            </p>
+            <p class="mt-0.5 text-xs text-[#666666] dark:text-[#a1a1aa]">{t("fwAclDesc")}</p>
           </div>
           <button type="button" onClick={addAclRule} class={BTN_OUTLINE}>
-            + 新增 ACL 规则
+            {t("fwAddAcl")}
           </button>
         </div>
         <div class="space-y-2.5">
@@ -278,7 +277,13 @@ export function FirewallPage(props: Props) {
                   }}
                   class={INPUT_CLS}
                 >
-                  <For each={zoneNames()}>{(z) => <option value={z}>源: {z}</option>}</For>
+                  <For each={zoneNames()}>
+                    {(z) => (
+                      <option value={z}>
+                        {t("fwSrcPrefix")} {z}
+                      </option>
+                    )}
+                  </For>
                 </select>
                 <select
                   value={rule.dst_zone ?? ""}
@@ -289,8 +294,14 @@ export function FirewallPage(props: Props) {
                   }}
                   class={INPUT_CLS}
                 >
-                  <option value="">本机 (Input)</option>
-                  <For each={zoneNames()}>{(z) => <option value={z}>目标: {z}</option>}</For>
+                  <option value="">{t("fwLocalInput")}</option>
+                  <For each={zoneNames()}>
+                    {(z) => (
+                      <option value={z}>
+                        {t("fwDstPrefix")} {z}
+                      </option>
+                    )}
+                  </For>
                 </select>
                 <select
                   value={rule.proto}
@@ -310,7 +321,7 @@ export function FirewallPage(props: Props) {
                 <input
                   type="text"
                   value={rule.src_ip ?? ""}
-                  placeholder="源 IP/CIDR"
+                  placeholder={t("fwSrcIpPlaceholder")}
                   onInput={(e) => {
                     const next = structuredClone(props.draft);
                     next.firewall.rules[idx()].src_ip = e.currentTarget.value || null;
@@ -321,7 +332,7 @@ export function FirewallPage(props: Props) {
                 <input
                   type="text"
                   value={rule.dst_port ?? ""}
-                  placeholder="端口 (如 443)"
+                  placeholder={t("fwDstPortPlaceholder")}
                   onInput={(e) => {
                     const next = structuredClone(props.draft);
                     next.firewall.rules[idx()].dst_port = e.currentTarget.value || null;
@@ -338,9 +349,9 @@ export function FirewallPage(props: Props) {
                   }}
                   class={INPUT_CLS}
                 >
-                  <option value="accept">放行 (accept)</option>
-                  <option value="drop">丢弃 (drop)</option>
-                  <option value="reject">拒绝 (reject)</option>
+                  <option value="accept">{t("fwActionAccept")}</option>
+                  <option value="drop">{t("fwActionDrop")}</option>
+                  <option value="reject">{t("fwActionReject")}</option>
                 </select>
                 <button
                   type="button"
@@ -351,7 +362,7 @@ export function FirewallPage(props: Props) {
                   }}
                   class={`text-right ${BTN_DELETE}`}
                 >
-                  删除
+                  {t("commonDelete")}
                 </button>
               </div>
             )}
@@ -362,9 +373,11 @@ export function FirewallPage(props: Props) {
       {/* Port Forwarding */}
       <section class={SECTION_CLS}>
         <div class="mb-3.5 flex items-center justify-between gap-2">
-          <h2 class="text-sm font-medium text-[#171717] dark:text-[#ededed]">端口转发 (DNAT)</h2>
+          <h2 class="text-sm font-medium text-[#171717] dark:text-[#ededed]">
+            {t("fwPortFwdTitle")}
+          </h2>
           <button type="button" onClick={addPortForward} class={BTN_OUTLINE}>
-            + 新增转发
+            {t("fwAddPortFwd")}
           </button>
         </div>
         <div class="space-y-2.5">
@@ -458,7 +471,7 @@ export function FirewallPage(props: Props) {
                   }}
                   class={`text-right ${BTN_DELETE}`}
                 >
-                  删除
+                  {t("commonDelete")}
                 </button>
               </div>
             )}

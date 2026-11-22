@@ -1,4 +1,5 @@
 import { For, Show } from "solid-js";
+import { t, toggleLocale } from "../i18n";
 import { theme, toggleTheme } from "../theme";
 
 export type PageTab =
@@ -10,14 +11,14 @@ export type PageTab =
   | "ota"
   | "diagnostics";
 
-export const NAV_ITEMS: Array<{ key: PageTab; label: string; icon: string }> = [
-  { key: "overview", label: "总览", icon: "i-ri-dashboard-3-line" },
-  { key: "network", label: "网络", icon: "i-ri-node-tree" },
-  { key: "firewall", label: "防火墙", icon: "i-ri-shield-flash-line" },
-  { key: "qos_conntrack", label: "流控", icon: "i-ri-speed-up-line" },
-  { key: "clients", label: "终端", icon: "i-ri-computer-line" },
-  { key: "ota", label: "升级", icon: "i-ri-download-cloud-2-line" },
-  { key: "diagnostics", label: "诊断", icon: "i-ri-terminal-box-line" },
+export const NAV_ITEMS: Array<{ key: PageTab; label: () => string; icon: string }> = [
+  { key: "overview", label: () => t("navOverview"), icon: "i-ri-dashboard-3-line" },
+  { key: "network", label: () => t("navNetwork"), icon: "i-ri-node-tree" },
+  { key: "firewall", label: () => t("navFirewall"), icon: "i-ri-shield-flash-line" },
+  { key: "qos_conntrack", label: () => t("navQosConntrack"), icon: "i-ri-speed-up-line" },
+  { key: "clients", label: () => t("navClients"), icon: "i-ri-computer-line" },
+  { key: "ota", label: () => t("navOta"), icon: "i-ri-download-cloud-2-line" },
+  { key: "diagnostics", label: () => t("navDiagnostics"), icon: "i-ri-terminal-box-line" },
 ];
 
 interface HeaderProps {
@@ -81,30 +82,30 @@ export function Header(props: HeaderProps) {
                   }`}
                 >
                   <span class={`${item.icon} text-sm`} />
-                  <span>{item.label}</span>
+                  <span>{item.label()}</span>
                 </button>
               );
             }}
           </For>
         </nav>
 
-        {/* Right Controls: Refresh + Theme + Logout */}
-        <div class="flex items-center gap-2 shrink-0">
+        {/* Right Controls: Refresh + Theme + Language + Logout */}
+        <div class="flex items-center gap-1.5 shrink-0">
           <button
             type="button"
             onClick={() => props.onRefresh()}
-            title="刷新全部状态"
+            title={t("headerRefreshTitle")}
             class="h-8 px-2.5 rounded-lg text-xs font-medium bg-white dark:bg-[#111111] hover:bg-[#f4f4f5] dark:hover:bg-[#1a1a1a] text-[#171717] dark:text-[#ededed] border border-[#eaeaea] dark:border-[#262626] flex items-center gap-1.5 cursor-pointer transition-all duration-200 active:scale-[0.96]"
           >
             <span class="i-ri-refresh-line text-sm text-[#666666] dark:text-[#a1a1aa]" />
-            <span class="hidden lg:inline">刷新</span>
+            <span class="hidden xl:inline">{t("headerRefresh")}</span>
           </button>
 
           <button
             type="button"
             onClick={toggleTheme}
-            aria-label={theme() === "dark" ? "浅色模式" : "深色模式"}
-            title={theme() === "dark" ? "切换浅色模式" : "切换深色模式"}
+            aria-label={theme() === "dark" ? t("themeLight") : t("themeDark")}
+            title={theme() === "dark" ? t("themeLight") : t("themeDark")}
             class="h-8 px-2.5 rounded-lg text-xs font-medium bg-white dark:bg-[#111111] hover:bg-[#f4f4f5] dark:hover:bg-[#1a1a1a] text-[#171717] dark:text-[#ededed] border border-[#eaeaea] dark:border-[#262626] flex items-center gap-1.5 cursor-pointer transition-all duration-200 active:scale-[0.96]"
           >
             <span
@@ -112,17 +113,28 @@ export function Header(props: HeaderProps) {
                 theme() === "dark" ? "i-ri-sun-line text-amber-400" : "i-ri-moon-line text-zinc-700"
               }`}
             />
-            <span class="hidden xl:inline">{theme() === "dark" ? "浅色" : "深色"}</span>
+            <span class="hidden xl:inline">
+              {theme() === "dark" ? t("themeLight") : t("themeDark")}
+            </span>
+          </button>
+
+          <button
+            type="button"
+            onClick={toggleLocale}
+            class="h-8 px-2.5 rounded-lg text-xs font-medium bg-white dark:bg-[#111111] hover:bg-[#f4f4f5] dark:hover:bg-[#1a1a1a] text-[#171717] dark:text-[#ededed] border border-[#eaeaea] dark:border-[#262626] flex items-center gap-1.5 cursor-pointer transition-all duration-200 active:scale-[0.96]"
+          >
+            <span class="i-ri-translate-2 text-sm text-[#666666] dark:text-[#a1a1aa]" />
+            <span>{t("langToggle")}</span>
           </button>
 
           <button
             type="button"
             onClick={() => props.onLogout()}
-            title="退出登录"
+            title={t("logoutTitle")}
             class="h-8 px-2.5 rounded-lg text-xs font-medium bg-white dark:bg-[#111111] hover:bg-[#f4f4f5] dark:hover:bg-[#1a1a1a] text-[#171717] dark:text-[#ededed] border border-[#eaeaea] dark:border-[#262626] flex items-center gap-1.5 cursor-pointer transition-all duration-200 active:scale-[0.96]"
           >
             <span class="i-ri-logout-box-r-line text-sm text-[#666666] dark:text-[#a1a1aa]" />
-            <span class="hidden xl:inline">退出</span>
+            <span class="hidden xl:inline">{t("logout")}</span>
           </button>
         </div>
       </div>

@@ -1,4 +1,5 @@
 import { Show, createEffect, createSignal, onCleanup } from "solid-js";
+import { t } from "../i18n";
 import type { PendingCommit } from "../types/PendingCommit";
 
 interface Props {
@@ -44,17 +45,19 @@ export function CommitConfirmModal(props: Props) {
               </div>
               <div class="flex-1">
                 <h3 class="text-base font-semibold tracking-tight text-[#171717] dark:text-[#ededed]">
-                  Commit-Confirm 防失联确认 (Gen #{pending().generation})
+                  {t("commitModalTitle")} (Gen #{pending().generation})
                 </h3>
                 <p class="mt-1 text-xs leading-relaxed text-[#666666] dark:text-[#a1a1aa]">
-                  新网络与防火墙配置已生效。请确认当前管理连接正常，否则系统将在倒计时结束后自动回滚到上一份已确认配置。
+                  {t("commitModalDesc")}
                 </p>
               </div>
             </div>
 
             <div class="mt-5 rounded-xl border border-[#eaeaea] dark:border-[#262626] bg-[#fafafa] dark:bg-[#111111] p-4">
               <div class="flex items-baseline justify-between">
-                <span class="text-xs text-[#666666] dark:text-[#a1a1aa]">自动回滚剩余时间</span>
+                <span class="text-xs text-[#666666] dark:text-[#a1a1aa]">
+                  {t("commitRemainingTime")}
+                </span>
                 <span class="font-mono text-2xl font-semibold tabular-nums text-amber-600 dark:text-amber-400">
                   {remainingSecs()}s
                 </span>
@@ -74,7 +77,7 @@ export function CommitConfirmModal(props: Props) {
                 onClick={() => props.onRollback()}
                 class="rounded-lg border border-[#eaeaea] dark:border-[#262626] bg-white dark:bg-[#111111] hover:bg-[#f4f4f5] dark:hover:bg-[#1a1a1a] px-4 py-2 text-xs font-medium text-[#171717] dark:text-[#ededed] cursor-pointer transition-all active:scale-[0.97] disabled:opacity-50"
               >
-                立即回滚
+                {t("commitRollbackNow")}
               </button>
               <button
                 type="button"
@@ -82,7 +85,7 @@ export function CommitConfirmModal(props: Props) {
                 onClick={() => props.onConfirm()}
                 class="rounded-lg bg-[#171717] hover:bg-[#383838] dark:bg-[#ededed] dark:hover:bg-[#d4d4d8] px-4 py-2 text-xs font-medium text-white dark:text-[#0a0a0a] border-0 cursor-pointer transition-all active:scale-[0.97] disabled:opacity-50"
               >
-                连接正常，确认保存
+                {t("commitConfirmSave")}
               </button>
             </div>
           </div>

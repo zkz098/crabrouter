@@ -10,6 +10,7 @@ import {
   runPing,
   runTraceroute,
 } from "../api";
+import { t } from "../i18n";
 import type { DiagCommandResult } from "../types/DiagCommandResult";
 import type { HardwareHealthSnapshot } from "../types/HardwareHealthSnapshot";
 import type { HealthSeverity } from "../types/HealthSeverity";
@@ -43,11 +44,11 @@ function severityBadgeClass(s: HealthSeverity): string {
 function severityLabel(s: HealthSeverity): string {
   switch (s) {
     case "critical":
-      return "CRITICAL 严重告警";
+      return t("diagCritical");
     case "warning":
-      return "WARNING 预警";
+      return t("diagWarning");
     default:
-      return "HEALTHY 正常";
+      return t("diagHealthy");
   }
 }
 
@@ -213,7 +214,7 @@ export function DiagnosticsPage(props: Props) {
         <div class="mb-3.5 flex flex-wrap items-center justify-between gap-2">
           <div class="flex items-center gap-2.5">
             <h2 class="text-sm font-medium text-[#171717] dark:text-[#ededed]">
-              硬件健康监控与异常告警 (lm-sensors · smartctl · nvme)
+              {t("diagHwTitle")}
             </h2>
             <Show when={props.hardware}>
               {(hw) => (
@@ -224,7 +225,7 @@ export function DiagnosticsPage(props: Props) {
             </Show>
           </div>
           <button type="button" onClick={() => props.onRefreshHardware()} class={BTN_OUTLINE}>
-            刷新传感器与 SMART
+            {t("diagHwRefresh")}
           </button>
         </div>
 
@@ -256,12 +257,12 @@ export function DiagnosticsPage(props: Props) {
           {/* Thermal Sensors */}
           <div class="rounded-xl border border-[#eaeaea] dark:border-[#262626] bg-[#fafafa] dark:bg-[#111111] p-3.5">
             <div class="mb-2.5 text-xs font-medium text-[#666666] dark:text-[#a1a1aa]">
-              温度传感器 (lm-sensors / hwmon)
+              {t("diagThermalTitle")}
             </div>
             <Show
               when={(props.hardware?.sensors.length ?? 0) > 0}
               fallback={
-                <p class="text-xs text-[#8f8f8f] dark:text-[#71717a]">未检测到板载温度传感器</p>
+                <p class="text-xs text-[#8f8f8f] dark:text-[#71717a]">{t("diagNoThermal")}</p>
               }
             >
               <div class="grid gap-2 sm:grid-cols-2">
@@ -279,8 +280,12 @@ export function DiagnosticsPage(props: Props) {
                       <div class="mt-1 flex items-center justify-between font-mono text-[11px] text-[#666666] dark:text-[#a1a1aa]">
                         <span>{s.chip}</span>
                         <span>
-                          {s.high_celsius ? `高:${s.high_celsius.toFixed(0)}°C ` : ""}
-                          {s.crit_celsius ? `危:${s.crit_celsius.toFixed(0)}°C` : ""}
+                          {s.high_celsius
+                            ? `${t("diagThermalHigh")}:${s.high_celsius.toFixed(0)}°C `
+                            : ""}
+                          {s.crit_celsius
+                            ? `${t("diagThermalCrit")}:${s.crit_celsius.toFixed(0)}°C`
+                            : ""}
                         </span>
                       </div>
                     </div>
@@ -293,14 +298,12 @@ export function DiagnosticsPage(props: Props) {
           {/* NVMe / SMART SSD Health */}
           <div class="rounded-xl border border-[#eaeaea] dark:border-[#262626] bg-[#fafafa] dark:bg-[#111111] p-3.5">
             <div class="mb-2.5 text-xs font-medium text-[#666666] dark:text-[#a1a1aa]">
-              SSD / NVMe 磁盘 SMART 健康度 (smartctl / nvme-cli)
+              {t("diagSmartTitle")}
             </div>
             <Show
               when={(props.hardware?.disks.length ?? 0) > 0}
               fallback={
-                <p class="text-xs text-[#8f8f8f] dark:text-[#71717a]">
-                  未检测到支持 SMART 的物理磁盘
-                </p>
+                <p class="text-xs text-[#8f8f8f] dark:text-[#71717a]">{t("diagNoSmart")}</p>
               }
             >
               <div class="space-y-2.5">
@@ -324,7 +327,7 @@ export function DiagnosticsPage(props: Props) {
 
                       <div class="mt-2 grid grid-cols-2 gap-1.5 font-mono text-[11px] text-[#666666] dark:text-[#a1a1aa] sm:grid-cols-3">
                         <div>
-                          温度:{" "}
+                          {t("diagSmartTemp")}:{" "}
                           <span class="text-[#171717] dark:text-[#ededed]">
                             {disk.temperature_celsius !== null
                               ? `${disk.temperature_celsius.toFixed(1)}°C`
@@ -332,13 +335,13 @@ export function DiagnosticsPage(props: Props) {
                           </span>
                         </div>
                         <div>
-                          寿命磨损:{" "}
+                          {t("diagSmartWear")}:{" "}
                           <span class="text-sky-600 dark:text-sky-400">
                             {disk.percentage_used !== null ? `${disk.percentage_used}%` : "-"}
                           </span>
                         </div>
                         <div>
-                          备用块余量:{" "}
+                          {t("diagSmartSpare")}:{" "}
                           <span class="text-emerald-600 dark:text-emerald-400">
                             {disk.available_spare_pct !== null
                               ? `${disk.available_spare_pct}%`
@@ -346,19 +349,19 @@ export function DiagnosticsPage(props: Props) {
                           </span>
                         </div>
                         <div>
-                          通电时长:{" "}
+                          {t("diagSmartPowerOn")}:{" "}
                           <span class="text-[#171717] dark:text-[#ededed]">
                             {disk.power_on_hours !== null ? `${disk.power_on_hours}h` : "-"}
                           </span>
                         </div>
                         <div>
-                          异常掉电:{" "}
+                          {t("diagSmartUnsafe")}:{" "}
                           <span class="text-[#171717] dark:text-[#ededed]">
                             {disk.unsafe_shutdowns ?? "-"}
                           </span>
                         </div>
                         <div>
-                          介质错误:{" "}
+                          {t("diagSmartErrors")}:{" "}
                           <span
                             class={
                               (disk.media_errors ?? 0) > 0
@@ -384,7 +387,7 @@ export function DiagnosticsPage(props: Props) {
         <div class="mb-3.5 flex flex-wrap items-center justify-between gap-2">
           <div class="flex items-center gap-2">
             <h2 class="text-sm font-medium text-[#171717] dark:text-[#ededed]">
-              Web 交互式终端 (xterm.js + PTY WebSocket)
+              {t("diagPtyTitle")}
             </h2>
             <span
               class={`rounded-full border px-2 py-0.5 text-[11px] font-medium ${
@@ -393,11 +396,11 @@ export function DiagnosticsPage(props: Props) {
                   : "border-zinc-500/20 bg-zinc-500/10 text-zinc-600 dark:text-zinc-400"
               }`}
             >
-              {ptyConnected() ? "PTY 已连接" : "PTY 已断开"}
+              {ptyConnected() ? t("diagPtyConnected") : t("diagPtyDisconnected")}
             </span>
           </div>
           <button type="button" onClick={reconnectTerminal} class={BTN_OUTLINE}>
-            重连 PTY 会话
+            {t("diagPtyReconnect")}
           </button>
         </div>
         <div
@@ -411,13 +414,15 @@ export function DiagnosticsPage(props: Props) {
       {/* Section 3: Network Diagnostic Tools */}
       <section class="grid gap-4 md:grid-cols-3">
         <div class={SECTION_CLS}>
-          <h3 class="text-sm font-medium text-[#171717] dark:text-[#ededed]">Ping 连通性测试</h3>
+          <h3 class="text-sm font-medium text-[#171717] dark:text-[#ededed]">
+            {t("diagPingTitle")}
+          </h3>
           <div class="mt-3 space-y-2.5 text-xs">
             <input
               type="text"
               value={pingHost()}
               onInput={(e) => setPingHost(e.currentTarget.value)}
-              placeholder="IP 或域名"
+              placeholder={t("diagHostPlaceholder")}
               class={INPUT_CLS}
             />
             <div class="flex items-center gap-2">
@@ -437,7 +442,7 @@ export function DiagnosticsPage(props: Props) {
                 }
                 class={`flex-1 ${BTN_PRIMARY}`}
               >
-                执行 Ping
+                {t("diagRunPing")}
               </button>
             </div>
           </div>
@@ -445,14 +450,14 @@ export function DiagnosticsPage(props: Props) {
 
         <div class={SECTION_CLS}>
           <h3 class="text-sm font-medium text-[#171717] dark:text-[#ededed]">
-            Traceroute 路由追踪
+            {t("diagTraceTitle")}
           </h3>
           <div class="mt-3 space-y-2.5 text-xs">
             <input
               type="text"
               value={traceHost()}
               onInput={(e) => setTraceHost(e.currentTarget.value)}
-              placeholder="IP 或域名"
+              placeholder={t("diagHostPlaceholder")}
               class={INPUT_CLS}
             />
             <button
@@ -461,20 +466,22 @@ export function DiagnosticsPage(props: Props) {
               onClick={() => void execDiag(() => runTraceroute({ host: traceHost() }))}
               class={`w-full ${BTN_PRIMARY}`}
             >
-              追踪路径
+              {t("diagRunTrace")}
             </button>
           </div>
         </div>
 
         <div class={SECTION_CLS}>
-          <h3 class="text-sm font-medium text-[#171717] dark:text-[#ededed]">iperf3 吞吐量测速</h3>
+          <h3 class="text-sm font-medium text-[#171717] dark:text-[#ededed]">
+            {t("diagIperfTitle")}
+          </h3>
           <div class="mt-3 space-y-2.5 text-xs">
             <div class="flex gap-2">
               <input
                 type="text"
                 value={iperfServer()}
                 onInput={(e) => setIperfServer(e.currentTarget.value)}
-                placeholder="服务端 IP"
+                placeholder={t("diagIperfServerPlaceholder")}
                 class={`flex-1 ${INPUT_CLS}`}
               />
               <input
@@ -491,7 +498,7 @@ export function DiagnosticsPage(props: Props) {
                   checked={iperfRev()}
                   onChange={(e) => setIperfRev(e.currentTarget.checked)}
                 />
-                反向 (-R)
+                {t("diagIperfReverse")}
               </label>
               <input
                 type="number"
@@ -516,7 +523,7 @@ export function DiagnosticsPage(props: Props) {
                 }
                 class={BTN_PRIMARY}
               >
-                开始测速
+                {t("diagRunIperf")}
               </button>
             </div>
           </div>
@@ -549,7 +556,9 @@ export function DiagnosticsPage(props: Props) {
       <section class={SECTION_CLS}>
         <div class="mb-3.5 flex flex-wrap items-center justify-between gap-2">
           <div class="flex items-center gap-2">
-            <h2 class="text-sm font-medium text-[#171717] dark:text-[#ededed]">实时控制面日志流</h2>
+            <h2 class="text-sm font-medium text-[#171717] dark:text-[#ededed]">
+              {t("diagLogsTitle")}
+            </h2>
             <span
               class={`rounded-full border px-2 py-0.5 text-[11px] font-medium ${
                 wsConnected()
@@ -557,7 +566,7 @@ export function DiagnosticsPage(props: Props) {
                   : "border-zinc-500/20 bg-zinc-500/10 text-zinc-600 dark:text-zinc-400"
               }`}
             >
-              {wsConnected() ? "WS 已连接" : "WS 未连接"}
+              {wsConnected() ? t("diagWsConnected") : t("diagWsDisconnected")}
             </span>
           </div>
           <div class="flex items-center gap-2 text-xs">
@@ -566,16 +575,16 @@ export function DiagnosticsPage(props: Props) {
               onChange={(e) => setLevelFilter(e.currentTarget.value)}
               class="rounded-lg border border-[#eaeaea] dark:border-[#262626] bg-[#fafafa] dark:bg-[#000000] px-2.5 py-1.5 text-xs text-[#171717] dark:text-[#ededed] outline-none"
             >
-              <option value="ALL">全部级别</option>
+              <option value="ALL">{t("diagAllLevels")}</option>
               <option value="INFO">INFO</option>
               <option value="WARN">WARN</option>
               <option value="ERROR">ERROR</option>
             </select>
             <button type="button" onClick={() => setPaused((p) => !p)} class={BTN_OUTLINE}>
-              {paused() ? "恢复滚动" : "暂停"}
+              {paused() ? t("diagResume") : t("diagPause")}
             </button>
             <button type="button" onClick={() => setLogs([])} class={BTN_OUTLINE}>
-              清屏
+              {t("diagClear")}
             </button>
           </div>
         </div>

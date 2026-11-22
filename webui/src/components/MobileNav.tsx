@@ -35,7 +35,7 @@ export function MobileNav(props: MobileNavProps) {
                 />
                 <span class={`${item.icon} text-lg`} />
                 <span class="text-[10px] leading-none truncate max-w-full px-0.5">
-                  {item.label}
+                  {item.label()}
                 </span>
               </button>
             );

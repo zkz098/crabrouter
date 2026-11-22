@@ -6,6 +6,7 @@ import {
   rebootSystem,
   uploadOtaImage,
 } from "../api";
+import { t } from "../i18n";
 import type { OtaCommandResult } from "../types/OtaCommandResult";
 import type { OtaStatus } from "../types/OtaStatus";
 import type { RouterConfig } from "../types/RouterConfig";
@@ -75,7 +76,7 @@ export function OtaPage(props: Props) {
       setResult({
         ok: true,
         action: "upload",
-        message: `镜像 ${staged.filename} 已上传并校验 SHA256`,
+        message: t("otaUploadedMsg").replace("{name}", staged.filename),
         output: `sha256: ${staged.sha256} (${formatBytes(staged.size_bytes)})`,
         reboot_required: false,
       });
@@ -100,24 +101,24 @@ export function OtaPage(props: Props) {
         <div class={`${SECTION_CLS} animate-card-enter`}>
           <div class="flex items-center justify-between gap-2">
             <span class="text-xs font-medium text-[#666666] dark:text-[#a1a1aa]">
-              当前活跃槽位 (A/B Root)
+              {t("otaActiveSlot")}
             </span>
             <div class="w-8 h-8 rounded-lg flex items-center justify-center shrink-0 text-sky-600 dark:text-sky-400 bg-sky-500/10">
               <span class="i-ri-hard-drive-2-line text-base" />
             </div>
           </div>
           <div class="mt-2.5 font-mono text-2xl font-semibold tracking-tight text-[#171717] dark:text-[#ededed]">
-            Slot {props.otaStatus?.active_slot ?? "未知"}
+            Slot {props.otaStatus?.active_slot ?? t("otaUnknown")}
           </div>
           <div class="mt-1 text-xs text-[#666666] dark:text-[#a1a1aa]">
-            系统版本: {props.otaStatus?.current_version ?? "dev/unreleased"}
+            {t("otaSystemVersion")}: {props.otaStatus?.current_version ?? "dev/unreleased"}
           </div>
         </div>
 
         <div class={`${SECTION_CLS} animate-card-enter`} style={{ "animation-delay": "60ms" }}>
           <div class="flex items-center justify-between gap-2">
             <span class="text-xs font-medium text-[#666666] dark:text-[#a1a1aa]">
-              systemd-boot 启动评估
+              {t("otaBootAssess")}
             </span>
             <button
               type="button"
@@ -125,21 +126,19 @@ export function OtaPage(props: Props) {
               onClick={() => void runAction(() => blessOtaBoot())}
               class="rounded-lg border border-emerald-500/25 bg-emerald-500/10 hover:bg-emerald-500/20 px-2.5 py-1 text-[11px] font-medium text-emerald-700 dark:text-emerald-400 cursor-pointer transition-colors disabled:opacity-50"
             >
-              确认槽位健康
+              {t("otaBlessBoot")}
             </button>
           </div>
           <div class="mt-2.5 font-mono text-2xl font-semibold tracking-tight text-emerald-600 dark:text-emerald-400">
             {props.otaStatus?.boot_assessment ?? "-"}
           </div>
-          <div class="mt-1 text-xs text-[#666666] dark:text-[#a1a1aa]">
-            升级后连续 3 次未通过健康检查将自动回滚
-          </div>
+          <div class="mt-1 text-xs text-[#666666] dark:text-[#a1a1aa]">{t("otaBootDesc")}</div>
         </div>
 
         <div class={`${SECTION_CLS} animate-card-enter`} style={{ "animation-delay": "120ms" }}>
           <div class="flex items-center justify-between gap-2">
             <span class="text-xs font-medium text-[#666666] dark:text-[#a1a1aa]">
-              槽位切换与重启
+              {t("otaSlotSwitch")}
             </span>
             <div class="w-8 h-8 rounded-lg flex items-center justify-center shrink-0 text-amber-600 dark:text-amber-400 bg-amber-500/10">
               <span class="i-ri-restart-line text-base" />
@@ -155,7 +154,7 @@ export function OtaPage(props: Props) {
                   onClick={() => setConfirmReboot(true)}
                   class="rounded-lg border border-amber-500/30 bg-amber-500/10 hover:bg-amber-500/20 px-3 py-1.5 text-xs font-medium text-amber-700 dark:text-amber-300 cursor-pointer transition-colors disabled:opacity-50"
                 >
-                  重启并切换新槽位
+                  {t("otaRebootSwitch")}
                 </button>
               }
             >
@@ -168,27 +167,25 @@ export function OtaPage(props: Props) {
                 }}
                 class="rounded-lg bg-rose-600 hover:bg-rose-500 px-3 py-1.5 text-xs font-medium text-white border-0 cursor-pointer transition-colors"
               >
-                确认立即重启
+                {t("otaConfirmReboot")}
               </button>
               <button type="button" onClick={() => setConfirmReboot(false)} class={BTN_OUTLINE}>
-                取消
+                {t("commonCancel")}
               </button>
             </Show>
           </div>
-          <div class="mt-2 text-xs text-[#666666] dark:text-[#a1a1aa]">
-            通过 systemd-logind D-Bus 触发平滑重启
-          </div>
+          <div class="mt-2 text-xs text-[#666666] dark:text-[#a1a1aa]">{t("otaRebootDesc")}</div>
         </div>
       </section>
 
       {/* Remote OTA Feed */}
       <section class={SECTION_CLS}>
         <h2 class="mb-3.5 text-sm font-medium text-[#171717] dark:text-[#ededed]">
-          在线 OTA 拉取升级 (systemd-sysupdate)
+          {t("otaRemoteTitle")}
         </h2>
         <div class="flex flex-wrap items-end gap-3 text-xs">
           <label class="flex-1 min-w-64 block">
-            <span class="text-[#666666] dark:text-[#a1a1aa]">OTA 镜像源 URL</span>
+            <span class="text-[#666666] dark:text-[#a1a1aa]">{t("otaFeedUrl")}</span>
             <input
               type="text"
               value={sourceUrl()}
@@ -208,7 +205,7 @@ export function OtaPage(props: Props) {
               checked={verifySig()}
               onChange={(e) => setVerifySig(e.currentTarget.checked)}
             />
-            校验签名 (SHA256SUMS.gpg)
+            {t("otaVerifySig")}
           </label>
           <button
             type="button"
@@ -216,7 +213,7 @@ export function OtaPage(props: Props) {
             onClick={() => void runAction(() => checkOtaUpdates())}
             class={BTN_OUTLINE}
           >
-            检查更新
+            {t("otaCheckUpdates")}
           </button>
           <button
             type="button"
@@ -232,7 +229,7 @@ export function OtaPage(props: Props) {
             }
             class={BTN_PRIMARY}
           >
-            拉取并写入备用槽位
+            {t("otaPullApply")}
           </button>
         </div>
       </section>
@@ -242,14 +239,12 @@ export function OtaPage(props: Props) {
         <div class="mb-3.5 flex flex-wrap items-center justify-between gap-2">
           <div>
             <h2 class="text-sm font-medium text-[#171717] dark:text-[#ededed]">
-              本地上传 OTA 镜像升级
+              {t("otaLocalTitle")}
             </h2>
-            <p class="mt-0.5 text-xs text-[#666666] dark:text-[#a1a1aa]">
-              支持上传 Debian 13 `mkosi` 产出的 `.raw` / `.raw.xz` / `.efi` 固件镜像。
-            </p>
+            <p class="mt-0.5 text-xs text-[#666666] dark:text-[#a1a1aa]">{t("otaLocalDesc")}</p>
           </div>
           <label class={BTN_PRIMARY}>
-            选择固件文件上传
+            {t("otaSelectFile")}
             <input
               type="file"
               accept=".raw,.xz,.zst,.efi,.img"
@@ -262,9 +257,7 @@ export function OtaPage(props: Props) {
 
         <Show
           when={(props.otaStatus?.staged_images.length ?? 0) > 0}
-          fallback={
-            <p class="text-xs text-[#666666] dark:text-[#a1a1aa]">暂未上传本地固件镜像。</p>
-          }
+          fallback={<p class="text-xs text-[#666666] dark:text-[#a1a1aa]">{t("otaNoStaged")}</p>}
         >
           <div class="space-y-2">
             <For each={props.otaStatus?.staged_images ?? []}>
@@ -292,7 +285,7 @@ export function OtaPage(props: Props) {
                     }
                     class={BTN_PRIMARY}
                   >
-                    写入备用槽位
+                    {t("otaWriteStandby")}
                   </button>
                 </div>
               )}
@@ -316,7 +309,7 @@ export function OtaPage(props: Props) {
               </span>
               <Show when={res().reboot_required}>
                 <span class="rounded-full border border-amber-500/20 bg-amber-500/10 px-2 py-0.5 text-[11px] font-medium text-amber-700 dark:text-amber-400">
-                  需要重启生效
+                  {t("otaRebootRequired")}
                 </span>
               </Show>
             </div>
