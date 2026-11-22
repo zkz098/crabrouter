@@ -4,10 +4,11 @@ import type { FirewallConfig } from "./FirewallConfig";
 import type { InterfacePin } from "./InterfacePin";
 import type { LanConfig } from "./LanConfig";
 import type { PolicyRuleConfig } from "./PolicyRuleConfig";
+import type { QosConfig } from "./QosConfig";
 import type { StaticRouteConfig } from "./StaticRouteConfig";
 import type { SystemConfig } from "./SystemConfig";
 import type { VlanConfig } from "./VlanConfig";
 import type { WanConfig } from "./WanConfig";
 import type { WireGuardConfig } from "./WireGuardConfig";
 
-export type RouterConfig = { schema_version: number, system: SystemConfig, wans: Array<WanConfig>, lans: Array<LanConfig>, vlans: Array<VlanConfig>, interface_pins: Array<InterfacePin>, routes: Array<StaticRouteConfig>, policy_rules: Array<PolicyRuleConfig>, firewall: FirewallConfig, dns: DnsIntegrationConfig, wireguard: WireGuardConfig, };
+export type RouterConfig = { schema_version: number, system: SystemConfig, wans: Array<WanConfig>, lans: Array<LanConfig>, vlans: Array<VlanConfig>, interface_pins: Array<InterfacePin>, routes: Array<StaticRouteConfig>, policy_rules: Array<PolicyRuleConfig>, firewall: FirewallConfig, dns: DnsIntegrationConfig, wireguard: WireGuardConfig, qos: QosConfig, };

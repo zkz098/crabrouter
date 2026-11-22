@@ -14,6 +14,7 @@ import {
   getClients,
   getConfig,
   getConfigHistory,
+  getConntrack,
   getDnsStatus,
   getInterfaces,
   getOtaStatus,
@@ -29,6 +30,7 @@ import {
 } from "./api";
 import { ClientsWgPage } from "./components/ClientsWgPage";
 import { CommitConfirmModal } from "./components/CommitConfirmModal";
+import { ConntrackQosPage } from "./components/ConntrackQosPage";
 import { DiagnosticsPage } from "./components/DiagnosticsPage";
 import { FirewallPage } from "./components/FirewallPage";
 import { LoginView } from "./components/LoginView";
@@ -39,12 +41,20 @@ import { SetupWizard } from "./components/SetupWizard";
 import type { RouterConfig } from "./types/RouterConfig";
 import type { SystemMetricsSnapshot } from "./types/SystemMetricsSnapshot";
 
-type PageTab = "overview" | "network" | "firewall" | "clients" | "ota" | "diagnostics";
+type PageTab =
+  | "overview"
+  | "network"
+  | "firewall"
+  | "qos_conntrack"
+  | "clients"
+  | "ota"
+  | "diagnostics";
 
 const TABS: { id: PageTab; label: string; icon: string }[] = [
   { id: "overview", label: "总览与预览", icon: "i-ri-dashboard-line" },
   { id: "network", label: "接口 / WAN / VLAN", icon: "i-ri-node-tree" },
   { id: "firewall", label: "防火墙 / NAT", icon: "i-ri-shield-line" },
+  { id: "qos_conntrack", label: "连接追踪 / QoS", icon: "i-ri-speed-up-line" },
   { id: "clients", label: "终端 / DHCP / VPN", icon: "i-ri-device-line" },
   { id: "ota", label: "固件升级 / OTA", icon: "i-ri-download-cloud-2-line" },
   { id: "diagnostics", label: "诊断工具箱", icon: "i-ri-terminal-box-line" },
@@ -66,6 +76,7 @@ export default function App() {
   );
   const [dnsStatus, { refetch: refetchDnsStatus }] = createResource(isReady, getDnsStatus);
   const [clients, { refetch: refetchClients }] = createResource(isReady, getClients);
+  const [conntrack, { refetch: refetchConntrack }] = createResource(isReady, getConntrack);
   const [history, { refetch: refetchHistory }] = createResource(isReady, getConfigHistory);
   const [otaStatus, { refetch: refetchOta }] = createResource(isReady, getOtaStatus);
 
@@ -118,6 +129,7 @@ export default function App() {
       refetchServices(),
       refetchDnsStatus(),
       refetchClients(),
+      refetchConntrack(),
       refetchHistory(),
       refetchOta(),
     ]);
@@ -344,6 +356,14 @@ export default function App() {
                 </Match>
                 <Match when={tab() === "firewall"}>
                   <FirewallPage draft={activeDraft()} onChange={(next) => setDraft(next)} />
+                </Match>
+                <Match when={tab() === "qos_conntrack"}>
+                  <ConntrackQosPage
+                    draft={activeDraft()}
+                    entries={conntrack() ?? []}
+                    onRefresh={() => void refetchConntrack()}
+                    onChange={(next) => setDraft(next)}
+                  />
                 </Match>
                 <Match when={tab() === "clients"}>
                   <ClientsWgPage

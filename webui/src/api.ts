@@ -1,6 +1,9 @@
 import type { AuthTokenResponse } from "./types/AuthTokenResponse";
 import type { CommitStatus } from "./types/CommitStatus";
 import type { ConfigSnapshotSummary } from "./types/ConfigSnapshotSummary";
+import type { ConntrackEntry } from "./types/ConntrackEntry";
+import type { ConntrackKillRequest } from "./types/ConntrackKillRequest";
+import type { ConntrackKillResponse } from "./types/ConntrackKillResponse";
 import type { CrabDnsAggregateStatus } from "./types/CrabDnsAggregateStatus";
 import type { DhcpLeaseEntry } from "./types/DhcpLeaseEntry";
 import type { DiagCommandResult } from "./types/DiagCommandResult";
@@ -91,6 +94,18 @@ export function getWanStatus(): Promise<WanRuntimeState[]> {
 
 export function getClients(): Promise<DhcpLeaseEntry[]> {
   return fetchJson<DhcpLeaseEntry[]>("/api/clients");
+}
+
+export function getConntrack(): Promise<ConntrackEntry[]> {
+  return fetchJson<ConntrackEntry[]>("/api/conntrack");
+}
+
+export function killConntrack(req: ConntrackKillRequest): Promise<ConntrackKillResponse> {
+  return fetchJson<ConntrackKillResponse>("/api/conntrack/kill", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(req),
+  });
 }
 
 export function getConfig(): Promise<RouterConfig> {

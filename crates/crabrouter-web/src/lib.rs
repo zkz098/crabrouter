@@ -66,6 +66,8 @@ pub fn build_router(
         .route("/api/wans/status", get(api::wan_status))
         .route("/api/net/wan-event", post(api::ingest_wan_event))
         .route("/api/clients", get(api::online_clients))
+        .route("/api/conntrack", get(api::list_conntrack))
+        .route("/api/conntrack/kill", post(api::kill_conntrack))
         .route("/api/config", get(api::get_config))
         .route("/api/config/preview", get(api::preview_rendered))
         .route("/api/config/commit", post(api::begin_commit))

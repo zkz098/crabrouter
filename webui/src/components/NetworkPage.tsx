@@ -548,9 +548,7 @@ export function NetworkPage(props: Props) {
                   <input
                     type="checkbox"
                     checked={lan.ipv6_ra_enabled}
-                    onChange={(e) =>
-                      updateLan(idx(), { ipv6_ra_enabled: e.currentTarget.checked })
-                    }
+                    onChange={(e) => updateLan(idx(), { ipv6_ra_enabled: e.currentTarget.checked })}
                   />
                   启用 IPv6 RA + /64 SLAAC 下发
                 </label>

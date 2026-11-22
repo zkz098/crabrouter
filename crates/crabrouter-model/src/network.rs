@@ -189,6 +189,102 @@ pub struct WanRuntimeState {
     pub updated_at: String,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default, TS)]
+#[serde(rename_all = "snake_case")]
+#[ts(export)]
+pub enum QdiscAlgo {
+    #[default]
+    Cake,
+    FqCodel,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default, TS)]
+#[serde(rename_all = "snake_case")]
+#[ts(export)]
+pub enum CakeDiffserv {
+    #[default]
+    Diffserv4,
+    Diffserv3,
+    BestEffort,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct QosInterfaceConfig {
+    pub interface: String,
+    #[serde(default = "default_true")]
+    pub enabled: bool,
+    #[serde(default)]
+    pub algorithm: QdiscAlgo,
+    /// Egress (upload) shaping rate in Kbit/s (`0` = unlimited line-rate).
+    #[serde(default)]
+    pub upload_kbps: u32,
+    /// Ingress (download) shaping rate in Kbit/s via IFB redirect (`0` = disabled).
+    #[serde(default)]
+    pub download_kbps: u32,
+    /// Framing overhead in bytes (`18` Ethernet, `26` `PPPoE`, `44` VDSL2/FTTP).
+    #[serde(default = "default_overhead_bytes")]
+    pub overhead_bytes: i16,
+    /// Enable NAT-aware per-host fairness (`nat dual-srchost` / `nat dual-dsthost`).
+    #[serde(default = "default_true")]
+    pub nat_aware: bool,
+    /// Enable TCP ACK filtering on egress (`ack-filter`).
+    #[serde(default)]
+    pub ack_filter: bool,
+    /// Diffserv priority tin profile for CAKE.
+    #[serde(default)]
+    pub diffserv: CakeDiffserv,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default, TS)]
+#[ts(export)]
+pub struct QosConfig {
+    #[serde(default)]
+    pub enabled: bool,
+    #[serde(default)]
+    pub interfaces: Vec<QosInterfaceConfig>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct ConntrackEntry {
+    pub family: String,
+    pub proto: String,
+    pub state: String,
+    pub src: String,
+    pub dst: String,
+    pub sport: Option<u16>,
+    pub dport: Option<u16>,
+    #[ts(type = "number")]
+    pub timeout_secs: u64,
+    #[ts(type = "number")]
+    pub orig_packets: u64,
+    #[ts(type = "number")]
+    pub orig_bytes: u64,
+    #[ts(type = "number")]
+    pub reply_packets: u64,
+    #[ts(type = "number")]
+    pub reply_bytes: u64,
+    pub mark: u32,
+    pub assured: bool,
+    pub offloaded: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct ConntrackKillRequest {
+    pub family: Option<String>,
+    pub proto: String,
+    pub src: String,
+    pub dst: String,
+    pub sport: Option<u16>,
+    pub dport: Option<u16>,
+}
+
+const fn default_overhead_bytes() -> i16 {
+    18
+}
+
 const fn default_mtu() -> u16 {
     1500
 }

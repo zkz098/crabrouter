@@ -10,6 +10,7 @@ import type { WanRuntimeState } from "../types/WanRuntimeState";
 
 type PreviewTab =
   | "nftables"
+  | "tc_qos"
   | "crabdns"
   | "dnsmasq"
   | "wg_quick"
@@ -56,6 +57,8 @@ export function OverviewPage(props: Props) {
     switch (tab()) {
       case "nftables":
         return p.nftables;
+      case "tc_qos":
+        return p.tc_qos;
       case "crabdns":
         return p.crabdns;
       case "dnsmasq":
@@ -338,6 +341,7 @@ export function OverviewPage(props: Props) {
               each={
                 [
                   "nftables",
+                  "tc_qos",
                   "crabdns",
                   "dnsmasq",
                   "wg_quick",

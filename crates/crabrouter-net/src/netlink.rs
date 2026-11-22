@@ -21,6 +21,7 @@ use crate::dhcpcd::sync_dhcpcd_files;
 use crate::nftables::{apply_nft_with_precheck, render_nftables_ruleset};
 use crate::pins::sync_interface_pin_files;
 use crate::pppoe::{PppdManager, render_pppd_peer};
+use crate::qos::{apply_tc_qos, render_tc_qos_script};
 use crate::{NetError, Result};
 
 pub type BoxFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
@@ -66,6 +67,7 @@ impl NetworkBackend for DryRunNetworkBackend {
     ) -> BoxFuture<'a, Result<()>> {
         Box::pin(async move {
             let ruleset = render_nftables_ruleset(cfg);
+            let tc_script = render_tc_qos_script(cfg);
             let plan = compute_network_diff_plan(cfg, &[], &[], &[], &[]);
             let ppp_peers: Vec<String> = cfg
                 .wans
@@ -84,7 +86,8 @@ impl NetworkBackend for DryRunNetworkBackend {
                 rules_to_add = plan.rules_to_add.len(),
                 ppp_peers = ppp_peers.len(),
                 nft_bytes = ruleset.len(),
-                "dry-run: computed network diff plan and rendered nftables configuration"
+                tc_bytes = tc_script.len(),
+                "dry-run: computed network diff plan and rendered nftables/tc configuration"
             );
             Ok(())
         })
@@ -135,6 +138,8 @@ impl NetworkBackend for LinuxNetworkBackend {
             self.pppd.sync(cfg).await?;
 
             apply_nft_with_precheck(cfg).await?;
+
+            apply_tc_qos(cfg).await?;
             Ok(())
         })
     }

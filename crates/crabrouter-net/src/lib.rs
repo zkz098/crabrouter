@@ -1,3 +1,4 @@
+pub mod conntrack;
 pub mod dhcpcd;
 pub mod events;
 pub mod ipv6_pd;
@@ -5,6 +6,7 @@ pub mod netlink;
 pub mod nftables;
 pub mod pins;
 pub mod pppoe;
+pub mod qos;
 pub mod telemetry;
 
 use thiserror::Error;
@@ -19,6 +21,7 @@ pub enum NetError {
     Apply(String),
 }
 
+pub use conntrack::{kill_conntrack_flow, parse_conntrack_table, read_conntrack_table};
 pub use dhcpcd::{WanLeaseEvent, render_dhcpcd_conf, render_dhcpcd_hook_script, sync_dhcpcd_files};
 pub use events::{WanEventBus, WanStateObserver, spawn_network_event_engine};
 pub use ipv6_pd::{
@@ -37,4 +40,5 @@ pub use pins::{render_systemd_link_files, render_udev_net_rules, sync_interface_
 pub use pppoe::{
     PppdManager, render_ppp_secrets, render_pppd_hook_script, render_pppd_peer, sync_pppd_files,
 };
+pub use qos::{apply_tc_qos, render_tc_qos_script};
 pub use telemetry::read_host_interfaces;

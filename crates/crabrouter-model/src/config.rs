@@ -8,7 +8,8 @@ use ts_rs::TS;
 use crate::error::{ModelError, Result};
 use crate::firewall::FirewallConfig;
 use crate::network::{
-    InterfacePin, LanConfig, PolicyRuleConfig, StaticRouteConfig, VlanConfig, WanConfig, WanProto,
+    InterfacePin, LanConfig, PolicyRuleConfig, QosConfig, StaticRouteConfig, VlanConfig, WanConfig,
+    WanProto,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
@@ -156,6 +157,8 @@ pub struct RouterConfig {
     pub dns: DnsIntegrationConfig,
     #[serde(default)]
     pub wireguard: WireGuardConfig,
+    #[serde(default)]
+    pub qos: QosConfig,
 }
 
 impl Default for RouterConfig {
@@ -172,6 +175,7 @@ impl Default for RouterConfig {
             firewall: FirewallConfig::default(),
             dns: DnsIntegrationConfig::default(),
             wireguard: WireGuardConfig::default(),
+            qos: QosConfig::default(),
         }
     }
 }
@@ -197,6 +201,7 @@ impl RouterConfig {
         self.validate_routing()?;
         self.validate_firewall()?;
         self.validate_wireguard()?;
+        self.validate_qos()?;
         Ok(())
     }
 
@@ -521,6 +526,31 @@ impl RouterConfig {
             self.wireguard.address_cidr.parse::<IpNet>().map_err(|e| {
                 ModelError::Validation(format!("wireguard invalid address_cidr: {e}"))
             })?;
+        }
+        Ok(())
+    }
+
+    fn validate_qos(&self) -> Result<()> {
+        let mut seen = HashSet::new();
+        for item in &self.qos.interfaces {
+            let iface = item.interface.trim();
+            if iface.is_empty() || iface.len() > 15 || iface.contains(char::is_whitespace) {
+                return Err(ModelError::Validation(format!(
+                    "QoS invalid interface name '{}'",
+                    item.interface
+                )));
+            }
+            if !seen.insert(iface) {
+                return Err(ModelError::Validation(format!(
+                    "duplicate QoS configuration for interface '{iface}'"
+                )));
+            }
+            if !(-64..=256).contains(&item.overhead_bytes) {
+                return Err(ModelError::Validation(format!(
+                    "QoS interface '{iface}' overhead_bytes {} must be within -64..=256",
+                    item.overhead_bytes
+                )));
+            }
         }
         Ok(())
     }

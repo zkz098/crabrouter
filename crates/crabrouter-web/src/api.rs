@@ -8,11 +8,13 @@ use axum::http::{HeaderMap, StatusCode, header};
 use axum::response::{IntoResponse, Response};
 use crabrouter_core::{CommitStatus, ConfigSnapshotSummary, CoreError};
 use crabrouter_model::{
-    DhcpLeaseEntry, HostInterfaceSnapshot, LanConfig, RouterConfig, WanConfig, WanRuntimeState,
+    ConntrackEntry, ConntrackKillRequest, DhcpLeaseEntry, HostInterfaceSnapshot, LanConfig,
+    RouterConfig, WanConfig, WanRuntimeState,
 };
 use crabrouter_net::{
-    WanLeaseEvent, read_host_interfaces, render_dhcpcd_conf, render_nftables_ruleset,
-    render_pppd_peer, render_systemd_link_files, render_udev_net_rules,
+    WanLeaseEvent, kill_conntrack_flow, read_conntrack_table, read_host_interfaces,
+    render_dhcpcd_conf, render_nftables_ruleset, render_pppd_peer, render_systemd_link_files,
+    render_tc_qos_script, render_udev_net_rules,
 };
 use crabrouter_services::{
     SystemdUnitStatus, generate_wireguard_keypair as svc_gen_wg_keypair, read_online_clients,
@@ -43,6 +45,7 @@ pub struct RenderedFilePreview {
 #[ts(export)]
 pub struct RenderedConfigsPreview {
     pub nftables: String,
+    pub tc_qos: String,
     pub dnsmasq: String,
     pub crabdns: String,
     pub dhcpcd: String,
@@ -397,6 +400,7 @@ pub async fn preview_rendered(
 
     Ok(Json(RenderedConfigsPreview {
         nftables: render_nftables_ruleset(&cfg),
+        tc_qos: render_tc_qos_script(&cfg),
         dnsmasq: render_dnsmasq_conf(&cfg)?,
         crabdns: render_crabdns_toml(&cfg)?,
         dhcpcd: render_dhcpcd_conf(&cfg),
@@ -465,6 +469,31 @@ pub async fn online_clients(
     .await
     .map_err(|e| CoreError::Transaction(e.to_string()))?;
     Ok(Json(clients))
+}
+
+#[derive(Serialize, TS)]
+#[ts(export)]
+pub struct ConntrackKillResponse {
+    pub deleted: u32,
+}
+
+pub async fn list_conntrack(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> Result<Json<Vec<ConntrackEntry>>, ApiError> {
+    require_auth_if_initialized(&state, &headers)?;
+    let entries = read_conntrack_table(state.dry_run).await?;
+    Ok(Json(entries))
+}
+
+pub async fn kill_conntrack(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(req): Json<ConntrackKillRequest>,
+) -> Result<Json<ConntrackKillResponse>, ApiError> {
+    require_auth_if_initialized(&state, &headers)?;
+    let deleted = kill_conntrack_flow(&req, state.dry_run).await?;
+    Ok(Json(ConntrackKillResponse { deleted }))
 }
 
 pub async fn generate_wireguard_keypair(
