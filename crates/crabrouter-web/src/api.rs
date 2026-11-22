@@ -8,9 +8,9 @@ use axum::http::{HeaderMap, StatusCode, header};
 use axum::response::{IntoResponse, Response};
 use crabrouter_core::{CommitStatus, ConfigSnapshotSummary, CoreError};
 use crabrouter_model::{
-    ConntrackEntry, ConntrackKillRequest, DhcpLeaseEntry, HardwareHealthSnapshot,
-    HostInterfaceSnapshot, LanConfig, MultiWanRuntimeStatus, RouterConfig, WanConfig,
-    WanRuntimeState,
+    ConntrackEntry, ConntrackKillRequest, DhcpLeaseEntry, EbpfRuntimeStatus,
+    HardwareHealthSnapshot, HostInterfaceSnapshot, LanConfig, MultiWanRuntimeStatus, RouterConfig,
+    WanConfig, WanRuntimeState,
 };
 use crabrouter_net::{
     WanLeaseEvent, collect_hardware_health, kill_conntrack_flow, read_conntrack_table,
@@ -370,6 +370,47 @@ pub async fn multi_wan_probe_now(
     Ok(Json(state.multi_wan.run_probe_cycle().await))
 }
 
+#[derive(Deserialize, TS)]
+#[ts(export)]
+pub struct EbpfDnsEventRequest {
+    pub domain: String,
+    pub ips: Vec<String>,
+    #[serde(default = "default_dns_ttl")]
+    #[ts(type = "number")]
+    pub ttl_secs: u64,
+}
+
+const fn default_dns_ttl() -> u64 {
+    300
+}
+
+#[derive(Serialize, TS)]
+#[ts(export)]
+pub struct EbpfDnsIngestResponse {
+    pub inserted: u32,
+}
+
+pub async fn ebpf_status(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> Result<Json<EbpfRuntimeStatus>, ApiError> {
+    require_auth_if_initialized(&state, &headers)?;
+    let cfg = state.engine.active_config();
+    Ok(Json(state.ebpf.snapshot(&cfg).await))
+}
+
+pub async fn ingest_ebpf_dns_event(
+    State(state): State<AppState>,
+    Json(req): Json<EbpfDnsEventRequest>,
+) -> Result<Json<EbpfDnsIngestResponse>, ApiError> {
+    let cfg = state.engine.active_config();
+    let inserted = state
+        .ebpf
+        .ingest_dns_resolution(&cfg, &req.domain, &req.ips, req.ttl_secs)
+        .await?;
+    Ok(Json(EbpfDnsIngestResponse { inserted }))
+}
+
 pub async fn ingest_wan_event(
     State(state): State<AppState>,
     Json(event): Json<WanLeaseEvent>,
@@ -435,6 +476,10 @@ pub async fn begin_commit(
 ) -> Result<Json<CommitStatus>, ApiError> {
     require_auth_if_initialized(&state, &headers)?;
     let status = state.engine.begin_commit(next).await?;
+    let cfg = state.engine.active_config();
+    if let Err(err) = state.ebpf.sync_config(&cfg).await {
+        tracing::warn!(error = %err, "eBPF sync after commit failed");
+    }
     Ok(Json(status))
 }
 
@@ -453,6 +498,10 @@ pub async fn rollback_commit(
 ) -> Result<Json<CommitStatus>, ApiError> {
     require_auth_if_initialized(&state, &headers)?;
     let status = state.engine.rollback_pending().await?;
+    let cfg = state.engine.active_config();
+    if let Err(err) = state.ebpf.sync_config(&cfg).await {
+        tracing::warn!(error = %err, "eBPF sync after rollback failed");
+    }
     Ok(Json(status))
 }
 

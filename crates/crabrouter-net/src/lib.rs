@@ -1,5 +1,6 @@
 pub mod conntrack;
 pub mod dhcpcd;
+pub mod ebpf;
 pub mod events;
 pub mod hardware;
 pub mod ipv6_pd;
@@ -27,6 +28,7 @@ pub use conntrack::{
     flush_conntrack_for_wan, kill_conntrack_flow, parse_conntrack_table, read_conntrack_table,
 };
 pub use dhcpcd::{WanLeaseEvent, render_dhcpcd_conf, render_dhcpcd_hook_script, sync_dhcpcd_files};
+pub use ebpf::EbpfEngine;
 pub use events::{WanEventBus, WanStateObserver, spawn_network_event_engine};
 pub use hardware::{
     collect_hardware_health, evaluate_hardware_alerts, parse_nvme_smart_log_json,

@@ -9,11 +9,11 @@ use clap::Parser;
 use crabrouter_core::{ConfigStore, RouterEngine};
 use crabrouter_model::RouterConfig;
 use crabrouter_net::{
-    DryRunNetworkBackend, LinuxNetworkBackend, NetworkBackend, WanStateObserver,
+    DryRunNetworkBackend, EbpfEngine, LinuxNetworkBackend, NetworkBackend, WanStateObserver,
     spawn_multi_wan_engine, spawn_network_event_engine,
 };
 use crabrouter_services::{DryRunSupervisor, ServiceSupervisor, SystemdSupervisor};
-use crabrouter_web::{LogHub, build_router};
+use crabrouter_web::{AppState, LogHub, build_router};
 use ipnet::IpNet;
 use mimalloc::MiMalloc;
 use tokio::net::TcpListener;
@@ -116,22 +116,28 @@ async fn main() -> anyhow::Result<()> {
         wan_bus.seed_states(saved_wans).await;
     }
     let multi_wan = spawn_multi_wan_engine(observer, wan_bus.clone(), cli.dry_run);
-
     let cfg = engine.active_config();
+    let ebpf = EbpfEngine::new(cli.dry_run);
+    if let Err(err) = ebpf.sync_config(&cfg).await {
+        tracing::warn!(error = %err, "initial eBPF tc/tcx sync failed");
+    }
+
     let ota_dir = cli
         .config
         .parent()
         .filter(|p| !p.as_os_str().is_empty())
         .map_or_else(|| PathBuf::from("ota"), |p| p.join("ota"));
-    let app = build_router(
-        Arc::clone(&engine),
+    let app = build_router(AppState {
+        engine: Arc::clone(&engine),
         wan_bus,
         multi_wan,
+        ebpf,
         logs,
-        cli.leases.clone(),
+        lease_path: cli.leases.clone(),
         ota_dir,
-        cli.dry_run,
-    );
+        sysupdate_dir: PathBuf::from("/etc/sysupdate.d"),
+        dry_run: cli.dry_run,
+    });
 
     let shutdown_handle = Handle::new();
     let server_tasks = spawn_web_listeners(&cfg, &cli, &app, &shutdown_handle).await?;

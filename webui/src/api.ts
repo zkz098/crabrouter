@@ -7,6 +7,7 @@ import type { ConntrackKillResponse } from "./types/ConntrackKillResponse";
 import type { CrabDnsAggregateStatus } from "./types/CrabDnsAggregateStatus";
 import type { DhcpLeaseEntry } from "./types/DhcpLeaseEntry";
 import type { DiagCommandResult } from "./types/DiagCommandResult";
+import type { EbpfRuntimeStatus } from "./types/EbpfRuntimeStatus";
 import type { HardwareHealthSnapshot } from "./types/HardwareHealthSnapshot";
 import type { HostInterfaceSnapshot } from "./types/HostInterfaceSnapshot";
 import type { Iperf3Request } from "./types/Iperf3Request";
@@ -102,6 +103,10 @@ export function triggerMultiWanProbe(): Promise<MultiWanRuntimeStatus> {
   return fetchJson<MultiWanRuntimeStatus>("/api/wans/multi-wan/probe", {
     method: "POST",
   });
+}
+
+export function getEbpfStatus(): Promise<EbpfRuntimeStatus> {
+  return fetchJson<EbpfRuntimeStatus>("/api/ebpf/status");
 }
 
 export function getClients(): Promise<DhcpLeaseEntry[]> {

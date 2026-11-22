@@ -15,7 +15,7 @@ use axum::http::{StatusCode, Uri, header};
 use axum::response::{IntoResponse, Response};
 use axum::routing::{any, get, post};
 use crabrouter_core::RouterEngine;
-use crabrouter_net::{MultiWanManager, WanEventBus};
+use crabrouter_net::{EbpfEngine, MultiWanManager, WanEventBus};
 use rust_embed::RustEmbed;
 use tower_http::cors::CorsLayer;
 
@@ -30,6 +30,7 @@ pub struct AppState {
     pub engine: Arc<RouterEngine>,
     pub wan_bus: WanEventBus,
     pub multi_wan: MultiWanManager,
+    pub ebpf: EbpfEngine,
     pub logs: LogHub,
     pub lease_path: PathBuf,
     pub ota_dir: PathBuf,
@@ -37,26 +38,7 @@ pub struct AppState {
     pub dry_run: bool,
 }
 
-pub fn build_router(
-    engine: Arc<RouterEngine>,
-    wan_bus: WanEventBus,
-    multi_wan: MultiWanManager,
-    logs: LogHub,
-    lease_path: PathBuf,
-    ota_dir: PathBuf,
-    dry_run: bool,
-) -> Router {
-    let state = AppState {
-        engine,
-        wan_bus,
-        multi_wan,
-        logs,
-        lease_path,
-        ota_dir,
-        sysupdate_dir: PathBuf::from("/etc/sysupdate.d"),
-        dry_run,
-    };
-
+pub fn build_router(state: AppState) -> Router {
     Router::new()
         .route("/api/health", get(api::health))
         .route("/api/setup/status", get(api::setup_status_with_headers))
@@ -70,6 +52,8 @@ pub fn build_router(
         .route("/api/wans/status", get(api::wan_status))
         .route("/api/wans/multi-wan/status", get(api::multi_wan_status))
         .route("/api/wans/multi-wan/probe", post(api::multi_wan_probe_now))
+        .route("/api/ebpf/status", get(api::ebpf_status))
+        .route("/api/ebpf/dns-event", post(api::ingest_ebpf_dns_event))
         .route("/api/net/wan-event", post(api::ingest_wan_event))
         .route("/api/clients", get(api::online_clients))
         .route("/api/conntrack", get(api::list_conntrack))

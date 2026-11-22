@@ -1,5 +1,6 @@
 import { For, Show, createResource, createSignal } from "solid-js";
-import { getMultiWanStatus, triggerMultiWanProbe } from "../api";
+import { getEbpfStatus, getMultiWanStatus, triggerMultiWanProbe } from "../api";
+import type { EbpfConfig } from "../types/EbpfConfig";
 import type { HostInterfaceSnapshot } from "../types/HostInterfaceSnapshot";
 import type { InterfaceRole } from "../types/InterfaceRole";
 import type { LanConfig } from "../types/LanConfig";
@@ -23,6 +24,7 @@ export function NetworkPage(props: Props) {
   const [draggedIface, setDraggedIface] = createSignal<string | null>(null);
   const [multiWanStatus, { mutate: setMultiWanStatus, refetch: refetchMultiWan }] =
     createResource(getMultiWanStatus);
+  const [ebpfStatus, { refetch: refetchEbpf }] = createResource(getEbpfStatus);
   const [probing, setProbing] = createSignal(false);
 
   async function runProbeNow() {
@@ -38,6 +40,23 @@ export function NetworkPage(props: Props) {
   function updateMultiWan(patch: Partial<MultiWanConfig>) {
     const next = structuredClone(props.draft);
     next.multi_wan = { ...next.multi_wan, ...patch };
+    props.onChange(next);
+  }
+
+  function updateEbpf(patch: Partial<EbpfConfig>) {
+    const next = structuredClone(props.draft);
+    next.ebpf = { ...next.ebpf, ...patch };
+    props.onChange(next);
+  }
+
+  function addEbpfRule() {
+    const next = structuredClone(props.draft);
+    const maxTag = next.ebpf.domain_rules.reduce((m, r) => Math.max(m, r.tag_id), 0);
+    next.ebpf.domain_rules.push({
+      domain: "*.example.com",
+      wan_name: next.wans[0]?.name ?? "wan",
+      tag_id: maxTag + 1,
+    });
     props.onChange(next);
   }
 
@@ -767,6 +786,243 @@ export function NetworkPage(props: Props) {
                       </div>
                     )}
                   </For>
+                </div>
+              </Show>
+            </div>
+          )}
+        </Show>
+      </section>
+
+      {/* eBPF / TCX Domain Policy & Traffic Stats */}
+      <section class="rounded-xl border border-slate-800 bg-slate-900/60 p-4">
+        <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <h2 class="text-sm font-semibold text-slate-200">
+              eBPF / TCX 域名策略分流与精细化统计
+            </h2>
+            <p class="mt-0.5 text-xs text-slate-400">
+              基于 aya 加载内核 tc/tcx 分类器，将 crabdns 解析结果写入 LPM Trie 实现 skb-&gt;mark
+              分流，并通过 PerCpuHashMap 采集客户端/域名维度实时流量。
+            </p>
+          </div>
+          <div class="flex items-center gap-3">
+            <label class="flex items-center gap-2 text-xs text-slate-300">
+              <input
+                type="checkbox"
+                checked={props.draft.ebpf.enabled}
+                onChange={(e) => updateEbpf({ enabled: e.currentTarget.checked })}
+              />
+              启用 eBPF TCX
+            </label>
+            <button
+              type="button"
+              onClick={addEbpfRule}
+              class="rounded-lg border border-sky-500/40 bg-sky-500/15 px-3 py-1.5 text-xs font-medium text-sky-300 hover:bg-sky-500/25"
+            >
+              + 添加域名规则
+            </button>
+            <button
+              type="button"
+              onClick={() => void refetchEbpf()}
+              class="rounded-lg border border-slate-700 bg-slate-800 px-2.5 py-1.5 text-xs text-slate-300 hover:bg-slate-700"
+            >
+              刷新状态
+            </button>
+          </div>
+        </div>
+
+        <label class="mb-3 block text-xs">
+          <span class="text-slate-400">挂载接口 (逗号分隔，留空默认自动挂载到全部 LAN Bridge)</span>
+          <input
+            type="text"
+            value={props.draft.ebpf.attach_interfaces.join(", ")}
+            placeholder="例如: br-lan"
+            onInput={(e) =>
+              updateEbpf({
+                attach_interfaces: e.currentTarget.value
+                  .split(",")
+                  .map((s) => s.trim())
+                  .filter(Boolean),
+              })
+            }
+            class="mt-1 w-full rounded-lg border border-slate-700 bg-slate-900 px-2.5 py-1.5 font-mono text-xs"
+          />
+        </label>
+
+        <div class="mb-3 grid gap-3 rounded-lg border border-slate-800 bg-slate-950/40 p-3 sm:grid-cols-3">
+          <label class="flex items-center gap-2 text-xs text-slate-300">
+            <input
+              type="checkbox"
+              checked={props.draft.ebpf.xdp_guard_enabled}
+              onChange={(e) => updateEbpf({ xdp_guard_enabled: e.currentTarget.checked })}
+            />
+            启用 WAN 边缘 XDP 防护 (黑名单 / SYN 限速)
+          </label>
+          <label class="block text-xs">
+            <span class="text-slate-400">XDP 挂载口 (留空默认全部 WAN)</span>
+            <input
+              type="text"
+              value={props.draft.ebpf.xdp_interfaces.join(", ")}
+              placeholder="例如: eth0"
+              onInput={(e) =>
+                updateEbpf({
+                  xdp_interfaces: e.currentTarget.value
+                    .split(",")
+                    .map((s) => s.trim())
+                    .filter(Boolean),
+                })
+              }
+              class="mt-1 w-full rounded border border-slate-700 bg-slate-900 px-2 py-1 font-mono text-xs"
+            />
+          </label>
+          <label class="block text-xs">
+            <span class="text-slate-400">单源 IP SYN 限速 (pkt/s, 0=关闭)</span>
+            <input
+              type="number"
+              min="0"
+              value={props.draft.ebpf.xdp_syn_rate_limit}
+              onInput={(e) =>
+                updateEbpf({ xdp_syn_rate_limit: Math.max(0, Number(e.currentTarget.value) || 0) })
+              }
+              class="mt-1 w-full rounded border border-slate-700 bg-slate-900 px-2 py-1 font-mono text-xs"
+            />
+          </label>
+          <label class="block text-xs sm:col-span-3">
+            <span class="text-slate-400">XDP 黑名单 IPv4 / CIDR (逗号分隔，线速 XDP_DROP)</span>
+            <input
+              type="text"
+              value={props.draft.ebpf.xdp_blocklist.join(", ")}
+              placeholder="例如: 198.51.100.0/24, 203.0.113.5"
+              onInput={(e) =>
+                updateEbpf({
+                  xdp_blocklist: e.currentTarget.value
+                    .split(",")
+                    .map((s) => s.trim())
+                    .filter(Boolean),
+                })
+              }
+              class="mt-1 w-full rounded border border-slate-700 bg-slate-900 px-2 py-1 font-mono text-xs"
+            />
+          </label>
+        </div>
+
+        <div class="space-y-2">
+          <For each={props.draft.ebpf.domain_rules}>
+            {(rule, idx) => (
+              <div class="grid items-center gap-2 rounded-lg border border-slate-800 bg-slate-950/60 p-2.5 sm:grid-cols-4">
+                <input
+                  type="text"
+                  value={rule.domain}
+                  placeholder="*.example.com"
+                  onInput={(e) => {
+                    const next = structuredClone(props.draft);
+                    const item = next.ebpf.domain_rules[idx()];
+                    if (item) {
+                      item.domain = e.currentTarget.value;
+                      props.onChange(next);
+                    }
+                  }}
+                  class="rounded border border-slate-700 bg-slate-900 px-2 py-1 font-mono text-xs"
+                />
+                <select
+                  value={rule.wan_name}
+                  onChange={(e) => {
+                    const next = structuredClone(props.draft);
+                    const item = next.ebpf.domain_rules[idx()];
+                    if (item) {
+                      item.wan_name = e.currentTarget.value;
+                      props.onChange(next);
+                    }
+                  }}
+                  class="rounded border border-slate-700 bg-slate-900 px-2 py-1 text-xs"
+                >
+                  <For each={props.draft.wans}>
+                    {(wan) => <option value={wan.name}>WAN: {wan.name}</option>}
+                  </For>
+                </select>
+                <input
+                  type="number"
+                  min="1"
+                  value={rule.tag_id}
+                  onInput={(e) => {
+                    const next = structuredClone(props.draft);
+                    const item = next.ebpf.domain_rules[idx()];
+                    if (item) {
+                      item.tag_id = Math.max(1, Number(e.currentTarget.value) || 1);
+                      props.onChange(next);
+                    }
+                  }}
+                  class="rounded border border-slate-700 bg-slate-900 px-2 py-1 font-mono text-xs"
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    const next = structuredClone(props.draft);
+                    next.ebpf.domain_rules.splice(idx(), 1);
+                    props.onChange(next);
+                  }}
+                  class="rounded border border-rose-500/40 bg-rose-500/10 px-2 py-1 text-xs text-rose-300 hover:bg-rose-500/20"
+                >
+                  删除
+                </button>
+              </div>
+            )}
+          </For>
+        </div>
+
+        <Show when={ebpfStatus()}>
+          {(st) => (
+            <div class="mt-3 rounded-xl border border-slate-800 bg-slate-950/60 p-3 text-xs">
+              <div class="flex flex-wrap items-center justify-between gap-2 text-slate-400">
+                <span>
+                  挂载接口:{" "}
+                  <span class="font-mono text-slate-200">
+                    {st().attached_interfaces.length > 0
+                      ? st().attached_interfaces.join(", ")
+                      : "未挂载"}
+                  </span>
+                </span>
+                <span class="font-mono">
+                  LPM 活跃前缀数: {st().active_lpm_entries} · XDP 挂载:{" "}
+                  {st().xdp_attached_interfaces.join(", ") || "未启用"} · XDP 丢弃: 黑名单{" "}
+                  {st().xdp_blocklist_drops} / SYN {st().xdp_syn_drops}
+                </span>
+              </div>
+              <Show when={st().last_error}>
+                {(err) => <div class="mt-1 font-mono text-rose-400">错误: {err()}</div>}
+              </Show>
+              <Show when={st().stats.length > 0}>
+                <div class="mt-2 overflow-x-auto">
+                  <table class="w-full text-left font-mono text-[11px]">
+                    <thead class="text-slate-500">
+                      <tr>
+                        <th class="py-1">客户端 IP</th>
+                        <th class="py-1">Tag / 域名</th>
+                        <th class="py-1">目标 WAN</th>
+                        <th class="py-1 text-right">上行 (TX)</th>
+                        <th class="py-1 text-right">下行 (RX)</th>
+                      </tr>
+                    </thead>
+                    <tbody class="divide-y divide-slate-800/70 text-slate-300">
+                      <For each={st().stats.slice(0, 20)}>
+                        {(row) => (
+                          <tr>
+                            <td class="py-1">{row.client_ip}</td>
+                            <td class="py-1">
+                              #{row.tag_id} {row.domain_label ?? "未分类"}
+                            </td>
+                            <td class="py-1">{row.wan_name ?? "-"}</td>
+                            <td class="py-1 text-right">
+                              {row.tx_bytes} B ({row.tx_packets} pkts)
+                            </td>
+                            <td class="py-1 text-right">
+                              {row.rx_bytes} B ({row.rx_packets} pkts)
+                            </td>
+                          </tr>
+                        )}
+                      </For>
+                    </tbody>
+                  </table>
                 </div>
               </Show>
             </div>

@@ -8,8 +8,8 @@ use ts_rs::TS;
 use crate::error::{ModelError, Result};
 use crate::firewall::FirewallConfig;
 use crate::network::{
-    InterfacePin, LanConfig, MultiWanConfig, PolicyRuleConfig, QosConfig, StaticRouteConfig,
-    VlanConfig, WanConfig, WanProto,
+    EbpfConfig, InterfacePin, LanConfig, MultiWanConfig, PolicyRuleConfig, QosConfig,
+    StaticRouteConfig, VlanConfig, WanConfig, WanProto,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
@@ -161,6 +161,8 @@ pub struct RouterConfig {
     pub qos: QosConfig,
     #[serde(default)]
     pub multi_wan: MultiWanConfig,
+    #[serde(default)]
+    pub ebpf: EbpfConfig,
 }
 
 impl Default for RouterConfig {
@@ -179,6 +181,7 @@ impl Default for RouterConfig {
             wireguard: WireGuardConfig::default(),
             qos: QosConfig::default(),
             multi_wan: MultiWanConfig::default(),
+            ebpf: EbpfConfig::default(),
         }
     }
 }
@@ -206,6 +209,7 @@ impl RouterConfig {
         self.validate_wireguard()?;
         self.validate_qos()?;
         self.validate_multi_wan()?;
+        self.validate_ebpf()?;
         Ok(())
     }
 
@@ -595,6 +599,38 @@ impl RouterConfig {
                 return Err(ModelError::Validation(format!(
                     "duplicate WAN routing table_id {table_id} on '{}'",
                     wan.name
+                )));
+            }
+        }
+        Ok(())
+    }
+
+    fn validate_ebpf(&self) -> Result<()> {
+        let mut tags = HashSet::new();
+        for rule in &self.ebpf.domain_rules {
+            if rule.domain.trim().is_empty() {
+                return Err(ModelError::Validation(
+                    "ebpf domain_rule domain cannot be empty".to_string(),
+                ));
+            }
+            if rule.tag_id == 0 {
+                return Err(ModelError::Validation(format!(
+                    "ebpf domain_rule '{}' tag_id must be > 0",
+                    rule.domain
+                )));
+            }
+            if !tags.insert(rule.tag_id) {
+                return Err(ModelError::Validation(format!(
+                    "duplicate ebpf domain_rule tag_id {}",
+                    rule.tag_id
+                )));
+            }
+        }
+        for entry in &self.ebpf.xdp_blocklist {
+            let trimmed = entry.trim();
+            if trimmed.parse::<Ipv4Addr>().is_err() && trimmed.parse::<ipnet::Ipv4Net>().is_err() {
+                return Err(ModelError::Validation(format!(
+                    "ebpf.xdp_blocklist invalid IPv4/CIDR '{entry}'"
                 )));
             }
         }

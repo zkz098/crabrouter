@@ -9,6 +9,7 @@ repository.workspace = true
 workspace = true
 
 [dependencies]
+aya.workspace = true
 chrono.workspace = true
 crabrouter-model.workspace = true
 futures-util.workspace = true

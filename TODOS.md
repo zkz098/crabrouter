@@ -71,8 +71,8 @@
 - [x] **Web 终端 & 硬件监控**
   - [x] WebUI 集成 `xterm.js` + 后端 PTY WebSocket（[terminal.rs](crates/crabrouter-web/src/terminal.rs)、[DiagnosticsPage.tsx](webui/src/components/DiagnosticsPage.tsx)）
   - [x] 采集 `smartctl` / `nvme` SSD 健康度与 `lm-sensors` 温度并增加异常告警（[hardware.rs](crates/crabrouter-net/src/hardware.rs)）
-- [ ] **eBPF / XDP 进阶加速（可选）**
-  - [ ] 评估基于 `aya` 将 `crabdns` 域名分流结果写入内核 eBPF Map，实现 TC/XDP 级策略分流与精细化流量统计
+- [x] **eBPF / XDP 进阶加速（可选）**
+  - [x] 基于 `aya` + `tc`/`tcx`（`DOMAIN_POLICY_LPM` + `FLOW_STATS` `PerCpuHashMap`）与 WAN 边缘 `XDP` 防护（`XDP_BLOCKLIST_LPM` + `XDP_SYN_RATE`）实现 `crabdns` 域名分流打标、精细化流量统计与线速 `XDP_DROP` 防护（[ebpf.rs](crates/crabrouter-net/src/ebpf.rs)、[crabrouter_tcx.bpf.c](crates/crabrouter-net/ebpf/crabrouter_tcx.bpf.c)）
 
 ---
 
