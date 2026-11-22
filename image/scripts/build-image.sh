@@ -28,7 +28,7 @@ if ! command -v mkosi >/dev/null 2>&1; then
   exit 1
 fi
 
-echo "==> 2. Building Debian 13 (Trixie) UEFI appliance image with mkosi"
+echo "==> 2. Building Debian 13 (Trixie) UEFI appliance image with mkosi ($(mkosi --version))"
 (cd "$IMAGE_DIR" && mkosi --image-version="$VERSION" --force)
 
 RAW_IMG="$(find "$OUT_DIR" -maxdepth 1 -name 'crabrouter*.raw' ! -name '*.root-*' | head -n 1 || true)"
