@@ -54,7 +54,10 @@ pub use nftables::{
     render_nftables_ruleset, render_nftables_ruleset_with_multi_wan,
     render_nftables_ruleset_with_options,
 };
-pub use pins::{render_systemd_link_files, render_udev_net_rules, sync_interface_pin_files};
+pub use pins::{
+    discover_physical_nic_pins, render_systemd_link_files, render_udev_net_rules,
+    sync_interface_pin_files,
+};
 pub use pppoe::{
     PppdManager, render_ppp_secrets, render_pppd_hook_script, render_pppd_peer, sync_pppd_files,
 };

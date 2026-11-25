@@ -3,6 +3,7 @@ set -euo pipefail
 
 if [[ -n "${BUILDROOT:-}" ]]; then
   systemctl --root="$BUILDROOT" enable crabrouter-etc-overlay.service || true
+  systemctl --root="$BUILDROOT" enable crabrouter-nic-pin.service || true
   systemctl --root="$BUILDROOT" enable crabrouterd.service || true
   systemctl --root="$BUILDROOT" enable crabrouter-dhcpcd.service || true
   systemctl --root="$BUILDROOT" enable crabdns.service || true
@@ -10,4 +11,19 @@ if [[ -n "${BUILDROOT:-}" ]]; then
   systemctl --root="$BUILDROOT" enable crabrouter-boot-bless.service || true
   systemctl --root="$BUILDROOT" enable systemd-boot-check-no-failures.service || true
   systemctl --root="$BUILDROOT" enable systemd-sysupdate.timer || true
+  systemctl --root="$BUILDROOT" enable ssh.service || true
+
+  # Optional build-time SSH authorized key injection for headless physical appliance recovery.
+  if [[ -n "${CRABROUTER_SSH_AUTHORIZED_KEY:-}" ]] || [[ -n "${CRABROUTER_SSH_PUBKEY_FILE:-}" ]]; then
+    install -d -m 0700 "$BUILDROOT/root/.ssh"
+    AUTH_KEYS="$BUILDROOT/root/.ssh/authorized_keys"
+    : > "$AUTH_KEYS"
+    if [[ -n "${CRABROUTER_SSH_AUTHORIZED_KEY:-}" ]]; then
+      printf '%s\n' "$CRABROUTER_SSH_AUTHORIZED_KEY" >> "$AUTH_KEYS"
+    fi
+    if [[ -n "${CRABROUTER_SSH_PUBKEY_FILE:-}" ]] && [[ -f "$CRABROUTER_SSH_PUBKEY_FILE" ]]; then
+      cat "$CRABROUTER_SSH_PUBKEY_FILE" >> "$AUTH_KEYS"
+    fi
+    chmod 0600 "$AUTH_KEYS"
+  fi
 fi

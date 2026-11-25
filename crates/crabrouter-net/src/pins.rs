@@ -6,6 +6,43 @@ use crabrouter_model::InterfacePin;
 
 use crate::Result;
 
+/// Discovers physical Ethernet NICs from `/sys/class/net` (requiring a hardware `device` link,
+/// `type == 1` (`ARPHRD_ETHER`), and a valid non-zero MAC) and returns sorted `InterfacePin` entries.
+pub fn discover_physical_nic_pins(sys_class_net: &Path) -> Vec<InterfacePin> {
+    let Ok(entries) = fs::read_dir(sys_class_net) else {
+        return Vec::new();
+    };
+    let mut pins = Vec::new();
+    for entry in entries.flatten() {
+        let name = entry.file_name().to_string_lossy().to_string();
+        if name == "lo" {
+            continue;
+        }
+        let base = entry.path();
+        if !base.join("device").exists() {
+            continue;
+        }
+        let is_ether = fs::read_to_string(base.join("type")).is_ok_and(|s| s.trim() == "1");
+        if !is_ether {
+            continue;
+        }
+        let Some(mac) = fs::read_to_string(base.join("address"))
+            .ok()
+            .map(|s| s.trim().to_ascii_lowercase())
+            .filter(|m| is_valid_unicast_mac(m))
+        else {
+            continue;
+        };
+        pins.push(InterfacePin { mac, name });
+    }
+    pins.sort_by(|a, b| a.name.cmp(&b.name));
+    pins
+}
+
+fn is_valid_unicast_mac(mac: &str) -> bool {
+    mac.len() == 17 && mac != "00:00:00:00:00:00" && mac != "ff:ff:ff:ff:ff:ff"
+}
+
 /// Renders individual `systemd.link` unit files for MAC-pinned interface naming.
 /// Returns `(filename, content)` tuples such as `("10-crabrouter-wan0.link", ...)`.
 pub fn render_systemd_link_files(pins: &[InterfacePin]) -> Vec<(String, String)> {
@@ -104,5 +141,30 @@ mod tests {
         let udev = render_udev_net_rules(&pins);
         assert!(udev.contains("ATTR{address}==\"aa:bb:cc:dd:ee:ff\""));
         assert!(udev.contains("NAME=\"wan0\""));
+    }
+
+    #[test]
+    fn discovers_only_physical_ethernet_nics_with_valid_mac() {
+        let tmp = std::env::temp_dir().join(format!("crabrouter-pins-test-{}", std::process::id()));
+        let eth0 = tmp.join("eth0");
+        let br0 = tmp.join("br-lan");
+        let lo = tmp.join("lo");
+        fs::create_dir_all(eth0.join("device")).unwrap();
+        fs::create_dir_all(&br0).unwrap();
+        fs::create_dir_all(&lo).unwrap();
+
+        fs::write(eth0.join("type"), "1\n").unwrap();
+        fs::write(eth0.join("address"), "AA:BB:CC:DD:EE:01\n").unwrap();
+        fs::write(br0.join("type"), "1\n").unwrap();
+        fs::write(br0.join("address"), "AA:BB:CC:DD:EE:02\n").unwrap();
+        fs::write(lo.join("type"), "772\n").unwrap();
+        fs::write(lo.join("address"), "00:00:00:00:00:00\n").unwrap();
+
+        let pins = discover_physical_nic_pins(&tmp);
+        assert_eq!(pins.len(), 1);
+        assert_eq!(pins[0].name, "eth0");
+        assert_eq!(pins[0].mac, "aa:bb:cc:dd:ee:01");
+
+        let _ = fs::remove_dir_all(&tmp);
     }
 }

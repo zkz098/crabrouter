@@ -1,0 +1,13 @@
+[Unit]
+Description=Pin physical NIC names by MAC on first boot to prevent ethX drift
+After=systemd-udev-settle.service crabrouter-etc-overlay.service
+Before=crabrouterd.service
+ConditionPathExists=!/etc/udev/rules.d/70-crabrouter-net.rules
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/crabctl pin-nics --apply
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

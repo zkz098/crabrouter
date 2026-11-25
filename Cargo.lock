@@ -471,6 +471,7 @@ dependencies = [
  "anyhow",
  "clap",
  "crabrouter-core",
+ "crabrouter-model",
  "crabrouter-net",
  "crabrouter-services",
  "serde",

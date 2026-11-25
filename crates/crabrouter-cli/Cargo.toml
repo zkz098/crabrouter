@@ -12,6 +12,7 @@ workspace = true
 anyhow.workspace = true
 clap.workspace = true
 crabrouter-core.workspace = true
+crabrouter-model.workspace = true
 crabrouter-net.workspace = true
 crabrouter-services.workspace = true
 serde.workspace = true

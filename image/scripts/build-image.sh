@@ -59,6 +59,12 @@ if [[ "${BUILD_ISO:-1}" == "1" ]] && command -v xorriso >/dev/null 2>&1 && comma
     for root_part in "$OUT_DIR"/crabrouter*.root-x86-64.raw; do
       [[ -f "$root_part" ]] && cp "$root_part" "$ISO_STAGE/iso/crabrouter/"
     done
+    for uki_efi in "$OUT_DIR"/crabrouter*.efi; do
+      [[ -f "$uki_efi" ]] || continue
+      [[ "$(basename "$uki_efi")" == crabrouter-live* ]] && continue
+      cp "$uki_efi" "$ISO_STAGE/iso/crabrouter/"
+    done
+    printf '%s\n' "$VERSION" > "$ISO_STAGE/iso/crabrouter/VERSION"
     xorriso -as mkisofs \
       -R -J -V "CRABROUTER_LIVE" \
       -eltorito-alt-boot -e efiboot.img -no-emul-boot \
