@@ -262,9 +262,12 @@ async fn spawn_web_listeners(
                 tracing::info!(addr = %addr, dry_run = cli.dry_run, "HTTP WebUI listener bound");
                 let router = app.clone();
                 server_tasks.push(tokio::spawn(async move {
-                    if let Err(err) = axum::serve(listener, router)
-                        .with_graceful_shutdown(wait_for_shutdown_signal())
-                        .await
+                    if let Err(err) = axum::serve(
+                        listener,
+                        router.into_make_service_with_connect_info::<SocketAddr>(),
+                    )
+                    .with_graceful_shutdown(wait_for_shutdown_signal())
+                    .await
                     {
                         tracing::error!(error = %err, "HTTP server error");
                     }
@@ -299,7 +302,7 @@ async fn spawn_web_listeners(
             server_tasks.push(tokio::spawn(async move {
                 if let Err(err) = axum_server::tls_rustls::bind_rustls(addr, tls)
                     .handle(handle)
-                    .serve(router.into_make_service())
+                    .serve(router.into_make_service_with_connect_info::<SocketAddr>())
                     .await
                 {
                     tracing::error!(error = %err, "HTTPS server error");

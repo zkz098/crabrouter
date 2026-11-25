@@ -1,11 +1,17 @@
+mod auth;
+
+use std::net::SocketAddr;
 use std::path::Path;
 use std::time::Duration;
 
 use axum::Json;
 use axum::extract::ws::{Message, WebSocket};
-use axum::extract::{Path as AxumPath, State, WebSocketUpgrade};
+use axum::extract::{ConnectInfo, Extension, Path as AxumPath, State, WebSocketUpgrade};
 use axum::http::{HeaderMap, StatusCode, header};
 use axum::response::{IntoResponse, Response};
+
+pub use auth::{ApiError, ErrorBody, require_auth_if_initialized};
+use auth::{extract_token, require_loopback_or_auth, session_cookie_header};
 use crabrouter_core::{CommitStatus, ConfigSnapshotSummary, CoreError};
 use crabrouter_model::{
     ConntrackEntry, ConntrackKillRequest, DhcpLeaseEntry, EbpfRuntimeStatus,
@@ -124,96 +130,6 @@ pub struct DiagCommandResult {
     pub command: String,
     pub exit_code: Option<i32>,
     pub output: String,
-}
-
-#[derive(Serialize)]
-pub struct ErrorBody {
-    error: String,
-}
-
-pub struct ApiError(pub CoreError);
-
-impl From<CoreError> for ApiError {
-    fn from(err: CoreError) -> Self {
-        Self(err)
-    }
-}
-
-impl From<crabrouter_services::ServiceError> for ApiError {
-    fn from(err: crabrouter_services::ServiceError) -> Self {
-        Self(CoreError::Service(err))
-    }
-}
-
-impl From<crabrouter_net::NetError> for ApiError {
-    fn from(err: crabrouter_net::NetError) -> Self {
-        Self(CoreError::Net(err))
-    }
-}
-
-impl From<crabrouter_model::ModelError> for ApiError {
-    fn from(err: crabrouter_model::ModelError) -> Self {
-        Self(CoreError::Model(err))
-    }
-}
-
-impl IntoResponse for ApiError {
-    fn into_response(self) -> Response {
-        let code = match &self.0 {
-            CoreError::Model(_) | CoreError::Transaction(_) => StatusCode::BAD_REQUEST,
-            CoreError::Auth(_) => StatusCode::UNAUTHORIZED,
-            _ => StatusCode::INTERNAL_SERVER_ERROR,
-        };
-        (
-            code,
-            Json(ErrorBody {
-                error: self.0.to_string(),
-            }),
-        )
-            .into_response()
-    }
-}
-
-fn extract_token(headers: &HeaderMap) -> Option<String> {
-    if let Some(auth) = headers
-        .get(header::AUTHORIZATION)
-        .and_then(|v| v.to_str().ok())
-        && let Some(token) = auth.strip_prefix("Bearer ")
-    {
-        return Some(token.trim().to_string());
-    }
-    if let Some(cookie_hdr) = headers.get(header::COOKIE).and_then(|v| v.to_str().ok()) {
-        for part in cookie_hdr.split(';') {
-            let trimmed = part.trim();
-            if let Some(val) = trimmed.strip_prefix("crabrouter_session=") {
-                return Some(val.to_string());
-            }
-        }
-    }
-    None
-}
-
-pub fn require_auth_if_initialized(state: &AppState, headers: &HeaderMap) -> Result<(), ApiError> {
-    let initialized = state.engine.db().is_initialized()?;
-    if !initialized {
-        return Ok(());
-    }
-    let Some(token) = extract_token(headers) else {
-        return Err(ApiError(CoreError::Auth(
-            "authentication required".to_string(),
-        )));
-    };
-    if state.engine.db().verify_session_token(&token)? {
-        Ok(())
-    } else {
-        Err(ApiError(CoreError::Auth(
-            "invalid or expired session".to_string(),
-        )))
-    }
-}
-
-fn session_cookie_header(token: &str) -> String {
-    format!("crabrouter_session={token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=604800")
 }
 
 pub async fn health() -> Json<HealthResponse> {
@@ -420,8 +336,11 @@ pub async fn ebpf_status(
 
 pub async fn ingest_ebpf_dns_event(
     State(state): State<AppState>,
+    peer: Option<Extension<ConnectInfo<SocketAddr>>>,
+    headers: HeaderMap,
     Json(req): Json<EbpfDnsEventRequest>,
 ) -> Result<Json<EbpfDnsIngestResponse>, ApiError> {
+    require_loopback_or_auth(&state, peer, &headers)?;
     let cfg = state.engine.active_config();
     let inserted = state
         .ebpf
@@ -432,10 +351,13 @@ pub async fn ingest_ebpf_dns_event(
 
 pub async fn ingest_wan_event(
     State(state): State<AppState>,
+    peer: Option<Extension<ConnectInfo<SocketAddr>>>,
+    headers: HeaderMap,
     Json(event): Json<WanLeaseEvent>,
-) -> StatusCode {
+) -> Result<StatusCode, ApiError> {
+    require_loopback_or_auth(&state, peer, &headers)?;
     state.wan_bus.emit(event).await;
-    StatusCode::ACCEPTED
+    Ok(StatusCode::ACCEPTED)
 }
 
 pub async fn get_config(

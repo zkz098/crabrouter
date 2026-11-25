@@ -1,8 +1,10 @@
+use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::sync::Arc;
 
 use axum::Router;
 use axum::body::Body;
+use axum::extract::ConnectInfo;
 use axum::http::{Request, StatusCode, header};
 use crabrouter_core::{ConfigStore, RouterEngine};
 use crabrouter_model::{DomainPolicyRule, RouterConfig};
@@ -299,6 +301,160 @@ async fn multi_wan_ebpf_conntrack_and_status_endpoints() {
         .await
         .expect("spa");
     assert_eq!(spa_resp.status(), StatusCode::OK);
+
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+async fn req_json_from_peer(
+    app: &Router,
+    method: &str,
+    uri: &str,
+    peer: SocketAddr,
+    token: Option<&str>,
+    body: Value,
+) -> StatusCode {
+    let mut builder = Request::builder()
+        .method(method)
+        .uri(uri)
+        .header(header::CONTENT_TYPE, "application/json");
+    if let Some(tok) = token {
+        builder = builder.header(header::AUTHORIZATION, format!("Bearer {tok}"));
+    }
+    let mut req = builder
+        .body(Body::from(body.to_string()))
+        .expect("build peer request");
+    req.extensions_mut().insert(ConnectInfo(peer));
+    app.clone()
+        .oneshot(req)
+        .await
+        .expect("oneshot response")
+        .status()
+}
+
+async fn init_test_admin(app: &Router) -> String {
+    let (_, cfg) = req_json(app, "GET", "/api/config", None, None).await;
+    let init_cfg: RouterConfig = serde_json::from_value(cfg).expect("parse config");
+    let (st, init_resp) = req_json(
+        app,
+        "POST",
+        "/api/setup/init",
+        None,
+        Some(json!({
+            "admin_username": "admin",
+            "admin_password": "correct-horse-battery-staple",
+            "hostname": "lab-router",
+            "timezone": "Asia/Shanghai",
+            "wan": init_cfg.wans[0],
+            "lan": init_cfg.lans[0]
+        })),
+    )
+    .await;
+    assert_eq!(st, StatusCode::OK);
+    init_resp["token"]
+        .as_str()
+        .expect("session token")
+        .to_string()
+}
+
+#[tokio::test]
+async fn internal_callbacks_require_loopback_or_auth() {
+    let (app, dir) = setup_test_app().await;
+
+    let wan_payload = json!({
+        "source": "dhcpcd",
+        "wan_name": "wan",
+        "device": "eth0",
+        "event": "BOUND",
+        "ip": "203.0.113.10",
+        "gateway": "203.0.113.1",
+        "dns_servers": []
+    });
+    let dns_payload = json!({
+        "domain": "api.openai.com",
+        "ips": ["104.18.7.192"],
+        "ttl_secs": 300
+    });
+
+    let lan_peer: SocketAddr = "192.168.10.50:54321".parse().expect("lan peer");
+    let loopback_v4: SocketAddr = "127.0.0.1:54321".parse().expect("loopback v4");
+    let loopback_v6: SocketAddr = "[::1]:54321".parse().expect("loopback v6");
+
+    assert_eq!(
+        req_json_from_peer(
+            &app,
+            "POST",
+            "/api/net/wan-event",
+            lan_peer,
+            None,
+            wan_payload.clone()
+        )
+        .await,
+        StatusCode::UNAUTHORIZED
+    );
+    assert_eq!(
+        req_json_from_peer(
+            &app,
+            "POST",
+            "/api/ebpf/dns-event",
+            lan_peer,
+            None,
+            dns_payload.clone()
+        )
+        .await,
+        StatusCode::UNAUTHORIZED
+    );
+
+    let token = init_test_admin(&app).await;
+
+    assert_eq!(
+        req_json_from_peer(
+            &app,
+            "POST",
+            "/api/net/wan-event",
+            loopback_v4,
+            None,
+            wan_payload.clone()
+        )
+        .await,
+        StatusCode::ACCEPTED
+    );
+    assert_eq!(
+        req_json_from_peer(
+            &app,
+            "POST",
+            "/api/ebpf/dns-event",
+            loopback_v6,
+            None,
+            dns_payload.clone()
+        )
+        .await,
+        StatusCode::OK
+    );
+
+    assert_eq!(
+        req_json_from_peer(
+            &app,
+            "POST",
+            "/api/net/wan-event",
+            lan_peer,
+            Some(&token),
+            wan_payload
+        )
+        .await,
+        StatusCode::ACCEPTED
+    );
+    assert_eq!(
+        req_json_from_peer(
+            &app,
+            "POST",
+            "/api/ebpf/dns-event",
+            lan_peer,
+            Some(&token),
+            dns_payload
+        )
+        .await,
+        StatusCode::OK
+    );
 
     let _ = std::fs::remove_dir_all(&dir);
 }
