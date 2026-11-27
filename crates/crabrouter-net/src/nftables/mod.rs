@@ -1,5 +1,11 @@
+mod extensions;
 #[cfg(test)]
 mod tests;
+
+use extensions::{
+    write_crowdsec_drop_rules, write_crowdsec_sets, write_iptv_forward_rules,
+    write_iptv_input_rules, write_mdns_input_rules,
+};
 
 use std::collections::HashSet;
 use std::fmt::Write;
@@ -81,6 +87,7 @@ pub fn render_nftables_ruleset_with_multi_wan<S: std::hash::BuildHasher>(
     }
 
     let has_flowtable = !flowtable_devices.is_empty();
+    write_crowdsec_sets(&mut out, cfg);
     write_input_chain(&mut out, cfg);
     write_forward_chain(&mut out, cfg, has_flowtable);
     write_mangle_prerouting_chain(&mut out, cfg, active_wans);
@@ -203,6 +210,9 @@ fn write_input_chain(out: &mut String, cfg: &RouterConfig) {
          \x20       ip6 daddr fe80::/10 udp sport 547 udp dport 546 accept comment \"dhcpv6-client\"\n",
     );
     write_syn_flood_guard(out, cfg, "input");
+    write_crowdsec_drop_rules(out, cfg);
+    write_mdns_input_rules(out, cfg);
+    write_iptv_input_rules(out, cfg);
     if cfg.upnp.enabled && !cfg.lans.is_empty() {
         let lan_ifaces = upnp_lan_ifaces(cfg);
         if !lan_ifaces.is_empty() {
@@ -244,6 +254,8 @@ fn write_forward_chain(out: &mut String, cfg: &RouterConfig, has_flowtable: bool
          \x20       ct state invalid drop\n",
     );
     write_syn_flood_guard(out, cfg, "forward");
+    write_crowdsec_drop_rules(out, cfg);
+    write_iptv_forward_rules(out, cfg);
     if cfg.lans.iter().any(|l| l.ipv6_mode == Ipv6LanMode::Relay) {
         out.push_str("        meta l4proto ipv6-icmp accept comment \"ipv6-relay-ndp\"\n");
     }

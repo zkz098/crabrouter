@@ -121,6 +121,25 @@ impl EbpfEngine {
         Ok(())
     }
 
+    /// Merges extra dynamic blocklist CIDRs (e.g. from `CrowdSec`) with `base_blocklist` in XDP maps.
+    pub async fn sync_extra_xdp_blocklist(
+        &self,
+        base_blocklist: &[String],
+        extra_cidrs: &[String],
+    ) -> Result<()> {
+        if self.dry_run {
+            return Ok(());
+        }
+        let mut guard = self.inner.lock().await;
+        let Some(bpf) = guard.bpf.as_mut() else {
+            return Ok(());
+        };
+        let mut merged = Vec::with_capacity(base_blocklist.len() + extra_cidrs.len());
+        merged.extend(base_blocklist.iter().cloned());
+        merged.extend(extra_cidrs.iter().cloned());
+        populate_xdp_blocklist_maps(bpf, &merged)
+    }
+
     /// Matches a resolved domain against `cfg.ebpf.domain_rules` and inserts IPv4 `/32`
     /// and IPv6 `/128` policy entries into `DOMAIN_POLICY_LPM` / `DOMAIN_POLICY_LPM_V6`.
     pub async fn ingest_dns_resolution(
@@ -469,14 +488,7 @@ pub fn resolve_xdp_interfaces(cfg: &RouterConfig) -> Vec<String> {
     cfg.wans.iter().map(|w| w.device.clone()).collect()
 }
 
-fn sync_xdp_guard(bpf: &mut Ebpf, cfg: &RouterConfig, ifaces: &[String]) -> Result<Vec<String>> {
-    if let Some(map) = bpf.map_mut("XDP_SYN_LIMIT_CFG") {
-        let mut arr = Array::<_, u32>::try_from(map)
-            .map_err(|e| NetError::Apply(format!("XDP_SYN_LIMIT_CFG open failed: {e}")))?;
-        arr.set(0, &cfg.ebpf.xdp_syn_rate_limit, 0)
-            .map_err(|e| NetError::Apply(format!("XDP_SYN_LIMIT_CFG set failed: {e}")))?;
-    }
-
+fn populate_xdp_blocklist_maps(bpf: &mut Ebpf, entries: &[String]) -> Result<()> {
     if let Some(map) = bpf.map_mut("XDP_BLOCKLIST_LPM") {
         let mut trie = LpmTrie::<_, u32, u64>::try_from(map)
             .map_err(|e| NetError::Apply(format!("XDP_BLOCKLIST_LPM open failed: {e}")))?;
@@ -484,7 +496,7 @@ fn sync_xdp_guard(bpf: &mut Ebpf, cfg: &RouterConfig, ifaces: &[String]) -> Resu
         for k in existing_keys {
             let _ = trie.remove(&k);
         }
-        for raw in &cfg.ebpf.xdp_blocklist {
+        for raw in entries {
             let trimmed = raw.trim();
             if let Ok(net) = trimmed.parse::<Ipv4Net>() {
                 let key = LpmKey::new(u32::from(net.prefix_len()), u32::from(net.addr()).to_be());
@@ -503,7 +515,7 @@ fn sync_xdp_guard(bpf: &mut Ebpf, cfg: &RouterConfig, ifaces: &[String]) -> Resu
         for k in existing_keys {
             let _ = trie.remove(&k);
         }
-        for raw in &cfg.ebpf.xdp_blocklist {
+        for raw in entries {
             let trimmed = raw.trim();
             if let Ok(net) = trimmed.parse::<Ipv6Net>() {
                 let key = LpmKey::new(u32::from(net.prefix_len()), net.addr().octets());
@@ -514,6 +526,18 @@ fn sync_xdp_guard(bpf: &mut Ebpf, cfg: &RouterConfig, ifaces: &[String]) -> Resu
             }
         }
     }
+    Ok(())
+}
+
+fn sync_xdp_guard(bpf: &mut Ebpf, cfg: &RouterConfig, ifaces: &[String]) -> Result<Vec<String>> {
+    if let Some(map) = bpf.map_mut("XDP_SYN_LIMIT_CFG") {
+        let mut arr = Array::<_, u32>::try_from(map)
+            .map_err(|e| NetError::Apply(format!("XDP_SYN_LIMIT_CFG open failed: {e}")))?;
+        arr.set(0, &cfg.ebpf.xdp_syn_rate_limit, 0)
+            .map_err(|e| NetError::Apply(format!("XDP_SYN_LIMIT_CFG set failed: {e}")))?;
+    }
+
+    populate_xdp_blocklist_maps(bpf, &cfg.ebpf.xdp_blocklist)?;
 
     let xdp: &mut Xdp = bpf
         .program_mut("crabrouter_xdp_wan_guard")

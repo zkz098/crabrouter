@@ -5,6 +5,7 @@ import type { ConntrackEntry } from "./types/ConntrackEntry";
 import type { ConntrackKillRequest } from "./types/ConntrackKillRequest";
 import type { ConntrackKillResponse } from "./types/ConntrackKillResponse";
 import type { CrabDnsAggregateStatus } from "./types/CrabDnsAggregateStatus";
+import type { CrowdSecStatus } from "./types/CrowdSecStatus";
 import type { DdnsRuntimeStatus } from "./types/DdnsRuntimeStatus";
 import type { DhcpLeaseEntry } from "./types/DhcpLeaseEntry";
 import type { DiagCommandResult } from "./types/DiagCommandResult";
@@ -133,6 +134,14 @@ export function getTlsStatus(): Promise<TlsRuntimeStatus> {
 
 export function triggerTlsRenew(): Promise<TlsRuntimeStatus> {
   return fetchJson<TlsRuntimeStatus>("/api/tls/renew", { method: "POST" });
+}
+
+export function getCrowdSecStatus(): Promise<CrowdSecStatus> {
+  return fetchJson<CrowdSecStatus>("/api/crowdsec/status");
+}
+
+export function triggerCrowdSecSync(): Promise<CrowdSecStatus> {
+  return fetchJson<CrowdSecStatus>("/api/crowdsec/sync", { method: "POST" });
 }
 
 export function getClients(): Promise<DhcpLeaseEntry[]> {

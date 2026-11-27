@@ -2,9 +2,12 @@ pub mod acme;
 pub mod cmd;
 pub mod containers;
 pub mod crabdns;
+pub mod crowdsec;
 pub mod ddns;
 pub mod dnsmasq;
+pub mod iptv;
 pub mod ipv6_relay;
+pub mod mdns;
 pub mod ota;
 pub mod supervisor;
 pub mod upnp;
@@ -33,9 +36,12 @@ pub use containers::dry_run::DryRunContainerBackend;
 pub use containers::socket::SocketContainerBackend;
 pub use containers::{ContainerAction, ContainerBackend};
 pub use crabdns::render_crabdns_toml;
+pub use crowdsec::{CrowdSecManager, render_crowdsec_acquis_yaml, render_crowdsec_bouncer_conf};
 pub use ddns::{DdnsManager, spawn_ddns_engine, spawn_ddns_engine_with_shutdown};
 pub use dnsmasq::{read_online_clients, render_dnsmasq_conf};
+pub use iptv::{render_igmpproxy_conf, render_udpxy_env};
 pub use ipv6_relay::{has_ipv6_relay_enabled, render_ndppd_conf};
+pub use mdns::render_avahi_daemon_conf;
 pub use ota::{
     OtaCommandResult, OtaStatus, StagedOtaImage, apply_ota_update, auto_bless_if_tentative,
     bless_current_boot, check_ota_updates, compute_file_sha256, query_ota_status,

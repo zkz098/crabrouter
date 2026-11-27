@@ -1,9 +1,11 @@
 pub mod bond;
 pub mod config;
 pub mod container;
+pub mod crowdsec;
 pub mod ebpf;
 pub mod error;
 pub mod firewall;
+pub mod multicast;
 pub mod network;
 pub mod nic_tuning;
 pub mod upnp;
@@ -18,11 +20,13 @@ pub use container::{
     ContainerNetworkSummary, ContainerPortBinding, ContainerRuntimeInfo, ContainerRuntimeKind,
     ContainerSummary, ContainerVolumeSummary,
 };
+pub use crowdsec::{CrowdSecConfig, CrowdSecDecision, CrowdSecStatus};
 pub use ebpf::{DomainPolicyRule, EbpfConfig, EbpfRuntimeStatus, EbpfTrafficStat};
 pub use error::{ModelError, Result};
 pub use firewall::{
     FirewallAction, FirewallConfig, FirewallRule, FirewallZone, PortForwardRule, TransportProto,
 };
+pub use multicast::{IptvConfig, MdnsConfig};
 pub use network::{
     AcmeChallengeType, AcmeConfig, CakeDiffserv, ConntrackEntry, ConntrackKillRequest, DdnsConfig,
     DdnsProvider, DdnsRuntimeStatus, DhcpLeaseEntry, DhcpStaticLease, DiskHealthReport,

@@ -21,8 +21,10 @@ import type { DdnsProvider } from "../types/DdnsProvider";
 import type { EbpfConfig } from "../types/EbpfConfig";
 import type { HostInterfaceSnapshot } from "../types/HostInterfaceSnapshot";
 import type { InterfaceRole } from "../types/InterfaceRole";
+import type { IptvConfig } from "../types/IptvConfig";
 import type { Ipv6LanMode } from "../types/Ipv6LanMode";
 import type { LanConfig } from "../types/LanConfig";
+import type { MdnsConfig } from "../types/MdnsConfig";
 import type { MultiWanConfig } from "../types/MultiWanConfig";
 import type { MultiWanMode } from "../types/MultiWanMode";
 import type { ProbeProtocol } from "../types/ProbeProtocol";
@@ -79,6 +81,18 @@ export function NetworkPage(props: Props) {
   function updateAcme(patch: Partial<AcmeConfig>) {
     const next = structuredClone(props.draft);
     next.acme = { ...next.acme, ...patch };
+    props.onChange(next);
+  }
+
+  function updateMdns(patch: Partial<MdnsConfig>) {
+    const next = structuredClone(props.draft);
+    next.mdns = { ...next.mdns, ...patch };
+    props.onChange(next);
+  }
+
+  function updateIptv(patch: Partial<IptvConfig>) {
+    const next = structuredClone(props.draft);
+    next.iptv = { ...next.iptv, ...patch };
     props.onChange(next);
   }
 
@@ -1963,6 +1977,184 @@ export function NetworkPage(props: Props) {
             </For>
           </div>
         </div>
+      </section>
+
+      <section class="rounded-xl border border-[#eaeaea] dark:border-[#262626] bg-white dark:bg-[#0a0a0a] p-4 sm:p-5 space-y-4">
+        <div class="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <h2 class="text-sm font-medium text-[#171717] dark:text-[#ededed]">
+              跨 VLAN 组播发现 (mDNS / Bonjour)
+            </h2>
+            <p class="mt-0.5 text-xs text-[#666666] dark:text-[#a1a1aa]">
+              通过 Avahi 反射器跨网段转发 AirPlay、Chromecast 与局域网打印机发现报文 (UDP 5353)
+            </p>
+          </div>
+          <label class="flex items-center gap-2 text-xs text-[#171717] dark:text-[#ededed]">
+            <input
+              type="checkbox"
+              checked={props.draft.mdns.enabled}
+              onChange={(e) => updateMdns({ enabled: e.currentTarget.checked })}
+            />
+            启用 mDNS 反射
+          </label>
+        </div>
+
+        <Show when={props.draft.mdns.enabled}>
+          <div class="grid gap-3 sm:grid-cols-3 text-xs">
+            <label class="block sm:col-span-2">
+              <span class="text-[#666666] dark:text-[#a1a1aa]">
+                参与反射的接口 (逗号分隔，留空自动包含全部 LAN 网桥与 LAN VLAN)
+              </span>
+              <input
+                type="text"
+                placeholder="br-lan, eth1.20"
+                value={props.draft.mdns.interfaces.join(", ")}
+                onInput={(e) =>
+                  updateMdns({
+                    interfaces: e.currentTarget.value
+                      .split(",")
+                      .map((s) => s.trim())
+                      .filter(Boolean),
+                  })
+                }
+                class="mt-1 w-full rounded-lg border border-[#eaeaea] dark:border-[#262626] bg-white dark:bg-[#000000] px-2.5 py-1.5 font-mono text-xs text-[#171717] dark:text-[#ededed] outline-none focus:border-[#171717] dark:focus:border-[#ededed]"
+              />
+            </label>
+            <div class="flex flex-col justify-end gap-2">
+              <label class="flex items-center gap-2 text-xs text-[#171717] dark:text-[#ededed]">
+                <input
+                  type="checkbox"
+                  checked={props.draft.mdns.publish_workstation}
+                  onChange={(e) => updateMdns({ publish_workstation: e.currentTarget.checked })}
+                />
+                广播路由器主机名 (.local)
+              </label>
+              <label class="flex items-center gap-2 text-xs text-[#171717] dark:text-[#ededed]">
+                <input
+                  type="checkbox"
+                  checked={props.draft.mdns.allow_point_to_point}
+                  onChange={(e) => updateMdns({ allow_point_to_point: e.currentTarget.checked })}
+                />
+                允许点对点接口反射
+              </label>
+            </div>
+          </div>
+        </Show>
+      </section>
+
+      <section class="rounded-xl border border-[#eaeaea] dark:border-[#262626] bg-white dark:bg-[#0a0a0a] p-4 sm:p-5 space-y-4">
+        <div class="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <h2 class="text-sm font-medium text-[#171717] dark:text-[#ededed]">
+              IPTV 组播支持 (IGMP Proxy + udpxy)
+            </h2>
+            <p class="mt-0.5 text-xs text-[#666666] dark:text-[#a1a1aa]">
+              转发运营商 IPTV 组播流至内网，并可选开启 udpxy 将组播转为 HTTP 单播供 Wi-Fi 终端播放
+            </p>
+          </div>
+          <label class="flex items-center gap-2 text-xs text-[#171717] dark:text-[#ededed]">
+            <input
+              type="checkbox"
+              checked={props.draft.iptv.enabled}
+              onChange={(e) => updateIptv({ enabled: e.currentTarget.checked })}
+            />
+            启用 IPTV 组播
+          </label>
+        </div>
+
+        <Show when={props.draft.iptv.enabled}>
+          <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 text-xs">
+            <label class="block">
+              <span class="text-[#666666] dark:text-[#a1a1aa]">上游组播接口 (WAN / VLAN)</span>
+              <input
+                type="text"
+                placeholder="eth0.85"
+                value={props.draft.iptv.upstream_interface}
+                onInput={(e) => updateIptv({ upstream_interface: e.currentTarget.value.trim() })}
+                class="mt-1 w-full rounded-lg border border-[#eaeaea] dark:border-[#262626] bg-white dark:bg-[#000000] px-2.5 py-1.5 font-mono text-xs text-[#171717] dark:text-[#ededed] outline-none focus:border-[#171717] dark:focus:border-[#ededed]"
+              />
+            </label>
+            <label class="block">
+              <span class="text-[#666666] dark:text-[#a1a1aa]">下游 LAN 接口 (留空=全部网桥)</span>
+              <input
+                type="text"
+                placeholder="br-lan"
+                value={props.draft.iptv.downstream_interfaces.join(", ")}
+                onInput={(e) =>
+                  updateIptv({
+                    downstream_interfaces: e.currentTarget.value
+                      .split(",")
+                      .map((s) => s.trim())
+                      .filter(Boolean),
+                  })
+                }
+                class="mt-1 w-full rounded-lg border border-[#eaeaea] dark:border-[#262626] bg-white dark:bg-[#000000] px-2.5 py-1.5 font-mono text-xs text-[#171717] dark:text-[#ededed] outline-none focus:border-[#171717] dark:focus:border-[#ededed]"
+              />
+            </label>
+            <label class="block sm:col-span-2">
+              <span class="text-[#666666] dark:text-[#a1a1aa]">允许组播源网段 (altnet CIDR)</span>
+              <input
+                type="text"
+                placeholder="10.0.0.0/8, 224.0.0.0/4"
+                value={props.draft.iptv.altnet_cidrs.join(", ")}
+                onInput={(e) =>
+                  updateIptv({
+                    altnet_cidrs: e.currentTarget.value
+                      .split(",")
+                      .map((s) => s.trim())
+                      .filter(Boolean),
+                  })
+                }
+                class="mt-1 w-full rounded-lg border border-[#eaeaea] dark:border-[#262626] bg-white dark:bg-[#000000] px-2.5 py-1.5 font-mono text-xs text-[#171717] dark:text-[#ededed] outline-none focus:border-[#171717] dark:focus:border-[#ededed]"
+              />
+            </label>
+          </div>
+
+          <div class="grid gap-3 sm:grid-cols-4 text-xs items-end">
+            <label class="flex items-center gap-2 text-xs text-[#171717] dark:text-[#ededed]">
+              <input
+                type="checkbox"
+                checked={props.draft.iptv.igmp_snooping}
+                onChange={(e) => updateIptv({ igmp_snooping: e.currentTarget.checked })}
+              />
+              网桥 IGMP Snooping
+            </label>
+            <label class="flex items-center gap-2 text-xs text-[#171717] dark:text-[#ededed]">
+              <input
+                type="checkbox"
+                checked={props.draft.iptv.udpxy_enabled}
+                onChange={(e) => updateIptv({ udpxy_enabled: e.currentTarget.checked })}
+              />
+              启用 udpxy 单播转发
+            </label>
+            <Show when={props.draft.iptv.udpxy_enabled}>
+              <label class="block">
+                <span class="text-[#666666] dark:text-[#a1a1aa]">udpxy 监听端口</span>
+                <input
+                  type="number"
+                  min={1}
+                  max={65535}
+                  value={props.draft.iptv.udpxy_port}
+                  onInput={(e) => updateIptv({ udpxy_port: Number(e.currentTarget.value) || 4022 })}
+                  class="mt-1 w-full rounded-lg border border-[#eaeaea] dark:border-[#262626] bg-white dark:bg-[#000000] px-2.5 py-1.5 font-mono text-xs text-[#171717] dark:text-[#ededed]"
+                />
+              </label>
+              <label class="block">
+                <span class="text-[#666666] dark:text-[#a1a1aa]">最大并发客户端</span>
+                <input
+                  type="number"
+                  min={1}
+                  max={256}
+                  value={props.draft.iptv.udpxy_max_clients}
+                  onInput={(e) =>
+                    updateIptv({ udpxy_max_clients: Number(e.currentTarget.value) || 16 })
+                  }
+                  class="mt-1 w-full rounded-lg border border-[#eaeaea] dark:border-[#262626] bg-white dark:bg-[#000000] px-2.5 py-1.5 font-mono text-xs text-[#171717] dark:text-[#ededed]"
+                />
+              </label>
+            </Show>
+          </div>
+        </Show>
       </section>
 
       <NicTuningSection

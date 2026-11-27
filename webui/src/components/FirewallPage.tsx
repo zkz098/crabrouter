@@ -1,6 +1,7 @@
-import { For, Show, createResource } from "solid-js";
-import { getUpnpLeases } from "../api";
+import { For, Show, createResource, createSignal } from "solid-js";
+import { getCrowdSecStatus, getUpnpLeases, triggerCrowdSecSync } from "../api";
 import { t } from "../i18n";
+import type { CrowdSecConfig } from "../types/CrowdSecConfig";
 import type { FirewallAction } from "../types/FirewallAction";
 import type { RouterConfig } from "../types/RouterConfig";
 import type { TransportProto } from "../types/TransportProto";
@@ -25,6 +26,24 @@ const BTN_DELETE =
 export function FirewallPage(props: Props) {
   const zoneNames = () => props.draft.firewall.zones.map((z) => z.name);
   const [upnpLeases, { refetch: refetchUpnpLeases }] = createResource(getUpnpLeases);
+  const [crowdsecStatus, { mutate: setCrowdsecStatus }] = createResource(getCrowdSecStatus);
+  const [syncingCs, setSyncingCs] = createSignal(false);
+
+  function updateCrowdSec(patch: Partial<CrowdSecConfig>) {
+    const next = structuredClone(props.draft);
+    next.crowdsec = { ...next.crowdsec, ...patch };
+    props.onChange(next);
+  }
+
+  async function syncCrowdSecNow() {
+    setSyncingCs(true);
+    try {
+      const res = await triggerCrowdSecSync();
+      setCrowdsecStatus(res);
+    } finally {
+      setSyncingCs(false);
+    }
+  }
 
   function updateUpnp(patch: Partial<UpnpConfig>) {
     const next = structuredClone(props.draft);
@@ -656,6 +675,142 @@ export function FirewallPage(props: Props) {
                               {entry.internal_ip}:{entry.internal_port}
                             </td>
                             <td class="py-1 font-sans">{entry.description}</td>
+                          </tr>
+                        )}
+                      </For>
+                    </tbody>
+                  </table>
+                </div>
+              </Show>
+            </div>
+          </div>
+        </Show>
+      </section>
+
+      <section class={SECTION_CLS}>
+        <div class="mb-3.5 flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <h2 class="text-sm font-medium text-[#171717] dark:text-[#ededed]">
+              CrowdSec 智能威胁防御 (LAPI + nftables / XDP)
+            </h2>
+            <p class="mt-0.5 text-xs text-[#666666] dark:text-[#a1a1aa]">
+              基于日志行为分析与协同威胁情报自动拦截暴力破解、端口扫描及恶意僵尸网络 IP
+            </p>
+          </div>
+          <label class="flex items-center gap-2 text-xs text-[#171717] dark:text-[#ededed]">
+            <input
+              type="checkbox"
+              checked={props.draft.crowdsec.enabled}
+              onChange={(e) => updateCrowdSec({ enabled: e.currentTarget.checked })}
+            />
+            启用 CrowdSec
+          </label>
+        </div>
+
+        <Show when={props.draft.crowdsec.enabled}>
+          <div class="space-y-4">
+            <div class="grid gap-3 sm:grid-cols-3 text-xs">
+              <label class="flex items-center gap-2 text-[#171717] dark:text-[#ededed]">
+                <input
+                  type="checkbox"
+                  checked={props.draft.crowdsec.bouncer_enabled}
+                  onChange={(e) => updateCrowdSec({ bouncer_enabled: e.currentTarget.checked })}
+                />
+                启用 nftables Bouncer 封禁集合
+              </label>
+              <label class="flex items-center gap-2 text-[#171717] dark:text-[#ededed]">
+                <input
+                  type="checkbox"
+                  checked={props.draft.crowdsec.sync_to_xdp}
+                  onChange={(e) => updateCrowdSec({ sync_to_xdp: e.currentTarget.checked })}
+                />
+                同步封禁列表至 eBPF XDP 驱动层
+              </label>
+              <label class="block">
+                <span class="text-[#666666] dark:text-[#a1a1aa]">决策同步周期 (秒)</span>
+                <input
+                  type="number"
+                  min={5}
+                  value={props.draft.crowdsec.update_frequency_secs}
+                  onInput={(e) =>
+                    updateCrowdSec({
+                      update_frequency_secs: Math.max(5, Number(e.currentTarget.value) || 10),
+                    })
+                  }
+                  class={`mt-1 ${INPUT_CLS} font-mono`}
+                />
+              </label>
+            </div>
+
+            <div class="grid gap-3 sm:grid-cols-2 text-xs">
+              <label class="block">
+                <span class="text-[#666666] dark:text-[#a1a1aa]">LAPI 监听地址</span>
+                <input
+                  type="text"
+                  value={props.draft.crowdsec.lapi_listen}
+                  onInput={(e) => updateCrowdSec({ lapi_listen: e.currentTarget.value.trim() })}
+                  class={`mt-1 ${INPUT_CLS} font-mono`}
+                />
+              </label>
+              <label class="block">
+                <span class="text-[#666666] dark:text-[#a1a1aa]">白名单 IP / CIDR (逗号分隔)</span>
+                <input
+                  type="text"
+                  placeholder="192.168.10.0/24"
+                  value={props.draft.crowdsec.whitelist_cidrs.join(", ")}
+                  onInput={(e) =>
+                    updateCrowdSec({
+                      whitelist_cidrs: e.currentTarget.value
+                        .split(",")
+                        .map((s) => s.trim())
+                        .filter(Boolean),
+                    })
+                  }
+                  class={`mt-1 ${INPUT_CLS} font-mono`}
+                />
+              </label>
+            </div>
+
+            <div class="rounded-lg border border-[#eaeaea] dark:border-[#262626] p-3">
+              <div class="mb-2 flex items-center justify-between">
+                <span class="text-xs font-medium text-[#171717] dark:text-[#ededed]">
+                  活跃封禁决策 ({crowdsecStatus()?.active_decisions ?? 0})
+                </span>
+                <button
+                  type="button"
+                  disabled={syncingCs()}
+                  onClick={() => void syncCrowdSecNow()}
+                  class={BTN_OUTLINE}
+                >
+                  {syncingCs() ? "同步中..." : "立即同步"}
+                </button>
+              </div>
+              <Show
+                when={(crowdsecStatus()?.decisions.length ?? 0) > 0}
+                fallback={
+                  <p class="text-xs text-[#666666] dark:text-[#a1a1aa]">
+                    暂无活跃 CrowdSec 封禁决策
+                  </p>
+                }
+              >
+                <div class="overflow-x-auto">
+                  <table class="w-full text-left text-xs font-mono">
+                    <thead class="text-[#666666] dark:text-[#a1a1aa]">
+                      <tr>
+                        <th class="py-1 pr-3">IP / CIDR</th>
+                        <th class="py-1 pr-3">动作</th>
+                        <th class="py-1 pr-3">触发场景</th>
+                        <th class="py-1">剩余时长</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <For each={crowdsecStatus()?.decisions ?? []}>
+                        {(dec) => (
+                          <tr class="border-t border-[#eaeaea] dark:border-[#262626]">
+                            <td class="py-1 pr-3">{dec.value}</td>
+                            <td class="py-1 pr-3">{dec.decision_type}</td>
+                            <td class="py-1 pr-3 font-sans">{dec.scenario}</td>
+                            <td class="py-1">{dec.duration}</td>
                           </tr>
                         )}
                       </For>

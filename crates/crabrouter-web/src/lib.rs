@@ -1,6 +1,7 @@
 pub mod api;
 pub mod containers_api;
 pub mod crabdns_proxy;
+pub mod crowdsec_api;
 pub mod ddns_tls_api;
 pub mod logs;
 pub mod metrics;
@@ -20,7 +21,7 @@ use axum::response::{IntoResponse, Response};
 use axum::routing::{any, delete, get, post};
 use crabrouter_core::RouterEngine;
 use crabrouter_net::{EbpfEngine, MultiWanManager, WanEventBus};
-use crabrouter_services::{ContainerBackend, DdnsManager, TlsCertManager};
+use crabrouter_services::{ContainerBackend, CrowdSecManager, DdnsManager, TlsCertManager};
 use rust_embed::RustEmbed;
 use tower_http::cors::CorsLayer;
 
@@ -39,6 +40,7 @@ pub struct AppState {
     pub ebpf: EbpfEngine,
     pub ddns: DdnsManager,
     pub tls: TlsCertManager,
+    pub crowdsec: CrowdSecManager,
     pub containers: Arc<dyn ContainerBackend>,
     pub logs: LogHub,
     pub lease_path: PathBuf,
@@ -71,6 +73,8 @@ pub fn build_router(state: AppState) -> Router {
         .route("/api/ddns/sync", post(ddns_tls_api::ddns_sync_now))
         .route("/api/tls/status", get(ddns_tls_api::tls_status))
         .route("/api/tls/renew", post(ddns_tls_api::tls_renew_now))
+        .route("/api/crowdsec/status", get(crowdsec_api::crowdsec_status))
+        .route("/api/crowdsec/sync", post(crowdsec_api::crowdsec_sync_now))
         .route("/api/net/wan-event", post(api::ingest_wan_event))
         .route("/api/clients", get(api::online_clients))
         .route("/api/upnp/leases", get(api::upnp_leases))

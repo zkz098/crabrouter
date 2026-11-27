@@ -25,8 +25,10 @@ use crabrouter_net::{
 };
 use crabrouter_services::{
     SystemdUnitStatus, generate_wireguard_keypair as svc_gen_wg_keypair, read_online_clients,
-    read_upnp_leases, render_containers_conf, render_crabdns_toml, render_dnsmasq_conf,
-    render_miniupnpd_conf, render_ndppd_conf, render_registries_conf, render_wg_quick_conf,
+    read_upnp_leases, render_avahi_daemon_conf, render_containers_conf, render_crabdns_toml,
+    render_crowdsec_bouncer_conf, render_dnsmasq_conf, render_igmpproxy_conf,
+    render_miniupnpd_conf, render_ndppd_conf, render_registries_conf, render_udpxy_env,
+    render_wg_quick_conf,
 };
 use serde::{Deserialize, Serialize};
 use tokio::process::Command;
@@ -61,6 +63,10 @@ pub struct RenderedConfigsPreview {
     pub wg_quick: String,
     pub miniupnpd: String,
     pub ndppd: String,
+    pub avahi_daemon: String,
+    pub igmpproxy: String,
+    pub udpxy_env: String,
+    pub crowdsec_bouncer: String,
     pub nic_tuning: String,
     pub containers_conf: String,
     pub registries_conf: String,
@@ -413,6 +419,10 @@ pub async fn preview_rendered(
         wg_quick,
         miniupnpd: render_miniupnpd_conf(&cfg),
         ndppd: render_ndppd_conf(&cfg),
+        avahi_daemon: render_avahi_daemon_conf(&cfg),
+        igmpproxy: render_igmpproxy_conf(&cfg),
+        udpxy_env: render_udpxy_env(&cfg),
+        crowdsec_bouncer: render_crowdsec_bouncer_conf(&cfg),
         nic_tuning: render_nic_tuning_script(&cfg),
         containers_conf: render_containers_conf(&cfg),
         registries_conf: render_registries_conf(&cfg),

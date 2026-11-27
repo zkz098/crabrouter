@@ -11,8 +11,11 @@ use crate::containers::config::{
     render_containers_conf, render_registries_conf, sync_container_host_configs,
 };
 use crate::crabdns::render_crabdns_toml;
+use crate::crowdsec::{render_crowdsec_acquis_yaml, render_crowdsec_bouncer_conf};
 use crate::dnsmasq::render_dnsmasq_conf;
+use crate::iptv::{render_igmpproxy_conf, render_udpxy_env};
 use crate::ipv6_relay::{has_ipv6_relay_enabled, render_ndppd_conf};
+use crate::mdns::render_avahi_daemon_conf;
 use crate::upnp::render_miniupnpd_conf;
 use crate::wireguard::{render_wg_quick_conf, sync_wireguard_files};
 use crate::{Result, ServiceError};
@@ -71,6 +74,11 @@ impl ServiceSupervisor for DryRunSupervisor {
             let crabdns = render_crabdns_toml(cfg)?;
             let miniupnpd = render_miniupnpd_conf(cfg);
             let ndppd = render_ndppd_conf(cfg);
+            let avahi = render_avahi_daemon_conf(cfg);
+            let igmpproxy = render_igmpproxy_conf(cfg);
+            let udpxy = render_udpxy_env(cfg);
+            let crowdsec_bouncer = render_crowdsec_bouncer_conf(cfg);
+            let crowdsec_acquis = render_crowdsec_acquis_yaml(cfg);
             let wg = if cfg.wireguard.enabled {
                 render_wg_quick_conf(
                     cfg,
@@ -86,6 +94,11 @@ impl ServiceSupervisor for DryRunSupervisor {
                 crabdns_bytes = crabdns.len(),
                 miniupnpd_bytes = miniupnpd.len(),
                 ndppd_bytes = ndppd.len(),
+                avahi_bytes = avahi.len(),
+                igmpproxy_bytes = igmpproxy.len(),
+                udpxy_bytes = udpxy.len(),
+                crowdsec_bouncer_bytes = crowdsec_bouncer.len(),
+                crowdsec_acquis_bytes = crowdsec_acquis.len(),
                 wg_bytes = wg.len(),
                 containers_conf_bytes = containers_conf.len(),
                 registries_conf_bytes = registries_conf.len(),
@@ -138,6 +151,14 @@ impl ServiceSupervisor for DryRunSupervisor {
                 },
                 dry_run_toggle_unit("miniupnpd.service", cfg.upnp.enabled),
                 dry_run_toggle_unit("ndppd.service", has_ipv6_relay_enabled(cfg)),
+                dry_run_toggle_unit("avahi-daemon.service", cfg.mdns.enabled),
+                dry_run_toggle_unit("igmpproxy.service", cfg.iptv.enabled),
+                dry_run_toggle_unit("udpxy.service", cfg.iptv.enabled && cfg.iptv.udpxy_enabled),
+                dry_run_toggle_unit("crowdsec.service", cfg.crowdsec.enabled),
+                dry_run_toggle_unit(
+                    "crowdsec-firewall-bouncer.service",
+                    cfg.crowdsec.enabled && cfg.crowdsec.bouncer_enabled,
+                ),
                 dry_run_toggle_unit(container_runtime_unit(cfg), cfg.containers.enabled),
             ])
         })
@@ -171,11 +192,21 @@ impl ServiceSupervisor for SystemdSupervisor {
             let crabdns_path = self.runtime_dir.join("crabdns.toml");
             let miniupnpd_path = self.runtime_dir.join("miniupnpd.conf");
             let ndppd_path = self.runtime_dir.join("ndppd.conf");
+            let avahi_path = self.runtime_dir.join("avahi-daemon.conf");
+            let igmpproxy_path = self.runtime_dir.join("igmpproxy.conf");
+            let udpxy_path = self.runtime_dir.join("udpxy.env");
+            let crowdsec_bouncer_path = self.runtime_dir.join("crowdsec-firewall-bouncer.yaml");
+            let crowdsec_acquis_path = self.runtime_dir.join("crowdsec-acquis.yaml");
 
             write_atomic(&dnsmasq_path, &render_dnsmasq_conf(cfg)?).await?;
             write_atomic(&crabdns_path, &render_crabdns_toml(cfg)?).await?;
             write_atomic(&miniupnpd_path, &render_miniupnpd_conf(cfg)).await?;
             write_atomic(&ndppd_path, &render_ndppd_conf(cfg)).await?;
+            write_atomic(&avahi_path, &render_avahi_daemon_conf(cfg)).await?;
+            write_atomic(&igmpproxy_path, &render_igmpproxy_conf(cfg)).await?;
+            write_atomic(&udpxy_path, &render_udpxy_env(cfg)).await?;
+            write_atomic(&crowdsec_bouncer_path, &render_crowdsec_bouncer_conf(cfg)).await?;
+            write_atomic(&crowdsec_acquis_path, &render_crowdsec_acquis_yaml(cfg)).await?;
 
             if cfg.wireguard.enabled {
                 sync_wireguard_files(cfg, &self.wireguard_dir)?;
@@ -199,6 +230,23 @@ impl ServiceSupervisor for SystemdSupervisor {
             sync_optional_unit(&mgr, &wg_unit, cfg.wireguard.enabled, true).await?;
             sync_optional_unit(&mgr, "miniupnpd.service", cfg.upnp.enabled, false).await?;
             sync_optional_unit(&mgr, "ndppd.service", has_ipv6_relay_enabled(cfg), false).await?;
+            sync_optional_unit(&mgr, "avahi-daemon.service", cfg.mdns.enabled, false).await?;
+            sync_optional_unit(&mgr, "igmpproxy.service", cfg.iptv.enabled, false).await?;
+            sync_optional_unit(
+                &mgr,
+                "udpxy.service",
+                cfg.iptv.enabled && cfg.iptv.udpxy_enabled,
+                false,
+            )
+            .await?;
+            sync_optional_unit(&mgr, "crowdsec.service", cfg.crowdsec.enabled, false).await?;
+            sync_optional_unit(
+                &mgr,
+                "crowdsec-firewall-bouncer.service",
+                cfg.crowdsec.enabled && cfg.crowdsec.bouncer_enabled,
+                false,
+            )
+            .await?;
             sync_optional_unit(
                 &mgr,
                 container_runtime_unit(cfg),
@@ -234,6 +282,11 @@ impl ServiceSupervisor for SystemdSupervisor {
                 format!("wg-quick@{}.service", cfg.wireguard.interface),
                 "miniupnpd.service".to_string(),
                 "ndppd.service".to_string(),
+                "avahi-daemon.service".to_string(),
+                "igmpproxy.service".to_string(),
+                "udpxy.service".to_string(),
+                "crowdsec.service".to_string(),
+                "crowdsec-firewall-bouncer.service".to_string(),
                 container_runtime_unit(cfg).to_string(),
             ];
             let mut out = Vec::with_capacity(units.len());

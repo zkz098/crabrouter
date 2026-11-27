@@ -63,6 +63,7 @@ async fn apply_rtnetlink_with_handle(
     let name_to_index = apply_link_diff(handle, &plan).await?;
     apply_addr_diff(handle, &plan, &name_to_index).await?;
     apply_route_and_rule_diff(handle, &plan, &name_to_index).await?;
+    apply_bridge_multicast_snooping(cfg);
     Ok(())
 }
 
@@ -378,6 +379,19 @@ pub(super) fn apply_ipv6_relay_sysctls(cfg: &RouterConfig) {
             write_sysctl(&format!("/proc/sys/net/ipv6/conf/{dev}/accept_ra"), "2");
             write_sysctl(&format!("/proc/sys/net/ipv6/conf/{dev}/proxy_ndp"), "1");
         }
+    }
+}
+
+fn apply_bridge_multicast_snooping(cfg: &RouterConfig) {
+    if !cfg.iptv.enabled {
+        return;
+    }
+    let val = if cfg.iptv.igmp_snooping { "1" } else { "0" };
+    for lan in &cfg.lans {
+        write_sysctl(
+            &format!("/sys/class/net/{}/bridge/multicast_snooping", lan.bridge),
+            val,
+        );
     }
 }
 

@@ -2,12 +2,15 @@
 import type { AcmeConfig } from "./AcmeConfig";
 import type { BondConfig } from "./BondConfig";
 import type { ContainerConfig } from "./ContainerConfig";
+import type { CrowdSecConfig } from "./CrowdSecConfig";
 import type { DdnsConfig } from "./DdnsConfig";
 import type { DnsIntegrationConfig } from "./DnsIntegrationConfig";
 import type { EbpfConfig } from "./EbpfConfig";
 import type { FirewallConfig } from "./FirewallConfig";
 import type { InterfacePin } from "./InterfacePin";
+import type { IptvConfig } from "./IptvConfig";
 import type { LanConfig } from "./LanConfig";
+import type { MdnsConfig } from "./MdnsConfig";
 import type { MultiWanConfig } from "./MultiWanConfig";
 import type { NicTuningConfig } from "./NicTuningConfig";
 import type { PolicyRuleConfig } from "./PolicyRuleConfig";
@@ -19,4 +22,4 @@ import type { VlanConfig } from "./VlanConfig";
 import type { WanConfig } from "./WanConfig";
 import type { WireGuardConfig } from "./WireGuardConfig";
 
-export type RouterConfig = { schema_version: number, system: SystemConfig, wans: Array<WanConfig>, lans: Array<LanConfig>, vlans: Array<VlanConfig>, bonds: Array<BondConfig>, interface_pins: Array<InterfacePin>, routes: Array<StaticRouteConfig>, policy_rules: Array<PolicyRuleConfig>, firewall: FirewallConfig, dns: DnsIntegrationConfig, wireguard: WireGuardConfig, qos: QosConfig, multi_wan: MultiWanConfig, ebpf: EbpfConfig, ddns: DdnsConfig, acme: AcmeConfig, upnp: UpnpConfig, nic_tuning: Array<NicTuningConfig>, containers: ContainerConfig, };
+export type RouterConfig = { schema_version: number, system: SystemConfig, wans: Array<WanConfig>, lans: Array<LanConfig>, vlans: Array<VlanConfig>, bonds: Array<BondConfig>, interface_pins: Array<InterfacePin>, routes: Array<StaticRouteConfig>, policy_rules: Array<PolicyRuleConfig>, firewall: FirewallConfig, dns: DnsIntegrationConfig, wireguard: WireGuardConfig, qos: QosConfig, multi_wan: MultiWanConfig, ebpf: EbpfConfig, ddns: DdnsConfig, acme: AcmeConfig, upnp: UpnpConfig, nic_tuning: Array<NicTuningConfig>, containers: ContainerConfig, mdns: MdnsConfig, iptv: IptvConfig, crowdsec: CrowdSecConfig, };

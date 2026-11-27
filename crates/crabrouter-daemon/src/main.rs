@@ -13,7 +13,7 @@ use crabrouter_net::{
     spawn_multi_wan_engine_with_shutdown, spawn_network_event_engine_with_shutdown,
 };
 use crabrouter_services::{
-    ContainerBackend, DryRunContainerBackend, DryRunSupervisor, ServiceSupervisor,
+    ContainerBackend, CrowdSecManager, DryRunContainerBackend, DryRunSupervisor, ServiceSupervisor,
     SocketContainerBackend, SystemdSupervisor, TlsCertManager, auto_bless_if_tentative,
     spawn_ddns_engine_with_shutdown,
 };
@@ -135,17 +135,7 @@ async fn main() -> anyhow::Result<()> {
         shutdown_rx.clone(),
     );
     let cfg = engine.active_config();
-    let ebpf = EbpfEngine::new(cli.dry_run);
-    engine.attach_ebpf(ebpf.clone());
-    if let Err(err) = ebpf.sync_config(&cfg).await {
-        tracing::warn!(error = %err, "initial eBPF tc/tcx sync failed");
-    }
-    spawn_crabdns_ebpf_bridge_with_shutdown(
-        Arc::clone(&engine),
-        ebpf.clone(),
-        cli.dry_run,
-        shutdown_rx.clone(),
-    );
+    let ebpf = init_ebpf_and_bridge(&engine, &cfg, cli.dry_run, &shutdown_rx).await;
 
     let ddns = {
         let eng_cfg = Arc::clone(&engine);
@@ -159,6 +149,12 @@ async fn main() -> anyhow::Result<()> {
         )
     };
     let tls = TlsCertManager::new(&cfg, cli.dry_run);
+    let crowdsec = spawn_crowdsec_sync_loop(
+        Arc::clone(&engine),
+        ebpf.clone(),
+        cli.dry_run,
+        shutdown_rx.clone(),
+    );
     let containers: Arc<dyn ContainerBackend> = if cli.dry_run {
         Arc::new(DryRunContainerBackend::new())
     } else {
@@ -177,6 +173,7 @@ async fn main() -> anyhow::Result<()> {
         ebpf,
         ddns,
         tls,
+        crowdsec,
         containers,
         logs,
         lease_path: cli.leases.clone(),
@@ -207,6 +204,70 @@ async fn main() -> anyhow::Result<()> {
 
     tracing::info!("crabrouterd stopped");
     Ok(())
+}
+
+async fn init_ebpf_and_bridge(
+    engine: &Arc<RouterEngine>,
+    cfg: &RouterConfig,
+    dry_run: bool,
+    shutdown_rx: &tokio::sync::watch::Receiver<bool>,
+) -> EbpfEngine {
+    let ebpf = EbpfEngine::new(dry_run);
+    engine.attach_ebpf(ebpf.clone());
+    if let Err(err) = ebpf.sync_config(cfg).await {
+        tracing::warn!(error = %err, "initial eBPF tc/tcx sync failed");
+    }
+    spawn_crabdns_ebpf_bridge_with_shutdown(
+        Arc::clone(engine),
+        ebpf.clone(),
+        dry_run,
+        shutdown_rx.clone(),
+    );
+    ebpf
+}
+
+fn spawn_crowdsec_sync_loop(
+    engine: Arc<RouterEngine>,
+    ebpf: EbpfEngine,
+    dry_run: bool,
+    mut shutdown_rx: tokio::sync::watch::Receiver<bool>,
+) -> CrowdSecManager {
+    let crowdsec = CrowdSecManager::new(dry_run);
+    let manager = crowdsec.clone();
+    tokio::spawn(async move {
+        loop {
+            let cfg = engine.active_config();
+            let status = manager.refresh_decisions(&cfg).await;
+            if cfg.crowdsec.enabled
+                && cfg.crowdsec.sync_to_xdp
+                && cfg.ebpf.enabled
+                && cfg.ebpf.xdp_guard_enabled
+            {
+                let extra: Vec<String> = status
+                    .decisions
+                    .iter()
+                    .filter(|d| d.decision_type == "ban")
+                    .map(|d| d.value.clone())
+                    .collect();
+                if let Err(err) = ebpf
+                    .sync_extra_xdp_blocklist(&cfg.ebpf.xdp_blocklist, &extra)
+                    .await
+                {
+                    tracing::debug!(error = %err, "crowdsec XDP mirror skipped");
+                }
+            }
+            let wait_secs = u64::from(cfg.crowdsec.update_frequency_secs.max(5));
+            tokio::select! {
+                () = tokio::time::sleep(std::time::Duration::from_secs(wait_secs)) => {}
+                _ = shutdown_rx.changed() => {
+                    if *shutdown_rx.borrow() {
+                        break;
+                    }
+                }
+            }
+        }
+    });
+    crowdsec
 }
 
 fn spawn_watchdog_and_autobless(dry_run: bool, mut shutdown: tokio::sync::watch::Receiver<bool>) {

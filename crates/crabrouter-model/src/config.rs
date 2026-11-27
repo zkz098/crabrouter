@@ -7,9 +7,11 @@ use ts_rs::TS;
 
 use crate::bond::{BondConfig, validate_bonds};
 use crate::container::ContainerConfig;
+use crate::crowdsec::CrowdSecConfig;
 use crate::ebpf::EbpfConfig;
 use crate::error::{ModelError, Result};
 use crate::firewall::FirewallConfig;
+use crate::multicast::{IptvConfig, MdnsConfig};
 use crate::network::{
     AcmeConfig, DdnsConfig, InterfacePin, Ipv6LanMode, LanConfig, MultiWanConfig, PolicyRuleConfig,
     QosConfig, StaticRouteConfig, VlanConfig, WanConfig, WanProto, is_valid_unicast_mac,
@@ -180,6 +182,12 @@ pub struct RouterConfig {
     pub nic_tuning: Vec<NicTuningConfig>,
     #[serde(default)]
     pub containers: ContainerConfig,
+    #[serde(default)]
+    pub mdns: MdnsConfig,
+    #[serde(default)]
+    pub iptv: IptvConfig,
+    #[serde(default)]
+    pub crowdsec: CrowdSecConfig,
 }
 
 impl Default for RouterConfig {
@@ -205,6 +213,9 @@ impl Default for RouterConfig {
             upnp: UpnpConfig::default(),
             nic_tuning: Vec::new(),
             containers: ContainerConfig::default(),
+            mdns: MdnsConfig::default(),
+            iptv: IptvConfig::default(),
+            crowdsec: CrowdSecConfig::default(),
         }
     }
 }
@@ -240,6 +251,9 @@ impl RouterConfig {
         validate_nic_tuning(&self.nic_tuning)?;
         self.containers
             .validate(self.dns.crabdns_port, self.dns.dnsmasq_dns_port)?;
+        self.mdns.validate()?;
+        self.iptv.validate()?;
+        self.crowdsec.validate()?;
         Ok(())
     }
 

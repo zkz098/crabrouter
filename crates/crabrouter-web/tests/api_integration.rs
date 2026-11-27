@@ -12,7 +12,9 @@ use crabrouter_net::{
     DryRunNetworkBackend, EbpfEngine, WanStateObserver, spawn_multi_wan_engine,
     spawn_network_event_engine,
 };
-use crabrouter_services::{DdnsManager, DryRunContainerBackend, DryRunSupervisor, TlsCertManager};
+use crabrouter_services::{
+    CrowdSecManager, DdnsManager, DryRunContainerBackend, DryRunSupervisor, TlsCertManager,
+};
 use crabrouter_web::{AppState, LogHub, build_router};
 use http_body_util::BodyExt;
 use serde_json::{Value, json};
@@ -51,6 +53,7 @@ async fn setup_test_app() -> (Router, PathBuf) {
         ebpf,
         ddns,
         tls,
+        crowdsec: CrowdSecManager::new(true),
         containers: Arc::new(DryRunContainerBackend::new()),
         logs: LogHub::new(),
         lease_path: dir.join("dnsmasq.leases"),
