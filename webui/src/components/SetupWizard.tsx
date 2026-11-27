@@ -93,6 +93,7 @@ export function SetupWizard(props: Props) {
       table_id: null,
       health_check_enabled: true,
       probe_targets: [],
+      mac_override: null,
     };
 
     const lan: LanConfig = {
@@ -107,6 +108,8 @@ export function SetupWizard(props: Props) {
       dhcp_lease_secs: 43200,
       static_leases: [],
       ipv6_ra_enabled: true,
+      ipv6_mode: "server",
+      ipv6_relay_wan: null,
       ipv6_subnet_id: null,
       ipv6_ula_cidr: null,
       stp_enabled: false,

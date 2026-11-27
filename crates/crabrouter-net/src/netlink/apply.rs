@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 
-use crabrouter_model::{RouterConfig, WanRuntimeState};
+use crabrouter_model::{Ipv6LanMode, RouterConfig, WanProto, WanRuntimeState};
 use futures_util::stream::TryStreamExt;
 use ipnet::IpNet;
 use rtnetlink::packet_route::AddressFamily;
@@ -148,6 +148,8 @@ async fn apply_link_diff(handle: &Handle, plan: &NetworkDiffPlan) -> Result<Hash
         name_to_index = refresh_name_to_index(handle).await?;
     }
 
+    apply_mac_overrides(handle, plan, &name_to_index).await;
+
     for (iface, mtu_opt) in &plan.links_to_up_mtu {
         if let Some(&idx) = name_to_index.get(iface) {
             let mut req = LinkUnspec::new_with_index(idx).up();
@@ -258,6 +260,7 @@ fn parse_link_infos(infos: Vec<LinkInfo>) -> (Option<String>, Option<u16>) {
 
 fn parse_observed_link(index: u32, attributes: Vec<LinkAttribute>) -> Option<ObservedLink> {
     let mut name = None;
+    let mut mac = None;
     let mut controller = None;
     let mut parent_index = None;
     let mut kind = None;
@@ -266,6 +269,12 @@ fn parse_observed_link(index: u32, attributes: Vec<LinkAttribute>) -> Option<Obs
     for attr in attributes {
         match attr {
             LinkAttribute::IfName(n) => name = Some(n),
+            LinkAttribute::Address(bytes) if bytes.len() == 6 => {
+                mac = Some(format!(
+                    "{:02x}:{:02x}:{:02x}:{:02x}:{:02x}:{:02x}",
+                    bytes[0], bytes[1], bytes[2], bytes[3], bytes[4], bytes[5]
+                ));
+            }
             LinkAttribute::Controller(idx) if idx > 0 => controller = Some(idx),
             LinkAttribute::Link(idx) if idx > 0 => parent_index = Some(idx),
             LinkAttribute::LinkInfo(infos) => {
@@ -284,11 +293,98 @@ fn parse_observed_link(index: u32, attributes: Vec<LinkAttribute>) -> Option<Obs
     Some(ObservedLink {
         index,
         name: name?,
+        mac,
         controller,
         kind,
         vlan_id,
         parent_index,
     })
+}
+
+pub(super) fn parse_mac_bytes(mac: &str) -> Option<[u8; 6]> {
+    let mut out = [0u8; 6];
+    let mut i = 0usize;
+    for part in mac.split(':') {
+        if i >= 6 || part.len() != 2 {
+            return None;
+        }
+        out[i] = u8::from_str_radix(part, 16).ok()?;
+        i += 1;
+    }
+    (i == 6).then_some(out)
+}
+
+async fn apply_mac_overrides(
+    handle: &Handle,
+    plan: &NetworkDiffPlan,
+    name_to_index: &HashMap<String, u32>,
+) {
+    for (iface, mac) in &plan.links_mac_to_set {
+        let Some(&idx) = name_to_index.get(iface) else {
+            tracing::warn!(iface = %iface, "cannot apply MAC override: interface not found");
+            continue;
+        };
+        let req = LinkUnspec::new_with_index(idx)
+            .address(mac.to_vec())
+            .build();
+        if handle.link().set(req).execute().await.is_ok() {
+            tracing::info!(iface = %iface, "applied WAN MAC address override");
+            continue;
+        }
+        // Some NIC drivers require the interface to be down before changing MAC.
+        let _ = handle
+            .link()
+            .set(LinkUnspec::new_with_index(idx).down().build())
+            .execute()
+            .await;
+        let retry = LinkUnspec::new_with_index(idx)
+            .address(mac.to_vec())
+            .up()
+            .build();
+        if let Err(err) = handle.link().set(retry).execute().await {
+            tracing::warn!(iface = %iface, error = %err, "failed to apply WAN MAC address override");
+        } else {
+            tracing::info!(iface = %iface, "applied WAN MAC address override after link down/up");
+        }
+    }
+}
+
+pub(super) fn apply_ipv6_relay_sysctls(cfg: &RouterConfig) {
+    let relay_lans: Vec<_> = cfg
+        .lans
+        .iter()
+        .filter(|l| l.ipv6_mode == Ipv6LanMode::Relay)
+        .collect();
+    if relay_lans.is_empty() {
+        return;
+    }
+    write_sysctl("/proc/sys/net/ipv6/conf/all/proxy_ndp", "1");
+    for lan in relay_lans {
+        write_sysctl(
+            &format!("/proc/sys/net/ipv6/conf/{}/proxy_ndp", lan.bridge),
+            "1",
+        );
+        let wan = lan
+            .ipv6_relay_wan
+            .as_deref()
+            .and_then(|name| cfg.wans.iter().find(|w| w.name == name))
+            .or_else(|| cfg.wans.first());
+        if let Some(w) = wan {
+            let dev = if w.proto == WanProto::Pppoe {
+                "ppp0"
+            } else {
+                w.device.as_str()
+            };
+            write_sysctl(&format!("/proc/sys/net/ipv6/conf/{dev}/accept_ra"), "2");
+            write_sysctl(&format!("/proc/sys/net/ipv6/conf/{dev}/proxy_ndp"), "1");
+        }
+    }
+}
+
+fn write_sysctl(path: &str, value: &str) {
+    if let Err(err) = std::fs::write(path, value) {
+        tracing::debug!(path, value, error = %err, "sysctl write skipped or failed");
+    }
 }
 
 async fn dump_links(handle: &Handle) -> Result<Vec<ObservedLink>> {

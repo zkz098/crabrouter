@@ -1,5 +1,11 @@
+use std::collections::HashSet;
+use std::net::IpAddr;
+
+use ipnet::IpNet;
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
+
+use crate::error::{ModelError, Result};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default, TS)]
 #[serde(rename_all = "snake_case")]
@@ -67,6 +73,9 @@ pub struct PortForwardRule {
     pub external_port: u16,
     pub dest_ip: String,
     pub internal_port: u16,
+    /// Enable NAT loopback (hairpin NAT) for LAN clients accessing the public IP.
+    #[serde(default = "default_true")]
+    pub reflection: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
@@ -81,6 +90,9 @@ pub struct FirewallConfig {
     pub syn_flood_rate: u32,
     #[serde(default = "default_true")]
     pub mss_clamping: bool,
+    /// Global switch for NAT loopback (hairpin NAT) on enabled port forwards.
+    #[serde(default = "default_true")]
+    pub nat_loopback: bool,
     #[serde(default)]
     pub zones: Vec<FirewallZone>,
     #[serde(default)]
@@ -96,6 +108,7 @@ impl Default for FirewallConfig {
             syn_flood_protect: true,
             syn_flood_rate: default_syn_flood_rate(),
             mss_clamping: true,
+            nat_loopback: true,
             zones: vec![
                 FirewallZone {
                     name: "lan".to_string(),
@@ -118,6 +131,92 @@ impl Default for FirewallConfig {
             port_forwards: Vec::new(),
         }
     }
+}
+
+impl FirewallConfig {
+    pub fn validate(&self) -> Result<()> {
+        let zone_names: HashSet<&str> = self.zones.iter().map(|z| z.name.as_str()).collect();
+
+        for rule in &self.rules {
+            if !zone_names.contains(rule.src_zone.as_str()) {
+                return Err(ModelError::Validation(format!(
+                    "firewall rule '{}' references unknown src_zone '{}'",
+                    rule.name, rule.src_zone
+                )));
+            }
+            if let Some(dst_zone) = rule.dst_zone.as_deref()
+                && !zone_names.contains(dst_zone)
+            {
+                return Err(ModelError::Validation(format!(
+                    "firewall rule '{}' references unknown dst_zone '{}'",
+                    rule.name, dst_zone
+                )));
+            }
+            validate_opt_ip_or_net(rule.src_ip.as_deref(), &rule.name, "src_ip")?;
+            validate_opt_ip_or_net(rule.dst_ip.as_deref(), &rule.name, "dst_ip")?;
+            if let Some(port_expr) = rule.dst_port.as_deref() {
+                validate_port_expr(port_expr, &rule.name)?;
+            }
+        }
+
+        for fwd in &self.port_forwards {
+            if fwd.external_port == 0 || fwd.internal_port == 0 {
+                return Err(ModelError::Validation(format!(
+                    "port forward '{}' ports must be non-zero",
+                    fwd.name
+                )));
+            }
+            fwd.dest_ip.parse::<IpAddr>().map_err(|e| {
+                ModelError::Validation(format!("port forward '{}' invalid dest_ip: {e}", fwd.name))
+            })?;
+        }
+        Ok(())
+    }
+}
+
+fn validate_opt_ip_or_net(val: Option<&str>, rule_name: &str, field: &str) -> Result<()> {
+    let Some(raw) = val.map(str::trim).filter(|s| !s.is_empty()) else {
+        return Ok(());
+    };
+    if raw.parse::<IpNet>().is_err() && raw.parse::<IpAddr>().is_err() {
+        return Err(ModelError::Validation(format!(
+            "firewall rule '{rule_name}' invalid {field} '{raw}'"
+        )));
+    }
+    Ok(())
+}
+
+fn validate_port_expr(expr: &str, rule_name: &str) -> Result<()> {
+    let trimmed = expr.trim();
+    if let Some((start_s, end_s)) = trimmed.split_once('-') {
+        let start: u16 = start_s.parse().map_err(|_| {
+            ModelError::Validation(format!(
+                "firewall rule '{rule_name}' invalid port range '{trimmed}'"
+            ))
+        })?;
+        let end: u16 = end_s.parse().map_err(|_| {
+            ModelError::Validation(format!(
+                "firewall rule '{rule_name}' invalid port range '{trimmed}'"
+            ))
+        })?;
+        if start == 0 || start > end {
+            return Err(ModelError::Validation(format!(
+                "firewall rule '{rule_name}' port range '{trimmed}' must have 1 <= start <= end"
+            )));
+        }
+        return Ok(());
+    }
+    let port: u16 = trimmed.parse().map_err(|_| {
+        ModelError::Validation(format!(
+            "firewall rule '{rule_name}' invalid port '{trimmed}'"
+        ))
+    })?;
+    if port == 0 {
+        return Err(ModelError::Validation(format!(
+            "firewall rule '{rule_name}' port cannot be 0"
+        )));
+    }
+    Ok(())
 }
 
 const fn default_true() -> bool {

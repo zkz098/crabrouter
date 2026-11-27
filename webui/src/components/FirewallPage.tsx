@@ -1,8 +1,10 @@
-import { For } from "solid-js";
+import { For, Show, createResource } from "solid-js";
+import { getUpnpLeases } from "../api";
 import { t } from "../i18n";
 import type { FirewallAction } from "../types/FirewallAction";
 import type { RouterConfig } from "../types/RouterConfig";
 import type { TransportProto } from "../types/TransportProto";
+import type { UpnpConfig } from "../types/UpnpConfig";
 
 interface Props {
   draft: RouterConfig;
@@ -22,6 +24,13 @@ const BTN_DELETE =
 
 export function FirewallPage(props: Props) {
   const zoneNames = () => props.draft.firewall.zones.map((z) => z.name);
+  const [upnpLeases, { refetch: refetchUpnpLeases }] = createResource(getUpnpLeases);
+
+  function updateUpnp(patch: Partial<UpnpConfig>) {
+    const next = structuredClone(props.draft);
+    next.upnp = { ...next.upnp, ...patch };
+    props.onChange(next);
+  }
 
   function addZone() {
     const next = structuredClone(props.draft);
@@ -62,6 +71,7 @@ export function FirewallPage(props: Props) {
       external_port: 8443,
       dest_ip: "192.168.10.50",
       internal_port: 443,
+      reflection: true,
     });
     props.onChange(next);
   }
@@ -72,7 +82,7 @@ export function FirewallPage(props: Props) {
         <h2 class="mb-3.5 text-sm font-medium text-[#171717] dark:text-[#ededed]">
           {t("fwGlobalTitle")}
         </h2>
-        <div class="grid gap-4 sm:grid-cols-4">
+        <div class="grid gap-4 sm:grid-cols-5">
           <label class="flex items-center gap-2 text-xs text-[#171717] dark:text-[#ededed]">
             <input
               type="checkbox"
@@ -96,6 +106,18 @@ export function FirewallPage(props: Props) {
               }}
             />
             {t("fwMssClamp")}
+          </label>
+          <label class="flex items-center gap-2 text-xs text-[#171717] dark:text-[#ededed]">
+            <input
+              type="checkbox"
+              checked={props.draft.firewall.nat_loopback}
+              onChange={(e) => {
+                const next = structuredClone(props.draft);
+                next.firewall.nat_loopback = e.currentTarget.checked;
+                props.onChange(next);
+              }}
+            />
+            NAT 回流 (Hairpin NAT)
           </label>
           <label class="flex items-center gap-2 text-xs text-[#171717] dark:text-[#ededed]">
             <input
@@ -383,7 +405,7 @@ export function FirewallPage(props: Props) {
         <div class="space-y-2.5">
           <For each={props.draft.firewall.port_forwards}>
             {(fwd, idx) => (
-              <div class={`grid items-center gap-2 sm:grid-cols-7 ${ROW_CLS}`}>
+              <div class={`grid items-center gap-2 sm:grid-cols-8 ${ROW_CLS}`}>
                 <label class="flex items-center gap-1.5">
                   <input
                     type="checkbox"
@@ -462,6 +484,18 @@ export function FirewallPage(props: Props) {
                   }}
                   class={`${INPUT_CLS} font-mono`}
                 />
+                <label class="flex items-center gap-1.5 text-[#171717] dark:text-[#ededed]">
+                  <input
+                    type="checkbox"
+                    checked={fwd.reflection}
+                    onChange={(e) => {
+                      const next = structuredClone(props.draft);
+                      next.firewall.port_forwards[idx()].reflection = e.currentTarget.checked;
+                      props.onChange(next);
+                    }}
+                  />
+                  回流
+                </label>
                 <button
                   type="button"
                   onClick={() => {
@@ -477,6 +511,161 @@ export function FirewallPage(props: Props) {
             )}
           </For>
         </div>
+      </section>
+
+      {/* UPnP / NAT-PMP / PCP */}
+      <section class={SECTION_CLS}>
+        <div class="mb-3.5 flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <h2 class="text-sm font-medium text-[#171717] dark:text-[#ededed]">
+              UPnP IGD / NAT-PMP / PCP
+            </h2>
+            <p class="mt-0.5 text-xs text-[#666666] dark:text-[#a1a1aa]">
+              允许内网游戏主机与 P2P 应用通过 miniupnpd (nftables) 自动申请动态端口映射
+            </p>
+          </div>
+          <label class="flex items-center gap-2 text-xs font-medium text-[#171717] dark:text-[#ededed]">
+            <input
+              type="checkbox"
+              checked={props.draft.upnp.enabled}
+              onChange={(e) => updateUpnp({ enabled: e.currentTarget.checked })}
+            />
+            启用 UPnP / NAT-PMP / PCP
+          </label>
+        </div>
+
+        <Show when={props.draft.upnp.enabled}>
+          <div class="space-y-4">
+            <div class="grid gap-3 sm:grid-cols-3">
+              <label class="flex items-center gap-2 text-xs text-[#171717] dark:text-[#ededed]">
+                <input
+                  type="checkbox"
+                  checked={props.draft.upnp.enable_upnp}
+                  onChange={(e) => updateUpnp({ enable_upnp: e.currentTarget.checked })}
+                />
+                启用 UPnP IGD (SSDP/SOAP)
+              </label>
+              <label class="flex items-center gap-2 text-xs text-[#171717] dark:text-[#ededed]">
+                <input
+                  type="checkbox"
+                  checked={props.draft.upnp.enable_natpmp}
+                  onChange={(e) => updateUpnp({ enable_natpmp: e.currentTarget.checked })}
+                />
+                启用 NAT-PMP / PCP (UDP 5351)
+              </label>
+              <label class="flex items-center gap-2 text-xs text-[#171717] dark:text-[#ededed]">
+                <input
+                  type="checkbox"
+                  checked={props.draft.upnp.secure_mode}
+                  onChange={(e) => updateUpnp({ secure_mode: e.currentTarget.checked })}
+                />
+                安全模式 (仅允许映射到请求者自身 IP)
+              </label>
+            </div>
+
+            <div class="grid gap-3 sm:grid-cols-4">
+              <label class="block text-xs">
+                <span class="text-[#666666] dark:text-[#a1a1aa]">外部起始端口</span>
+                <input
+                  type="number"
+                  min={1}
+                  max={65535}
+                  value={props.draft.upnp.min_ext_port}
+                  onInput={(e) =>
+                    updateUpnp({ min_ext_port: Math.max(1, Number(e.currentTarget.value) || 1024) })
+                  }
+                  class={`mt-1 ${INPUT_CLS} font-mono`}
+                />
+              </label>
+              <label class="block text-xs">
+                <span class="text-[#666666] dark:text-[#a1a1aa]">外部结束端口</span>
+                <input
+                  type="number"
+                  min={1}
+                  max={65535}
+                  value={props.draft.upnp.max_ext_port}
+                  onInput={(e) =>
+                    updateUpnp({
+                      max_ext_port: Math.min(65535, Number(e.currentTarget.value) || 65535),
+                    })
+                  }
+                  class={`mt-1 ${INPUT_CLS} font-mono`}
+                />
+              </label>
+              <label class="block text-xs">
+                <span class="text-[#666666] dark:text-[#a1a1aa]">最大租约时长 (秒)</span>
+                <input
+                  type="number"
+                  min={60}
+                  value={props.draft.upnp.lease_duration_secs}
+                  onInput={(e) =>
+                    updateUpnp({
+                      lease_duration_secs: Math.max(60, Number(e.currentTarget.value) || 3600),
+                    })
+                  }
+                  class={`mt-1 ${INPUT_CLS} font-mono`}
+                />
+              </label>
+              <label class="block text-xs">
+                <span class="text-[#666666] dark:text-[#a1a1aa]">指定 WAN 接口 (可选)</span>
+                <input
+                  type="text"
+                  placeholder="自动 (主 WAN / ppp0)"
+                  value={props.draft.upnp.wan_interface ?? ""}
+                  onInput={(e) => {
+                    const val = e.currentTarget.value.trim();
+                    updateUpnp({ wan_interface: val === "" ? null : val });
+                  }}
+                  class={`mt-1 ${INPUT_CLS} font-mono`}
+                />
+              </label>
+            </div>
+
+            <div class="rounded-lg border border-[#eaeaea] dark:border-[#262626] p-3">
+              <div class="mb-2 flex items-center justify-between">
+                <span class="text-xs font-medium text-[#171717] dark:text-[#ededed]">
+                  活跃动态映射 ({upnpLeases()?.length ?? 0})
+                </span>
+                <button type="button" onClick={() => void refetchUpnpLeases()} class={BTN_OUTLINE}>
+                  刷新
+                </button>
+              </div>
+              <Show
+                when={(upnpLeases()?.length ?? 0) > 0}
+                fallback={
+                  <p class="text-xs text-[#666666] dark:text-[#a1a1aa]">暂无活跃 UPnP/PCP 映射</p>
+                }
+              >
+                <div class="overflow-x-auto">
+                  <table class="w-full text-left text-xs font-mono">
+                    <thead class="text-[#666666] dark:text-[#a1a1aa]">
+                      <tr>
+                        <th class="py-1 pr-3">协议</th>
+                        <th class="py-1 pr-3">外部端口</th>
+                        <th class="py-1 pr-3">内网目标</th>
+                        <th class="py-1">描述</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <For each={upnpLeases() ?? []}>
+                        {(entry) => (
+                          <tr class="border-t border-[#eaeaea] dark:border-[#262626]">
+                            <td class="py-1 pr-3">{entry.proto}</td>
+                            <td class="py-1 pr-3">{entry.external_port}</td>
+                            <td class="py-1 pr-3">
+                              {entry.internal_ip}:{entry.internal_port}
+                            </td>
+                            <td class="py-1 font-sans">{entry.description}</td>
+                          </tr>
+                        )}
+                      </For>
+                    </tbody>
+                  </table>
+                </div>
+              </Show>
+            </div>
+          </div>
+        </Show>
       </section>
     </div>
   );

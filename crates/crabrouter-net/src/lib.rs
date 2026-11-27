@@ -8,6 +8,7 @@ pub mod ipv6_pd;
 pub mod multi_wan;
 pub mod netlink;
 pub mod nftables;
+pub mod nic_tuning;
 pub mod pins;
 pub mod pppoe;
 pub mod qos;
@@ -54,6 +55,7 @@ pub use nftables::{
     render_nftables_ruleset, render_nftables_ruleset_with_multi_wan,
     render_nftables_ruleset_with_options,
 };
+pub use nic_tuning::{apply_nic_tuning, probe_nic_capabilities, render_nic_tuning_script};
 pub use pins::{
     discover_physical_nic_pins, render_systemd_link_files, render_udev_net_rules,
     sync_interface_pin_files,

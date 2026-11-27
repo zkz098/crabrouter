@@ -121,6 +121,7 @@ fn build_multi_wan_test_config() -> RouterConfig {
             table_id: Some(101),
             health_check_enabled: true,
             probe_targets: vec!["198.51.100.1".to_string()],
+            mac_override: None,
         },
         WanConfig {
             name: "wan2".to_string(),
@@ -138,6 +139,7 @@ fn build_multi_wan_test_config() -> RouterConfig {
             table_id: Some(102),
             health_check_enabled: true,
             probe_targets: vec!["203.0.113.1".to_string()],
+            mac_override: None,
         },
     ];
     for zone in &mut cfg.firewall.zones {

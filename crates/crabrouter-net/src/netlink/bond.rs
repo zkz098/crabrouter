@@ -295,6 +295,7 @@ mod tests {
             ObservedLink {
                 index: 2,
                 name: "eth1".to_string(),
+                mac: None,
                 controller: None,
                 kind: None,
                 vlan_id: None,
@@ -303,6 +304,7 @@ mod tests {
             ObservedLink {
                 index: 3,
                 name: "eth2".to_string(),
+                mac: None,
                 controller: None,
                 kind: None,
                 vlan_id: None,
@@ -325,6 +327,7 @@ mod tests {
         let links = vec![ObservedLink {
             index: 99,
             name: "bond0".to_string(),
+            mac: None,
             controller: None,
             kind: Some("bond".to_string()),
             vlan_id: None,

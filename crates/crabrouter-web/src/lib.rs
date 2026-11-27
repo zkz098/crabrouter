@@ -3,6 +3,7 @@ pub mod crabdns_proxy;
 pub mod ddns_tls_api;
 pub mod logs;
 pub mod metrics;
+pub mod nic_tuning_api;
 pub mod ota_api;
 pub mod rate_limit;
 pub mod terminal;
@@ -55,6 +56,10 @@ pub fn build_router(state: AppState) -> Router {
         .route("/api/services/status", get(api::service_statuses))
         .route("/api/dns/status", get(crabdns_proxy::dns_aggregate_status))
         .route("/api/interfaces", get(api::interfaces))
+        .route(
+            "/api/interfaces/{name}/capabilities",
+            get(nic_tuning_api::interface_capabilities),
+        )
         .route("/api/wans/status", get(api::wan_status))
         .route("/api/wans/multi-wan/status", get(api::multi_wan_status))
         .route("/api/wans/multi-wan/probe", post(api::multi_wan_probe_now))
@@ -66,6 +71,7 @@ pub fn build_router(state: AppState) -> Router {
         .route("/api/tls/renew", post(ddns_tls_api::tls_renew_now))
         .route("/api/net/wan-event", post(api::ingest_wan_event))
         .route("/api/clients", get(api::online_clients))
+        .route("/api/upnp/leases", get(api::upnp_leases))
         .route("/api/conntrack", get(api::list_conntrack))
         .route("/api/conntrack/kill", post(api::kill_conntrack))
         .route("/api/config", get(api::get_config))

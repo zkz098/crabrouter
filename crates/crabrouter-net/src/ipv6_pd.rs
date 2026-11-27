@@ -1,7 +1,7 @@
 use std::collections::{HashMap, HashSet};
 use std::net::{IpAddr, Ipv6Addr};
 
-use crabrouter_model::{InterfaceRole, Ipv6PdSlice, RouterConfig};
+use crabrouter_model::{InterfaceRole, Ipv6LanMode, Ipv6PdSlice, RouterConfig};
 use futures_util::stream::TryStreamExt;
 use ipnet::Ipv6Net;
 use rtnetlink::packet_route::link::LinkAttribute;
@@ -24,6 +24,7 @@ pub fn resolve_downstream_ipv6_targets(cfg: &RouterConfig) -> Vec<DownstreamIpv6
     let mut used_ids: HashSet<u8> = HashSet::new();
     for lan in &cfg.lans {
         if lan.ipv6_ra_enabled
+            && lan.ipv6_mode == Ipv6LanMode::Server
             && let Some(id) = lan.ipv6_subnet_id
         {
             used_ids.insert(id);
@@ -56,7 +57,7 @@ pub fn resolve_downstream_ipv6_targets(cfg: &RouterConfig) -> Vec<DownstreamIpv6
 
     let mut targets = Vec::new();
     for lan in &cfg.lans {
-        if !lan.ipv6_ra_enabled {
+        if !lan.ipv6_ra_enabled || lan.ipv6_mode != Ipv6LanMode::Server {
             continue;
         }
         let Some(subnet_id) = lan.ipv6_subnet_id.or_else(|| alloc_free_id(&mut used_ids)) else {

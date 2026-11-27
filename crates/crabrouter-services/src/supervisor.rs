@@ -9,6 +9,8 @@ use zbus::OwnedObjectPath;
 
 use crate::crabdns::render_crabdns_toml;
 use crate::dnsmasq::render_dnsmasq_conf;
+use crate::ipv6_relay::{has_ipv6_relay_enabled, render_ndppd_conf};
+use crate::upnp::render_miniupnpd_conf;
 use crate::wireguard::{render_wg_quick_conf, sync_wireguard_files};
 use crate::{Result, ServiceError};
 
@@ -64,6 +66,8 @@ impl ServiceSupervisor for DryRunSupervisor {
         Box::pin(async move {
             let dnsmasq = render_dnsmasq_conf(cfg)?;
             let crabdns = render_crabdns_toml(cfg)?;
+            let miniupnpd = render_miniupnpd_conf(cfg);
+            let ndppd = render_ndppd_conf(cfg);
             let wg = if cfg.wireguard.enabled {
                 render_wg_quick_conf(
                     cfg,
@@ -75,8 +79,10 @@ impl ServiceSupervisor for DryRunSupervisor {
             tracing::info!(
                 dnsmasq_bytes = dnsmasq.len(),
                 crabdns_bytes = crabdns.len(),
+                miniupnpd_bytes = miniupnpd.len(),
+                ndppd_bytes = ndppd.len(),
                 wg_bytes = wg.len(),
-                "dry-run: rendered crabdns, dnsmasq & wireguard configurations"
+                "dry-run: rendered crabdns, dnsmasq, miniupnpd, ndppd & wireguard configurations"
             );
             Ok(())
         })
@@ -123,6 +129,8 @@ impl ServiceSupervisor for DryRunSupervisor {
                     }
                     .to_string(),
                 },
+                dry_run_toggle_unit("miniupnpd.service", cfg.upnp.enabled),
+                dry_run_toggle_unit("ndppd.service", has_ipv6_relay_enabled(cfg)),
             ])
         })
     }
@@ -149,9 +157,13 @@ impl ServiceSupervisor for SystemdSupervisor {
             tokio::fs::create_dir_all(&self.runtime_dir).await?;
             let dnsmasq_path = self.runtime_dir.join("dnsmasq.conf");
             let crabdns_path = self.runtime_dir.join("crabdns.toml");
+            let miniupnpd_path = self.runtime_dir.join("miniupnpd.conf");
+            let ndppd_path = self.runtime_dir.join("ndppd.conf");
 
             write_atomic(&dnsmasq_path, &render_dnsmasq_conf(cfg)?).await?;
             write_atomic(&crabdns_path, &render_crabdns_toml(cfg)?).await?;
+            write_atomic(&miniupnpd_path, &render_miniupnpd_conf(cfg)).await?;
+            write_atomic(&ndppd_path, &render_ndppd_conf(cfg)).await?;
 
             if cfg.wireguard.enabled {
                 sync_wireguard_files(cfg, &self.wireguard_dir)?;
@@ -169,11 +181,9 @@ impl ServiceSupervisor for SystemdSupervisor {
             reload_unit_via_dbus(&mgr, "chrony.service", false).await?;
 
             let wg_unit = format!("wg-quick@{}.service", cfg.wireguard.interface);
-            if cfg.wireguard.enabled {
-                reload_unit_via_dbus(&mgr, &wg_unit, true).await?;
-            } else {
-                stop_unit_via_dbus(&mgr, &wg_unit).await?;
-            }
+            sync_optional_unit(&mgr, &wg_unit, cfg.wireguard.enabled, true).await?;
+            sync_optional_unit(&mgr, "miniupnpd.service", cfg.upnp.enabled, false).await?;
+            sync_optional_unit(&mgr, "ndppd.service", has_ipv6_relay_enabled(cfg), false).await?;
 
             Ok(())
         })
@@ -200,6 +210,8 @@ impl ServiceSupervisor for SystemdSupervisor {
                 "dnsmasq.service".to_string(),
                 "chrony.service".to_string(),
                 format!("wg-quick@{}.service", cfg.wireguard.interface),
+                "miniupnpd.service".to_string(),
+                "ndppd.service".to_string(),
             ];
             let mut out = Vec::with_capacity(units.len());
             for unit in units {
@@ -207,6 +219,28 @@ impl ServiceSupervisor for SystemdSupervisor {
             }
             Ok(out)
         })
+    }
+}
+
+fn dry_run_toggle_unit(unit: &str, enabled: bool) -> SystemdUnitStatus {
+    SystemdUnitStatus {
+        unit: unit.to_string(),
+        load_state: "dry-run".to_string(),
+        active_state: if enabled { "active" } else { "inactive" }.to_string(),
+        sub_state: if enabled { "running" } else { "dead" }.to_string(),
+    }
+}
+
+async fn sync_optional_unit(
+    mgr: &SystemdManagerProxy<'_>,
+    unit: &str,
+    enabled: bool,
+    required: bool,
+) -> Result<()> {
+    if enabled {
+        reload_unit_via_dbus(mgr, unit, required).await
+    } else {
+        stop_unit_via_dbus(mgr, unit).await
     }
 }
 

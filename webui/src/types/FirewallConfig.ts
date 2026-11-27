@@ -3,4 +3,8 @@ import type { FirewallRule } from "./FirewallRule";
 import type { FirewallZone } from "./FirewallZone";
 import type { PortForwardRule } from "./PortForwardRule";
 
-export type FirewallConfig = { flowtable_offload: boolean, syn_flood_protect: boolean, syn_flood_rate: number, mss_clamping: boolean, zones: Array<FirewallZone>, rules: Array<FirewallRule>, port_forwards: Array<PortForwardRule>, };
+export type FirewallConfig = { flowtable_offload: boolean, syn_flood_protect: boolean, syn_flood_rate: number, mss_clamping: boolean, 
+/**
+ * Global switch for NAT loopback (hairpin NAT) on enabled port forwards.
+ */
+nat_loopback: boolean, zones: Array<FirewallZone>, rules: Array<FirewallRule>, port_forwards: Array<PortForwardRule>, };

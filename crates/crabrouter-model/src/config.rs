@@ -10,9 +10,11 @@ use crate::ebpf::EbpfConfig;
 use crate::error::{ModelError, Result};
 use crate::firewall::FirewallConfig;
 use crate::network::{
-    AcmeConfig, DdnsConfig, InterfacePin, LanConfig, MultiWanConfig, PolicyRuleConfig, QosConfig,
-    StaticRouteConfig, VlanConfig, WanConfig, WanProto,
+    AcmeConfig, DdnsConfig, InterfacePin, Ipv6LanMode, LanConfig, MultiWanConfig, PolicyRuleConfig,
+    QosConfig, StaticRouteConfig, VlanConfig, WanConfig, WanProto, is_valid_unicast_mac,
 };
+use crate::nic_tuning::{NicTuningConfig, validate_nic_tuning};
+use crate::upnp::UpnpConfig;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[ts(export)]
@@ -171,6 +173,10 @@ pub struct RouterConfig {
     pub ddns: DdnsConfig,
     #[serde(default)]
     pub acme: AcmeConfig,
+    #[serde(default)]
+    pub upnp: UpnpConfig,
+    #[serde(default)]
+    pub nic_tuning: Vec<NicTuningConfig>,
 }
 
 impl Default for RouterConfig {
@@ -193,6 +199,8 @@ impl Default for RouterConfig {
             ebpf: EbpfConfig::default(),
             ddns: DdnsConfig::default(),
             acme: AcmeConfig::default(),
+            upnp: UpnpConfig::default(),
+            nic_tuning: Vec::new(),
         }
     }
 }
@@ -217,13 +225,15 @@ impl RouterConfig {
         validate_bonds(&self.bonds, &self.lans)?;
         self.validate_interface_pins()?;
         self.validate_routing()?;
-        self.validate_firewall()?;
+        self.firewall.validate()?;
         self.validate_wireguard()?;
         self.validate_qos()?;
         self.validate_multi_wan()?;
         self.ebpf.validate()?;
         self.ddns.validate()?;
         self.acme.validate()?;
+        self.upnp.validate()?;
+        validate_nic_tuning(&self.nic_tuning)?;
         Ok(())
     }
 
@@ -251,6 +261,18 @@ impl RouterConfig {
                 return Err(ModelError::Validation(format!(
                     "WAN '{}' ipv6_pd_prefix_len {} must be between 48 and 64",
                     wan.name, wan.ipv6_pd_prefix_len
+                )));
+            }
+            if let Some(mac) = wan
+                .mac_override
+                .as_deref()
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+                && !is_valid_unicast_mac(mac)
+            {
+                return Err(ModelError::Validation(format!(
+                    "WAN '{}' invalid mac_override '{mac}' (must be a unicast MAC)",
+                    wan.name
                 )));
             }
             match wan.proto {
@@ -355,6 +377,19 @@ impl RouterConfig {
                         lan.name, ula
                     )));
                 }
+            }
+            if lan.ipv6_mode == Ipv6LanMode::Relay
+                && let Some(wan_ref) = lan
+                    .ipv6_relay_wan
+                    .as_deref()
+                    .map(str::trim)
+                    .filter(|s| !s.is_empty())
+                && !self.wans.iter().any(|w| w.name == wan_ref)
+            {
+                return Err(ModelError::Validation(format!(
+                    "LAN '{}' ipv6_relay_wan '{wan_ref}' references unknown WAN",
+                    lan.name
+                )));
             }
         }
         self.validate_ipv6_subnet_ids()?;
@@ -494,50 +529,6 @@ impl RouterConfig {
         Ok(())
     }
 
-    fn validate_firewall(&self) -> Result<()> {
-        let zone_names: HashSet<&str> = self
-            .firewall
-            .zones
-            .iter()
-            .map(|z| z.name.as_str())
-            .collect();
-
-        for rule in &self.firewall.rules {
-            if !zone_names.contains(rule.src_zone.as_str()) {
-                return Err(ModelError::Validation(format!(
-                    "firewall rule '{}' references unknown src_zone '{}'",
-                    rule.name, rule.src_zone
-                )));
-            }
-            if let Some(dst_zone) = rule.dst_zone.as_deref()
-                && !zone_names.contains(dst_zone)
-            {
-                return Err(ModelError::Validation(format!(
-                    "firewall rule '{}' references unknown dst_zone '{}'",
-                    rule.name, dst_zone
-                )));
-            }
-            validate_opt_ip_or_net(rule.src_ip.as_deref(), &rule.name, "src_ip")?;
-            validate_opt_ip_or_net(rule.dst_ip.as_deref(), &rule.name, "dst_ip")?;
-            if let Some(port_expr) = rule.dst_port.as_deref() {
-                validate_port_expr(port_expr, &rule.name)?;
-            }
-        }
-
-        for fwd in &self.firewall.port_forwards {
-            if fwd.external_port == 0 || fwd.internal_port == 0 {
-                return Err(ModelError::Validation(format!(
-                    "port forward '{}' ports must be non-zero",
-                    fwd.name
-                )));
-            }
-            fwd.dest_ip.parse::<IpAddr>().map_err(|e| {
-                ModelError::Validation(format!("port forward '{}' invalid dest_ip: {e}", fwd.name))
-            })?;
-        }
-        Ok(())
-    }
-
     fn validate_wireguard(&self) -> Result<()> {
         if self.wireguard.enabled {
             if self.wireguard.interface.trim().is_empty() {
@@ -618,51 +609,6 @@ impl RouterConfig {
         }
         Ok(())
     }
-}
-
-fn validate_opt_ip_or_net(val: Option<&str>, rule_name: &str, field: &str) -> Result<()> {
-    let Some(raw) = val.map(str::trim).filter(|s| !s.is_empty()) else {
-        return Ok(());
-    };
-    if raw.parse::<IpNet>().is_err() && raw.parse::<IpAddr>().is_err() {
-        return Err(ModelError::Validation(format!(
-            "firewall rule '{rule_name}' invalid {field} '{raw}'"
-        )));
-    }
-    Ok(())
-}
-
-fn validate_port_expr(expr: &str, rule_name: &str) -> Result<()> {
-    let trimmed = expr.trim();
-    if let Some((start_s, end_s)) = trimmed.split_once('-') {
-        let start: u16 = start_s.parse().map_err(|_| {
-            ModelError::Validation(format!(
-                "firewall rule '{rule_name}' invalid port range '{trimmed}'"
-            ))
-        })?;
-        let end: u16 = end_s.parse().map_err(|_| {
-            ModelError::Validation(format!(
-                "firewall rule '{rule_name}' invalid port range '{trimmed}'"
-            ))
-        })?;
-        if start == 0 || start > end {
-            return Err(ModelError::Validation(format!(
-                "firewall rule '{rule_name}' port range '{trimmed}' must have 1 <= start <= end"
-            )));
-        }
-        return Ok(());
-    }
-    let port: u16 = trimmed.parse().map_err(|_| {
-        ModelError::Validation(format!(
-            "firewall rule '{rule_name}' invalid port '{trimmed}'"
-        ))
-    })?;
-    if port == 0 {
-        return Err(ModelError::Validation(format!(
-            "firewall rule '{rule_name}' port cannot be 0"
-        )));
-    }
-    Ok(())
 }
 
 pub fn is_valid_mac(mac: &str) -> bool {
@@ -753,6 +699,7 @@ fn default_wans() -> Vec<WanConfig> {
         table_id: None,
         health_check_enabled: true,
         probe_targets: Vec::new(),
+        mac_override: None,
     }]
 }
 
@@ -769,6 +716,8 @@ fn default_lans() -> Vec<LanConfig> {
         dhcp_lease_secs: 43_200,
         static_leases: Vec::new(),
         ipv6_ra_enabled: true,
+        ipv6_mode: Ipv6LanMode::Server,
+        ipv6_relay_wan: None,
         ipv6_subnet_id: None,
         ipv6_ula_cidr: None,
         stp_enabled: false,

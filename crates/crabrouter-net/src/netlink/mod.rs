@@ -15,6 +15,7 @@ use rtnetlink::packet_route::route::RouteProtocol;
 use crate::Result;
 use crate::dhcpcd::sync_dhcpcd_files;
 use crate::nftables::{apply_nft_with_precheck, render_nftables_ruleset};
+use crate::nic_tuning::{apply_nic_tuning, render_nic_tuning_script};
 use crate::pins::sync_interface_pin_files;
 use crate::pppoe::{PppdManager, render_pppd_peer};
 use crate::qos::{apply_tc_qos, render_tc_qos_script};
@@ -66,6 +67,7 @@ impl NetworkBackend for DryRunNetworkBackend {
         Box::pin(async move {
             let ruleset = render_nftables_ruleset(cfg);
             let tc_script = render_tc_qos_script(cfg);
+            let _nic_script = render_nic_tuning_script(cfg);
             let plan = compute_network_diff_plan(cfg, &[], &[], &[], &[]);
             let ppp_peers: Vec<String> = cfg
                 .wans
@@ -132,6 +134,8 @@ impl NetworkBackend for LinuxNetworkBackend {
             )?;
 
             apply_rtnetlink_diff(cfg).await?;
+            apply::apply_ipv6_relay_sysctls(cfg);
+            apply_nic_tuning(cfg).await?;
 
             self.pppd.sync(cfg).await?;
 
@@ -147,6 +151,7 @@ impl NetworkBackend for LinuxNetworkBackend {
 pub struct ObservedLink {
     pub index: u32,
     pub name: String,
+    pub mac: Option<String>,
     pub controller: Option<u32>,
     pub kind: Option<String>,
     pub vlan_id: Option<u16>,
@@ -226,6 +231,7 @@ pub struct NetworkDiffPlan {
     pub bond_slaves_to_detach: Vec<String>,
     pub bridges_to_create: Vec<String>,
     pub bridges_stp_to_set: Vec<BridgeStpSpec>,
+    pub links_mac_to_set: Vec<(String, [u8; 6])>,
     pub links_to_up_mtu: Vec<(String, Option<u32>)>,
     pub bridge_ports_to_attach: Vec<BridgePortSpec>,
     pub bridge_ports_to_detach: Vec<String>,
@@ -281,6 +287,22 @@ pub fn compute_network_diff_plan_with_wans(
     plan_policy_rules(cfg, rules, wan_states, &mut plan);
 
     for wan in &cfg.wans {
+        if let Some(mac_str) = wan
+            .mac_override
+            .as_deref()
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            && let Some(desired_mac) = apply::parse_mac_bytes(mac_str)
+        {
+            let already = link_by_name
+                .get(wan.device.as_str())
+                .and_then(|l| l.mac.as_deref())
+                .is_some_and(|m| m.eq_ignore_ascii_case(mac_str));
+            if !already {
+                plan.links_mac_to_set
+                    .push((wan.device.clone(), desired_mac));
+            }
+        }
         plan.links_to_up_mtu
             .push((wan.device.clone(), Some(u32::from(wan.mtu))));
     }
@@ -722,6 +744,7 @@ mod tests {
             ObservedLink {
                 index: 2,
                 name: "eth1".to_string(),
+                mac: None,
                 controller: Some(10),
                 kind: None,
                 vlan_id: None,
@@ -730,6 +753,7 @@ mod tests {
             ObservedLink {
                 index: 10,
                 name: "br-lan".to_string(),
+                mac: None,
                 controller: None,
                 kind: Some("bridge".to_string()),
                 vlan_id: None,
@@ -738,6 +762,7 @@ mod tests {
             ObservedLink {
                 index: 11,
                 name: "eth9".to_string(),
+                mac: None,
                 controller: Some(10),
                 kind: None,
                 vlan_id: None,
@@ -746,6 +771,7 @@ mod tests {
             ObservedLink {
                 index: 12,
                 name: "eth1.99".to_string(),
+                mac: None,
                 controller: None,
                 kind: Some("vlan".to_string()),
                 vlan_id: Some(99),

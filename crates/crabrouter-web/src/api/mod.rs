@@ -16,16 +16,17 @@ use crabrouter_core::{CommitStatus, ConfigSnapshotSummary, CoreError};
 use crabrouter_model::{
     ConntrackEntry, ConntrackKillRequest, DhcpLeaseEntry, EbpfRuntimeStatus,
     HardwareHealthSnapshot, HostInterfaceSnapshot, LanConfig, MultiWanRuntimeStatus, RouterConfig,
-    WanConfig, WanRuntimeState,
+    UpnpLeaseEntry, WanConfig, WanRuntimeState,
 };
 use crabrouter_net::{
     WanLeaseEvent, collect_hardware_health, kill_conntrack_flow, read_conntrack_table,
-    read_host_interfaces, render_dhcpcd_conf, render_nftables_ruleset, render_pppd_peer,
-    render_systemd_link_files, render_tc_qos_script, render_udev_net_rules,
+    read_host_interfaces, render_dhcpcd_conf, render_nftables_ruleset, render_nic_tuning_script,
+    render_pppd_peer, render_systemd_link_files, render_tc_qos_script, render_udev_net_rules,
 };
 use crabrouter_services::{
     SystemdUnitStatus, generate_wireguard_keypair as svc_gen_wg_keypair, read_online_clients,
-    render_crabdns_toml, render_dnsmasq_conf, render_wg_quick_conf,
+    read_upnp_leases, render_crabdns_toml, render_dnsmasq_conf, render_miniupnpd_conf,
+    render_ndppd_conf, render_wg_quick_conf,
 };
 use serde::{Deserialize, Serialize};
 use tokio::process::Command;
@@ -58,6 +59,9 @@ pub struct RenderedConfigsPreview {
     pub dhcpcd: String,
     pub udev_rules: String,
     pub wg_quick: String,
+    pub miniupnpd: String,
+    pub ndppd: String,
+    pub nic_tuning: String,
     pub systemd_links: Vec<RenderedFilePreview>,
     pub pppd_peers: Vec<RenderedFilePreview>,
 }
@@ -405,9 +409,25 @@ pub async fn preview_rendered(
         dhcpcd: render_dhcpcd_conf(&cfg),
         udev_rules: render_udev_net_rules(&cfg.interface_pins),
         wg_quick,
+        miniupnpd: render_miniupnpd_conf(&cfg),
+        ndppd: render_ndppd_conf(&cfg),
+        nic_tuning: render_nic_tuning_script(&cfg),
         systemd_links,
         pppd_peers,
     }))
+}
+
+pub async fn upnp_leases(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> Result<Json<Vec<UpnpLeaseEntry>>, ApiError> {
+    require_auth_if_initialized(&state, &headers)?;
+    if state.dry_run {
+        return Ok(Json(Vec::new()));
+    }
+    Ok(Json(read_upnp_leases(Path::new(
+        "/run/crabrouter/upnp.leases",
+    ))))
 }
 
 pub async fn begin_commit(

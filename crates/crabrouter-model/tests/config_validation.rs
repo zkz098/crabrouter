@@ -116,3 +116,78 @@ fn accepts_ipv6_entries_in_xdp_blocklist() {
     cfg.ebpf.xdp_blocklist.push("not-an-ip".to_string());
     assert!(cfg.validate().is_err());
 }
+
+#[test]
+fn validates_wan_mac_override_upnp_and_ipv6_relay() {
+    let mut cfg = RouterConfig::default();
+    cfg.wans[0].mac_override = Some("02:11:22:33:44:55".to_string());
+    cfg.lans[0].ipv6_mode = crabrouter_model::Ipv6LanMode::Relay;
+    cfg.lans[0].ipv6_relay_wan = Some("wan".to_string());
+    cfg.upnp.enabled = true;
+    assert!(cfg.validate().is_ok());
+
+    // Multicast MAC must be rejected.
+    let mut bad_mac = cfg.clone();
+    bad_mac.wans[0].mac_override = Some("01:11:22:33:44:55".to_string());
+    assert!(bad_mac.validate().is_err());
+
+    // Unknown relay WAN must be rejected.
+    let mut bad_relay = cfg.clone();
+    bad_relay.lans[0].ipv6_relay_wan = Some("nonexistent".to_string());
+    assert!(bad_relay.validate().is_err());
+
+    // Invalid UPnP port range must be rejected.
+    let mut bad_upnp = cfg;
+    bad_upnp.upnp.min_ext_port = 50000;
+    bad_upnp.upnp.max_ext_port = 10000;
+    assert!(bad_upnp.validate().is_err());
+}
+
+#[test]
+fn validates_nic_tuning_profiles_and_constraints() {
+    use crabrouter_model::{NicTuningConfig, NicTuningProfile, RpsMode};
+
+    let mut cfg = RouterConfig::default();
+    cfg.nic_tuning.push(NicTuningConfig {
+        interface: "eth0".to_string(),
+        enabled: true,
+        profile: NicTuningProfile::LowLatency,
+        gro: None,
+        gso: None,
+        tso: None,
+        lro: None,
+        rx_checksum: None,
+        tx_checksum: None,
+        pause_rx: None,
+        pause_tx: None,
+        rx_ring: Some(1024),
+        tx_ring: Some(1024),
+        rps_mode: RpsMode::Off,
+        rps_mask: None,
+        xps_enabled: false,
+        rfs_flow_entries: None,
+    });
+    assert!(cfg.validate().is_ok());
+    let eff = cfg.nic_tuning[0].resolve_effective();
+    assert_eq!(eff.lro, Some(false));
+    assert_eq!(eff.pause_rx, Some(false));
+    assert_eq!(eff.rps_mode, RpsMode::Auto);
+    assert!(eff.xps_enabled);
+    assert_eq!(eff.rfs_flow_entries, Some(32_768));
+
+    // Duplicate interface must fail.
+    let mut dup = cfg.clone();
+    dup.nic_tuning.push(cfg.nic_tuning[0].clone());
+    assert!(dup.validate().is_err());
+
+    // Invalid custom RPS mask must fail.
+    let mut bad_mask = cfg.clone();
+    bad_mask.nic_tuning[0].rps_mode = RpsMode::Custom;
+    bad_mask.nic_tuning[0].rps_mask = Some("0000".to_string());
+    assert!(bad_mask.validate().is_err());
+
+    // Out-of-range ring buffer must fail.
+    let mut bad_ring = cfg;
+    bad_ring.nic_tuning[0].rx_ring = Some(32);
+    assert!(bad_ring.validate().is_err());
+}

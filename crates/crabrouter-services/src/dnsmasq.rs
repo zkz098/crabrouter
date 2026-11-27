@@ -4,7 +4,7 @@ use std::fs;
 use std::net::Ipv4Addr;
 use std::path::Path;
 
-use crabrouter_model::{DhcpLeaseEntry, InterfaceRole, RouterConfig};
+use crabrouter_model::{DhcpLeaseEntry, InterfaceRole, Ipv6LanMode, RouterConfig};
 use ipnet::IpNet;
 
 use crate::{Result, ServiceError};
@@ -33,7 +33,10 @@ pub fn render_dnsmasq_conf(cfg: &RouterConfig) -> Result<String> {
         cfg.dns.dnsmasq_dns_port
     );
 
-    let any_ra_enabled = cfg.lans.iter().any(|l| l.ipv6_ra_enabled)
+    let any_ra_enabled = cfg
+        .lans
+        .iter()
+        .any(|l| l.ipv6_ra_enabled && l.ipv6_mode == Ipv6LanMode::Server)
         || cfg
             .vlans
             .iter()
@@ -48,76 +51,91 @@ pub fn render_dnsmasq_conf(cfg: &RouterConfig) -> Result<String> {
     }
 
     for lan in &cfg.lans {
-        let net: IpNet = lan
-            .cidr
-            .parse()
-            .map_err(|e| ServiceError::Render(format!("invalid LAN cidr '{}': {e}", lan.cidr)))?;
-        let IpNet::V4(v4_net) = net else {
-            continue;
-        };
+        write_lan_section(&mut out, lan)?;
+    }
 
-        let _ = writeln!(out, "# LAN '{}' ({})", lan.name, lan.bridge);
-        let _ = writeln!(out, "local=/{}/", lan.domain);
-        let _ = writeln!(out, "domain={}", lan.domain);
+    write_vlan_ipv6_ra(&mut out, cfg);
 
-        let mut iface_emitted = false;
-        if lan.dhcp_enabled {
-            let base = u32::from(v4_net.network());
-            let broadcast = u32::from(v4_net.broadcast());
-            let start_u32 = base.saturating_add(lan.dhcp_start_offset);
-            let end_u32 = start_u32
-                .saturating_add(lan.dhcp_limit.saturating_sub(1))
-                .min(broadcast.saturating_sub(1));
+    Ok(out)
+}
 
-            if start_u32 <= end_u32 {
-                let start_ip = Ipv4Addr::from(start_u32);
-                let end_ip = Ipv4Addr::from(end_u32);
-                let router_ip = v4_net.addr();
-                iface_emitted = true;
-                let _ = writeln!(
-                    out,
-                    "interface={}\n\
-                     dhcp-range=set:{},{start_ip},{end_ip},{},{}s\n\
-                     dhcp-option=tag:{},option:router,{router_ip}\n\
-                     dhcp-option=tag:{},option:dns-server,{router_ip}",
-                    lan.bridge,
-                    lan.name,
-                    v4_net.netmask(),
-                    lan.dhcp_lease_secs,
-                    lan.name,
-                    lan.name,
-                );
-            }
+fn write_lan_section(out: &mut String, lan: &crabrouter_model::LanConfig) -> Result<()> {
+    let net: IpNet = lan
+        .cidr
+        .parse()
+        .map_err(|e| ServiceError::Render(format!("invalid LAN cidr '{}': {e}", lan.cidr)))?;
+    let IpNet::V4(v4_net) = net else {
+        return Ok(());
+    };
 
-            for lease in &lan.static_leases {
-                let host = lease
-                    .hostname
-                    .as_deref()
-                    .map(str::trim)
-                    .filter(|s| !s.is_empty());
-                if let Some(h) = host {
-                    let _ = writeln!(out, "dhcp-host={},{},{}", lease.mac, lease.ip, h);
-                } else {
-                    let _ = writeln!(out, "dhcp-host={},{}", lease.mac, lease.ip);
-                }
-            }
+    let _ = writeln!(out, "# LAN '{}' ({})", lan.name, lan.bridge);
+    let _ = writeln!(out, "local=/{}/", lan.domain);
+    let _ = writeln!(out, "domain={}", lan.domain);
+
+    let mut iface_emitted = false;
+    if lan.dhcp_enabled {
+        let base = u32::from(v4_net.network());
+        let broadcast = u32::from(v4_net.broadcast());
+        let start_u32 = base.saturating_add(lan.dhcp_start_offset);
+        let end_u32 = start_u32
+            .saturating_add(lan.dhcp_limit.saturating_sub(1))
+            .min(broadcast.saturating_sub(1));
+
+        if start_u32 <= end_u32 {
+            let start_ip = Ipv4Addr::from(start_u32);
+            let end_ip = Ipv4Addr::from(end_u32);
+            let router_ip = v4_net.addr();
+            iface_emitted = true;
+            let _ = writeln!(
+                out,
+                "interface={}\n\
+                 dhcp-range=set:{},{start_ip},{end_ip},{},{}s\n\
+                 dhcp-option=tag:{},option:router,{router_ip}\n\
+                 dhcp-option=tag:{},option:dns-server,{router_ip}",
+                lan.bridge,
+                lan.name,
+                v4_net.netmask(),
+                lan.dhcp_lease_secs,
+                lan.name,
+                lan.name,
+            );
         }
 
-        if lan.ipv6_ra_enabled {
+        for lease in &lan.static_leases {
+            let host = lease
+                .hostname
+                .as_deref()
+                .map(str::trim)
+                .filter(|s| !s.is_empty());
+            if let Some(h) = host {
+                let _ = writeln!(out, "dhcp-host={},{},{}", lease.mac, lease.ip, h);
+            } else {
+                let _ = writeln!(out, "dhcp-host={},{}", lease.mac, lease.ip);
+            }
+        }
+    }
+
+    match lan.ipv6_mode {
+        Ipv6LanMode::Server if lan.ipv6_ra_enabled => {
             write_lan_ipv6_ra(
-                &mut out,
+                out,
                 &lan.name,
                 &lan.bridge,
                 lan.dhcp_lease_secs,
                 iface_emitted,
             );
         }
-        out.push('\n');
+        Ipv6LanMode::Relay => {
+            let _ = writeln!(
+                out,
+                "# IPv6 Relay mode active on '{}' — NDP/RA handled by ndppd",
+                lan.bridge
+            );
+        }
+        Ipv6LanMode::Server | Ipv6LanMode::Disabled => {}
     }
-
-    write_vlan_ipv6_ra(&mut out, cfg);
-
-    Ok(out)
+    out.push('\n');
+    Ok(())
 }
 
 fn write_lan_ipv6_ra(

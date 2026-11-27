@@ -6,8 +6,8 @@ use std::sync::OnceLock;
 use std::time::Duration;
 
 use crabrouter_model::{
-    FirewallAction, FirewallRule, FirewallZone, MultiWanMode, RouterConfig, TransportProto,
-    wan_fwmark, wan_table_id,
+    FirewallAction, FirewallRule, FirewallZone, Ipv6LanMode, MultiWanMode, RouterConfig,
+    TransportProto, wan_fwmark, wan_table_id,
 };
 use ipnet::IpNet;
 use tokio::io::AsyncWriteExt;
@@ -200,6 +200,16 @@ fn write_input_chain(out: &mut String, cfg: &RouterConfig) {
          \x20       ip6 daddr fe80::/10 udp sport 547 udp dport 546 accept comment \"dhcpv6-client\"\n",
     );
     write_syn_flood_guard(out, cfg, "input");
+    if cfg.upnp.enabled && !cfg.lans.is_empty() {
+        let lan_ifaces = upnp_lan_ifaces(cfg);
+        if !lan_ifaces.is_empty() {
+            let lan_set = format_iface_set(&lan_ifaces);
+            let _ = writeln!(
+                out,
+                "        iifname {lan_set} udp dport {{ 1900, 5351 }} accept comment \"upnp-natpmp-pcp\""
+            );
+        }
+    }
     for rule in cfg
         .firewall
         .rules
@@ -230,6 +240,9 @@ fn write_forward_chain(out: &mut String, cfg: &RouterConfig, has_flowtable: bool
          \x20       ct state invalid drop\n",
     );
     write_syn_flood_guard(out, cfg, "forward");
+    if cfg.lans.iter().any(|l| l.ipv6_mode == Ipv6LanMode::Relay) {
+        out.push_str("        meta l4proto ipv6-icmp accept comment \"ipv6-relay-ndp\"\n");
+    }
     for rule in cfg
         .firewall
         .rules
@@ -447,6 +460,7 @@ fn write_prerouting_chain(out: &mut String, cfg: &RouterConfig) {
         "    chain prerouting {\n\
          \x20       type nat hook prerouting priority dstnat; policy accept;\n",
     );
+    let (lan_ifaces, lan_router_ips, _) = collect_lan_v4_info(cfg);
     for rule in &cfg.firewall.port_forwards {
         if !rule.enabled {
             continue;
@@ -458,18 +472,28 @@ fn write_prerouting_chain(out: &mut String, cfg: &RouterConfig) {
             continue;
         }
         let ifaces = format_iface_set(&zone.interfaces);
-        let protos = match rule.proto {
-            TransportProto::Tcp => vec!["tcp"],
-            TransportProto::Udp => vec!["udp"],
-            TransportProto::TcpUdp => vec!["tcp", "udp"],
-            TransportProto::Icmp | TransportProto::Any => continue,
-        };
-        for proto in protos {
+        let protos = port_forward_protos(rule.proto);
+        for proto in &protos {
             let _ = writeln!(
                 out,
                 "        iifname {ifaces} {proto} dport {} dnat to {}:{} comment \"{}\"",
                 rule.external_port, rule.dest_ip, rule.internal_port, rule.name
             );
+        }
+        if cfg.firewall.nat_loopback
+            && rule.reflection
+            && !lan_ifaces.is_empty()
+            && !lan_router_ips.is_empty()
+        {
+            let lan_set = format_iface_set(&lan_ifaces);
+            let router_ip_set = format_addr_set(&lan_router_ips);
+            for proto in &protos {
+                let _ = writeln!(
+                    out,
+                    "        iifname {lan_set} ip daddr != {router_ip_set} fib daddr type local {proto} dport {} dnat to {}:{} comment \"hairpin:{}\"",
+                    rule.external_port, rule.dest_ip, rule.internal_port, rule.name
+                );
+            }
         }
     }
     out.push_str("    }\n\n");
@@ -486,7 +510,72 @@ fn write_postrouting_chain(out: &mut String, cfg: &RouterConfig) {
             let _ = writeln!(out, "        meta nfproto ipv4 oifname {ifaces} masquerade");
         }
     }
+    write_hairpin_postrouting(out, cfg);
     out.push_str("    }\n");
+}
+
+fn write_hairpin_postrouting(out: &mut String, cfg: &RouterConfig) {
+    if !cfg.firewall.nat_loopback {
+        return;
+    }
+    let (lan_ifaces, _, lan_nets) = collect_lan_v4_info(cfg);
+    if lan_ifaces.is_empty() || lan_nets.is_empty() {
+        return;
+    }
+    let lan_set = format_iface_set(&lan_ifaces);
+    let net_set = format_addr_set(&lan_nets);
+    for rule in &cfg.firewall.port_forwards {
+        if !rule.enabled || !rule.reflection {
+            continue;
+        }
+        for proto in port_forward_protos(rule.proto) {
+            let _ = writeln!(
+                out,
+                "        meta nfproto ipv4 ct status dnat oifname {lan_set} ip saddr {net_set} ip daddr {} {proto} dport {} masquerade comment \"hairpin:{}\"",
+                rule.dest_ip, rule.internal_port, rule.name
+            );
+        }
+    }
+}
+
+fn port_forward_protos(proto: TransportProto) -> Vec<&'static str> {
+    match proto {
+        TransportProto::Tcp => vec!["tcp"],
+        TransportProto::Udp => vec!["udp"],
+        TransportProto::TcpUdp => vec!["tcp", "udp"],
+        TransportProto::Icmp | TransportProto::Any => Vec::new(),
+    }
+}
+
+fn collect_lan_v4_info(cfg: &RouterConfig) -> (Vec<String>, Vec<String>, Vec<String>) {
+    let mut ifaces = Vec::new();
+    let mut router_ips = Vec::new();
+    let mut nets = Vec::new();
+    for lan in &cfg.lans {
+        if !ifaces.contains(&lan.bridge) {
+            ifaces.push(lan.bridge.clone());
+        }
+        if let Ok(IpNet::V4(v4)) = lan.cidr.parse::<IpNet>() {
+            router_ips.push(v4.addr().to_string());
+            nets.push(v4.trunc().to_string());
+        }
+    }
+    (ifaces, router_ips, nets)
+}
+
+fn upnp_lan_ifaces(cfg: &RouterConfig) -> Vec<String> {
+    if !cfg.upnp.lan_interfaces.is_empty() {
+        return cfg.upnp.lan_interfaces.clone();
+    }
+    cfg.lans.iter().map(|l| l.bridge.clone()).collect()
+}
+
+fn format_addr_set(items: &[String]) -> String {
+    if items.len() == 1 {
+        items[0].clone()
+    } else {
+        format!("{{ {} }}", items.join(", "))
+    }
 }
 
 fn write_zone_verdict(out: &mut String, zone: &FirewallZone, dir_kw: &str, action: FirewallAction) {
@@ -577,5 +666,33 @@ mod tests {
         assert!(nft.contains("devices = { \"br-lan\" }"));
         assert!(!nft.contains("devices = { \"eth0\""));
         assert!(nft.contains("tcp dport 443 accept comment \"acl:allow-https\""));
+    }
+
+    #[test]
+    fn renders_nat_loopback_upnp_and_ipv6_relay_rules() {
+        let mut cfg = RouterConfig::default();
+        cfg.upnp.enabled = true;
+        cfg.lans[0].ipv6_mode = Ipv6LanMode::Relay;
+        cfg.firewall
+            .port_forwards
+            .push(crabrouter_model::PortForwardRule {
+                name: "web-srv".to_string(),
+                enabled: true,
+                proto: TransportProto::Tcp,
+                src_zone: "wan".to_string(),
+                external_port: 8443,
+                dest_ip: "192.168.10.20".to_string(),
+                internal_port: 443,
+                reflection: true,
+            });
+        let nft = render_nftables_ruleset(&cfg);
+        assert!(nft.contains("udp dport { 1900, 5351 } accept comment \"upnp-natpmp-pcp\""));
+        assert!(nft.contains("meta l4proto ipv6-icmp accept comment \"ipv6-relay-ndp\""));
+        assert!(nft.contains(
+            "iifname \"br-lan\" ip daddr != 192.168.10.1 fib daddr type local tcp dport 8443 dnat to 192.168.10.20:443 comment \"hairpin:web-srv\""
+        ));
+        assert!(nft.contains(
+            "meta nfproto ipv4 ct status dnat oifname \"br-lan\" ip saddr 192.168.10.0/24 ip daddr 192.168.10.20 tcp dport 443 masquerade comment \"hairpin:web-srv\""
+        ));
     }
 }

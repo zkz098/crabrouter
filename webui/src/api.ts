@@ -15,6 +15,7 @@ import type { Iperf3Request } from "./types/Iperf3Request";
 import type { LogEvent } from "./types/LogEvent";
 import type { LoginRequest } from "./types/LoginRequest";
 import type { MultiWanRuntimeStatus } from "./types/MultiWanRuntimeStatus";
+import type { NicCapabilitiesSnapshot } from "./types/NicCapabilitiesSnapshot";
 import type { OtaApplyRequest } from "./types/OtaApplyRequest";
 import type { OtaCommandResult } from "./types/OtaCommandResult";
 import type { OtaStatus } from "./types/OtaStatus";
@@ -27,6 +28,7 @@ import type { StagedOtaImage } from "./types/StagedOtaImage";
 import type { SystemdUnitStatus } from "./types/SystemdUnitStatus";
 import type { TlsRuntimeStatus } from "./types/TlsRuntimeStatus";
 import type { TracerouteRequest } from "./types/TracerouteRequest";
+import type { UpnpLeaseEntry } from "./types/UpnpLeaseEntry";
 import type { WanRuntimeState } from "./types/WanRuntimeState";
 import type { WireGuardKeypairResponse } from "./types/WireGuardKeypairResponse";
 
@@ -93,6 +95,12 @@ export function getInterfaces(): Promise<HostInterfaceSnapshot[]> {
   return fetchJson<HostInterfaceSnapshot[]>("/api/interfaces");
 }
 
+export function getInterfaceCapabilities(name: string): Promise<NicCapabilitiesSnapshot> {
+  return fetchJson<NicCapabilitiesSnapshot>(
+    `/api/interfaces/${encodeURIComponent(name)}/capabilities`,
+  );
+}
+
 export function getWanStatus(): Promise<WanRuntimeState[]> {
   return fetchJson<WanRuntimeState[]>("/api/wans/status");
 }
@@ -129,6 +137,10 @@ export function triggerTlsRenew(): Promise<TlsRuntimeStatus> {
 
 export function getClients(): Promise<DhcpLeaseEntry[]> {
   return fetchJson<DhcpLeaseEntry[]>("/api/clients");
+}
+
+export function getUpnpLeases(): Promise<UpnpLeaseEntry[]> {
+  return fetchJson<UpnpLeaseEntry[]>("/api/upnp/leases");
 }
 
 export function getConntrack(): Promise<ConntrackEntry[]> {

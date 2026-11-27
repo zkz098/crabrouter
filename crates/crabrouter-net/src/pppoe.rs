@@ -315,6 +315,7 @@ mod tests {
             table_id: None,
             health_check_enabled: true,
             probe_targets: Vec::new(),
+            mac_override: None,
         };
         let peer = render_pppd_peer(&wan);
         assert!(peer.contains("plugin rp-pppoe.so"));

@@ -1,5 +1,6 @@
 import { For, Show, createResource, createSignal } from "solid-js";
 import { t } from "../i18n";
+import { NicTuningSection } from "./NicTuningSection";
 import {
   getDdnsStatus,
   getEbpfStatus,
@@ -20,6 +21,7 @@ import type { DdnsProvider } from "../types/DdnsProvider";
 import type { EbpfConfig } from "../types/EbpfConfig";
 import type { HostInterfaceSnapshot } from "../types/HostInterfaceSnapshot";
 import type { InterfaceRole } from "../types/InterfaceRole";
+import type { Ipv6LanMode } from "../types/Ipv6LanMode";
 import type { LanConfig } from "../types/LanConfig";
 import type { MultiWanConfig } from "../types/MultiWanConfig";
 import type { MultiWanMode } from "../types/MultiWanMode";
@@ -194,6 +196,7 @@ export function NetworkPage(props: Props) {
       table_id: null,
       health_check_enabled: true,
       probe_targets: [],
+      mac_override: null,
     });
     props.onChange(next);
   }
@@ -553,6 +556,19 @@ export function NetworkPage(props: Props) {
                         </select>
                       </Show>
                     </div>
+                    <label class="block text-xs">
+                      <span class="text-[#666666] dark:text-[#a1a1aa]">MAC 地址克隆 (可选)</span>
+                      <input
+                        type="text"
+                        placeholder="留空使用硬件 MAC (如 aa:bb:cc:dd:ee:ff)"
+                        value={wan.mac_override ?? ""}
+                        onInput={(e) => {
+                          const val = e.currentTarget.value.trim();
+                          updateWan(idx(), { mac_override: val === "" ? null : val });
+                        }}
+                        class="mt-1 w-full rounded-lg border border-[#eaeaea] dark:border-[#262626] bg-white dark:bg-[#000000] text-[#171717] dark:text-[#ededed] outline-none focus:border-[#171717] dark:focus:border-[#ededed] px-2.5 py-1.5 font-mono text-xs"
+                      />
+                    </label>
                   </div>
 
                   <Show when={runtime()?.ipv6_pd_prefix}>
@@ -1329,14 +1345,58 @@ export function NetworkPage(props: Props) {
                   />
                   {t("netEnableDhcp")}
                 </label>
-                <label class="flex items-center gap-2 pt-5 text-xs text-[#171717] dark:text-[#ededed]">
-                  <input
-                    type="checkbox"
-                    checked={lan.ipv6_ra_enabled}
-                    onChange={(e) => updateLan(idx(), { ipv6_ra_enabled: e.currentTarget.checked })}
-                  />
-                  {t("netEnableRa")}
+                <label class="block text-xs">
+                  <span class="text-[#666666] dark:text-[#a1a1aa]">IPv6 分配模式</span>
+                  <select
+                    value={lan.ipv6_mode}
+                    onChange={(e) => {
+                      const mode = e.currentTarget.value as Ipv6LanMode;
+                      updateLan(idx(), {
+                        ipv6_mode: mode,
+                        ipv6_ra_enabled: mode === "server",
+                      });
+                    }}
+                    class="mt-1 w-full rounded-lg border border-[#eaeaea] dark:border-[#262626] bg-white dark:bg-[#000000] text-[#171717] dark:text-[#ededed] outline-none focus:border-[#171717] dark:focus:border-[#ededed] px-2.5 py-1.5 text-xs"
+                  >
+                    <option value="server">PD 子网委派 (Server / SLAAC)</option>
+                    <option value="relay">IPv6 中继模式 (NDP Proxy / Relay)</option>
+                    <option value="disabled">禁用 IPv6</option>
+                  </select>
                 </label>
+                <Show when={lan.ipv6_mode === "relay"}>
+                  <label class="block text-xs">
+                    <span class="text-[#666666] dark:text-[#a1a1aa]">中继上游 WAN</span>
+                    <select
+                      value={lan.ipv6_relay_wan ?? ""}
+                      onChange={(e) => {
+                        const val = e.currentTarget.value.trim();
+                        updateLan(idx(), { ipv6_relay_wan: val === "" ? null : val });
+                      }}
+                      class="mt-1 w-full rounded-lg border border-[#eaeaea] dark:border-[#262626] bg-white dark:bg-[#000000] text-[#171717] dark:text-[#ededed] outline-none focus:border-[#171717] dark:focus:border-[#ededed] px-2.5 py-1.5 font-mono text-xs"
+                    >
+                      <option value="">自动 (主 WAN)</option>
+                      <For each={props.draft.wans}>
+                        {(w) => (
+                          <option value={w.name}>
+                            {w.name} ({w.device})
+                          </option>
+                        )}
+                      </For>
+                    </select>
+                  </label>
+                </Show>
+                <Show when={lan.ipv6_mode === "server"}>
+                  <label class="flex items-center gap-2 pt-5 text-xs text-[#171717] dark:text-[#ededed]">
+                    <input
+                      type="checkbox"
+                      checked={lan.ipv6_ra_enabled}
+                      onChange={(e) =>
+                        updateLan(idx(), { ipv6_ra_enabled: e.currentTarget.checked })
+                      }
+                    />
+                    {t("netEnableRa")}
+                  </label>
+                </Show>
                 <label class="block text-xs">
                   <span class="text-[#666666] dark:text-[#a1a1aa]">
                     IPv6-PD /64 子网序号 (可选 SLA ID)
@@ -1904,6 +1964,12 @@ export function NetworkPage(props: Props) {
           </div>
         </div>
       </section>
+
+      <NicTuningSection
+        draft={props.draft}
+        interfaces={props.interfaces}
+        onChange={props.onChange}
+      />
     </div>
   );
 }

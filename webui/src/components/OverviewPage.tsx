@@ -16,6 +16,9 @@ type PreviewTab =
   | "crabdns"
   | "dnsmasq"
   | "wg_quick"
+  | "miniupnpd"
+  | "ndppd"
+  | "nic_tuning"
   | "dhcpcd"
   | "udev"
   | "systemd_link"
@@ -68,6 +71,12 @@ export function OverviewPage(props: Props) {
         return p.dnsmasq;
       case "wg_quick":
         return p.wg_quick;
+      case "miniupnpd":
+        return p.miniupnpd;
+      case "ndppd":
+        return p.ndppd;
+      case "nic_tuning":
+        return p.nic_tuning;
       case "dhcpcd":
         return p.dhcpcd;
       case "udev":
@@ -432,6 +441,9 @@ export function OverviewPage(props: Props) {
                   "crabdns",
                   "dnsmasq",
                   "wg_quick",
+                  "miniupnpd",
+                  "ndppd",
+                  "nic_tuning",
                   "dhcpcd",
                   "udev",
                   "systemd_link",
