@@ -1,0 +1,7 @@
+[Unit]
+Description=CrabRouter Container Workload Slice
+Before=slices.target
+
+[Slice]
+MemoryAccounting=yes
+CPUAccounting=yes

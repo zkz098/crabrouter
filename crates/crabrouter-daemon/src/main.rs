@@ -13,8 +13,9 @@ use crabrouter_net::{
     spawn_multi_wan_engine_with_shutdown, spawn_network_event_engine_with_shutdown,
 };
 use crabrouter_services::{
-    DryRunSupervisor, ServiceSupervisor, SystemdSupervisor, TlsCertManager,
-    auto_bless_if_tentative, spawn_ddns_engine_with_shutdown,
+    ContainerBackend, DryRunContainerBackend, DryRunSupervisor, ServiceSupervisor,
+    SocketContainerBackend, SystemdSupervisor, TlsCertManager, auto_bless_if_tentative,
+    spawn_ddns_engine_with_shutdown,
 };
 use crabrouter_web::{AppState, LogHub, build_router, spawn_crabdns_ebpf_bridge_with_shutdown};
 use ipnet::IpNet;
@@ -88,8 +89,7 @@ impl<S: Subscriber> Layer<S> for LogHubLayer {
     }
 }
 
-#[tokio::main]
-async fn main() -> anyhow::Result<()> {
+fn init_logging() -> LogHub {
     let logs = LogHub::new();
     let env_filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"));
     tracing_subscriber::registry()
@@ -97,7 +97,12 @@ async fn main() -> anyhow::Result<()> {
         .with(tracing_subscriber::fmt::layer())
         .with(LogHubLayer { hub: logs.clone() })
         .init();
+    logs
+}
 
+#[tokio::main]
+async fn main() -> anyhow::Result<()> {
+    let logs = init_logging();
     let cli = Cli::parse();
     let store = ConfigStore::new(&cli.config);
 
@@ -154,6 +159,11 @@ async fn main() -> anyhow::Result<()> {
         )
     };
     let tls = TlsCertManager::new(&cfg, cli.dry_run);
+    let containers: Arc<dyn ContainerBackend> = if cli.dry_run {
+        Arc::new(DryRunContainerBackend::new())
+    } else {
+        Arc::new(SocketContainerBackend)
+    };
 
     let ota_dir = cli
         .config
@@ -167,6 +177,7 @@ async fn main() -> anyhow::Result<()> {
         ebpf,
         ddns,
         tls,
+        containers,
         logs,
         lease_path: cli.leases.clone(),
         ota_dir,

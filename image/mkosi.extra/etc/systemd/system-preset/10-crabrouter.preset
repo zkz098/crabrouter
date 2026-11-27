@@ -8,3 +8,5 @@ enable crabrouter-boot-bless.service
 enable systemd-boot-check-no-failures.service
 enable systemd-sysupdate.timer
 enable ssh.service
+enable podman.socket
+enable podman-restart.service

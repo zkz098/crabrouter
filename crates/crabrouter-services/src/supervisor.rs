@@ -2,11 +2,14 @@ use std::future::Future;
 use std::path::{Path, PathBuf};
 use std::pin::Pin;
 
-use crabrouter_model::RouterConfig;
+use crabrouter_model::{ContainerRuntimeKind, RouterConfig};
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 use zbus::OwnedObjectPath;
 
+use crate::containers::config::{
+    render_containers_conf, render_registries_conf, sync_container_host_configs,
+};
 use crate::crabdns::render_crabdns_toml;
 use crate::dnsmasq::render_dnsmasq_conf;
 use crate::ipv6_relay::{has_ipv6_relay_enabled, render_ndppd_conf};
@@ -76,13 +79,17 @@ impl ServiceSupervisor for DryRunSupervisor {
             } else {
                 String::new()
             };
+            let containers_conf = render_containers_conf(cfg);
+            let registries_conf = render_registries_conf(cfg);
             tracing::info!(
                 dnsmasq_bytes = dnsmasq.len(),
                 crabdns_bytes = crabdns.len(),
                 miniupnpd_bytes = miniupnpd.len(),
                 ndppd_bytes = ndppd.len(),
                 wg_bytes = wg.len(),
-                "dry-run: rendered crabdns, dnsmasq, miniupnpd, ndppd & wireguard configurations"
+                containers_conf_bytes = containers_conf.len(),
+                registries_conf_bytes = registries_conf.len(),
+                "dry-run: rendered crabdns, dnsmasq, miniupnpd, ndppd, wireguard & container configurations"
             );
             Ok(())
         })
@@ -131,6 +138,7 @@ impl ServiceSupervisor for DryRunSupervisor {
                 },
                 dry_run_toggle_unit("miniupnpd.service", cfg.upnp.enabled),
                 dry_run_toggle_unit("ndppd.service", has_ipv6_relay_enabled(cfg)),
+                dry_run_toggle_unit(container_runtime_unit(cfg), cfg.containers.enabled),
             ])
         })
     }
@@ -140,6 +148,8 @@ impl ServiceSupervisor for DryRunSupervisor {
 pub struct SystemdSupervisor {
     pub runtime_dir: PathBuf,
     pub wireguard_dir: PathBuf,
+    pub containers_dir: PathBuf,
+    pub systemd_dir: PathBuf,
 }
 
 impl Default for SystemdSupervisor {
@@ -147,6 +157,8 @@ impl Default for SystemdSupervisor {
         Self {
             runtime_dir: PathBuf::from("/run/crabrouter"),
             wireguard_dir: PathBuf::from("/etc/wireguard"),
+            containers_dir: PathBuf::from("/etc/containers"),
+            systemd_dir: PathBuf::from("/etc/systemd/system"),
         }
     }
 }
@@ -168,6 +180,9 @@ impl ServiceSupervisor for SystemdSupervisor {
             if cfg.wireguard.enabled {
                 sync_wireguard_files(cfg, &self.wireguard_dir)?;
             }
+            if cfg.containers.enabled {
+                sync_container_host_configs(cfg, &self.containers_dir, &self.systemd_dir).await?;
+            }
 
             let conn = zbus::Connection::system().await.map_err(|e| {
                 ServiceError::Orchestration(format!("systemd D-Bus connect failed: {e}"))
@@ -184,6 +199,13 @@ impl ServiceSupervisor for SystemdSupervisor {
             sync_optional_unit(&mgr, &wg_unit, cfg.wireguard.enabled, true).await?;
             sync_optional_unit(&mgr, "miniupnpd.service", cfg.upnp.enabled, false).await?;
             sync_optional_unit(&mgr, "ndppd.service", has_ipv6_relay_enabled(cfg), false).await?;
+            sync_optional_unit(
+                &mgr,
+                container_runtime_unit(cfg),
+                cfg.containers.enabled,
+                false,
+            )
+            .await?;
 
             Ok(())
         })
@@ -212,6 +234,7 @@ impl ServiceSupervisor for SystemdSupervisor {
                 format!("wg-quick@{}.service", cfg.wireguard.interface),
                 "miniupnpd.service".to_string(),
                 "ndppd.service".to_string(),
+                container_runtime_unit(cfg).to_string(),
             ];
             let mut out = Vec::with_capacity(units.len());
             for unit in units {
@@ -219,6 +242,13 @@ impl ServiceSupervisor for SystemdSupervisor {
             }
             Ok(out)
         })
+    }
+}
+
+fn container_runtime_unit(cfg: &RouterConfig) -> &'static str {
+    match cfg.containers.runtime {
+        ContainerRuntimeKind::Podman => "podman.socket",
+        ContainerRuntimeKind::Docker => "docker.service",
     }
 }
 

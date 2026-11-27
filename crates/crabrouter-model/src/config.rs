@@ -6,6 +6,7 @@ use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
 use crate::bond::{BondConfig, validate_bonds};
+use crate::container::ContainerConfig;
 use crate::ebpf::EbpfConfig;
 use crate::error::{ModelError, Result};
 use crate::firewall::FirewallConfig;
@@ -177,6 +178,8 @@ pub struct RouterConfig {
     pub upnp: UpnpConfig,
     #[serde(default)]
     pub nic_tuning: Vec<NicTuningConfig>,
+    #[serde(default)]
+    pub containers: ContainerConfig,
 }
 
 impl Default for RouterConfig {
@@ -201,6 +204,7 @@ impl Default for RouterConfig {
             acme: AcmeConfig::default(),
             upnp: UpnpConfig::default(),
             nic_tuning: Vec::new(),
+            containers: ContainerConfig::default(),
         }
     }
 }
@@ -234,6 +238,8 @@ impl RouterConfig {
         self.acme.validate()?;
         self.upnp.validate()?;
         validate_nic_tuning(&self.nic_tuning)?;
+        self.containers
+            .validate(self.dns.crabdns_port, self.dns.dnsmasq_dns_port)?;
         Ok(())
     }
 

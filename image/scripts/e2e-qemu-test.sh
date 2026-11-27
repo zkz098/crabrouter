@@ -124,10 +124,86 @@ fi
 SETUP_JSON="$(curl -fsS "http://127.0.0.1:${HTTP_PORT}/api/setup/status")"
 OTA_JSON="$(curl -fsS "http://127.0.0.1:${HTTP_PORT}/api/ota/status")"
 IFACES_JSON="$(curl -fsS "http://127.0.0.1:${HTTP_PORT}/api/interfaces")"
+CONTAINERS_JSON="$(curl -fsS "http://127.0.0.1:${HTTP_PORT}/api/containers/info")"
 
-echo "==> /api/setup/status: $SETUP_JSON"
-echo "==> /api/ota/status:   $OTA_JSON"
-echo "==> /api/interfaces:   $(echo "$IFACES_JSON" | head -c 180)..."
+echo "==> /api/setup/status:    $SETUP_JSON"
+echo "==> /api/ota/status:      $OTA_JSON"
+echo "==> /api/interfaces:      $(echo "$IFACES_JSON" | head -c 180)..."
+echo "==> /api/containers/info: $CONTAINERS_JSON"
+if [[ "$CONTAINERS_JSON" != *'"runtime":'* ]]; then
+  echo "error: unexpected /api/containers/info payload: $CONTAINERS_JSON" >&2
+  exit 1
+fi
+
+if command -v python3 >/dev/null 2>&1; then
+  echo "==> Enabling containers in RouterConfig (commit + confirm) and testing live Podman socket..."
+  CFG_CUR="$(curl -fsS "http://127.0.0.1:${HTTP_PORT}/api/config")"
+  CFG_NEXT="$(python3 -c 'import json,sys; c=json.loads(sys.argv[1]); c["containers"]["enabled"]=True; print(json.dumps(c))' "$CFG_CUR")"
+  COMMIT_OUT="$WORK_DIR/commit.json"
+  COMMIT_CODE="$(curl -sS -o "$COMMIT_OUT" -w '%{http_code}' -X POST -H 'Content-Type: application/json' -d "$CFG_NEXT" "http://127.0.0.1:${HTTP_PORT}/api/config/commit")"
+  if [[ "$COMMIT_CODE" != "200" ]]; then
+    echo "error: /api/config/commit failed (HTTP $COMMIT_CODE): $(cat "$COMMIT_OUT")" >&2
+    exit 1
+  fi
+  CONFIRM_CODE="$(curl -sS -o /dev/null -w '%{http_code}' -X POST "http://127.0.0.1:${HTTP_PORT}/api/config/confirm")"
+  if [[ "$CONFIRM_CODE" != "200" ]]; then
+    echo "error: /api/config/confirm failed (HTTP $CONFIRM_CODE)" >&2
+    exit 1
+  fi
+
+  PODMAN_READY=0
+  PODMAN_INFO=""
+  for _ in $(seq 1 15); do
+    PODMAN_INFO="$(curl -fsS --max-time 20 "http://127.0.0.1:${HTTP_PORT}/api/containers/info" || true)"
+    if [[ "$PODMAN_INFO" == *'"available":true'* ]]; then
+      PODMAN_READY=1
+      break
+    fi
+    sleep 2
+  done
+  if [[ "$PODMAN_READY" != "1" ]]; then
+    echo "error: Podman socket did not become available within 30s: $PODMAN_INFO" >&2
+    exit 1
+  fi
+  echo "==> Live Podman runtime info: $PODMAN_INFO"
+
+  for ep in "/api/containers" "/api/containers/images" "/api/containers/networks" "/api/containers/volumes"; do
+    EP_CODE="$(curl -sS --max-time 20 -o "$WORK_DIR/ep.json" -w '%{http_code}' "http://127.0.0.1:${HTTP_PORT}${ep}")"
+    if [[ "$EP_CODE" != "200" ]]; then
+      echo "error: GET $ep returned HTTP $EP_CODE: $(cat "$WORK_DIR/ep.json")" >&2
+      exit 1
+    fi
+  done
+
+  NET_CREATE_CODE="$(curl -sS --max-time 20 -o "$WORK_DIR/net_create.json" -w '%{http_code}' -X POST -H 'Content-Type: application/json' \
+    -d '{"name":"e2e-net","driver":"bridge","subnet":"10.89.0.0/24","gateway":"10.89.0.1","internal":false}' \
+    "http://127.0.0.1:${HTTP_PORT}/api/containers/networks")"
+  if [[ "$NET_CREATE_CODE" != "200" ]]; then
+    echo "error: POST /api/containers/networks failed (HTTP $NET_CREATE_CODE): $(cat "$WORK_DIR/net_create.json")" >&2
+    exit 1
+  fi
+  NETS_JSON="$(curl -fsS --max-time 20 "http://127.0.0.1:${HTTP_PORT}/api/containers/networks")"
+  if [[ "$NETS_JSON" != *'"e2e-net"'* ]]; then
+    echo "error: created network e2e-net not listed: $NETS_JSON" >&2
+    exit 1
+  fi
+  NET_DEL_CODE="$(curl -sS --max-time 20 -o "$WORK_DIR/net_del.json" -w '%{http_code}' -X DELETE "http://127.0.0.1:${HTTP_PORT}/api/containers/networks/e2e-net")"
+  if [[ "$NET_DEL_CODE" != "200" ]]; then
+    echo "error: DELETE /api/containers/networks/e2e-net failed (HTTP $NET_DEL_CODE): $(cat "$WORK_DIR/net_del.json")" >&2
+    exit 1
+  fi
+
+  BAD_MOUNT_CODE="$(curl -sS --max-time 20 -o "$WORK_DIR/bad_mount.json" -w '%{http_code}' -X POST -H 'Content-Type: application/json' \
+    -d '{"name":"evil","image":"alpine:latest","mounts":[{"source":"/etc/shadow","target":"/mnt/shadow","read_only":true}]}' \
+    "http://127.0.0.1:${HTTP_PORT}/api/containers")"
+  if [[ "$BAD_MOUNT_CODE" != "400" ]]; then
+    echo "error: expected HTTP 400 for forbidden bind mount, got $BAD_MOUNT_CODE: $(cat "$WORK_DIR/bad_mount.json")" >&2
+    exit 1
+  fi
+  echo "==> Live container network (netavark+nftables) & mount security guard verified!"
+else
+  echo "warn: python3 not found; skipping live container runtime E2E"
+fi
 
 if [[ "${CRABROUTER_TEST_OTA_ROLLBACK:-0}" == "1" ]] || [[ "${1:-}" == "--test-ota-rollback" ]]; then
   if command -v sfdisk >/dev/null 2>&1 && command -v mcopy >/dev/null 2>&1 && command -v mdir >/dev/null 2>&1; then

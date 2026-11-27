@@ -1,3 +1,6 @@
+#[cfg(test)]
+mod tests;
+
 use std::collections::HashSet;
 use std::fmt::Write;
 use std::net::IpAddr;
@@ -7,7 +10,7 @@ use std::time::Duration;
 
 use crabrouter_model::{
     FirewallAction, FirewallRule, FirewallZone, Ipv6LanMode, MultiWanMode, RouterConfig,
-    TransportProto, wan_fwmark, wan_table_id,
+    TransportProto, WanProto, wan_fwmark, wan_table_id,
 };
 use ipnet::IpNet;
 use tokio::io::AsyncWriteExt;
@@ -210,6 +213,7 @@ fn write_input_chain(out: &mut String, cfg: &RouterConfig) {
             );
         }
     }
+    write_container_input_rules(out, cfg);
     for rule in cfg
         .firewall
         .rules
@@ -243,6 +247,7 @@ fn write_forward_chain(out: &mut String, cfg: &RouterConfig, has_flowtable: bool
     if cfg.lans.iter().any(|l| l.ipv6_mode == Ipv6LanMode::Relay) {
         out.push_str("        meta l4proto ipv6-icmp accept comment \"ipv6-relay-ndp\"\n");
     }
+    write_container_forward_rules(out, cfg);
     for rule in cfg
         .firewall
         .rules
@@ -256,6 +261,85 @@ fn write_forward_chain(out: &mut String, cfg: &RouterConfig, has_flowtable: bool
     }
     out.push_str("        ct status dnat accept\n");
     out.push_str("    }\n\n");
+}
+
+fn write_container_input_rules(out: &mut String, cfg: &RouterConfig) {
+    if !cfg.containers.enabled {
+        return;
+    }
+    let ifaces = cfg.containers.effective_bridge_interfaces();
+    if ifaces.is_empty() {
+        return;
+    }
+    let iface_set = format_iface_set(&ifaces);
+    let mut ports = vec![cfg.dns.crabdns_port];
+    if !ports.contains(&cfg.containers.dns_bind_port) {
+        ports.push(cfg.containers.dns_bind_port);
+    }
+    let ports_expr = format_port_set(&ports);
+    let _ = writeln!(
+        out,
+        "        iifname {iface_set} meta l4proto {{ tcp, udp }} th dport {ports_expr} accept comment \"container-dns\""
+    );
+}
+
+fn write_container_forward_rules(out: &mut String, cfg: &RouterConfig) {
+    if !cfg.containers.enabled {
+        return;
+    }
+    let ifaces = cfg.containers.effective_bridge_interfaces();
+    if ifaces.is_empty() {
+        return;
+    }
+    let iface_set = format_iface_set(&ifaces);
+    let _ = writeln!(
+        out,
+        "        iifname {iface_set} oifname {iface_set} accept comment \"container-intra\""
+    );
+
+    if cfg.containers.allow_wan_access {
+        let wan_ifaces = collect_wan_ifaces(cfg);
+        if !wan_ifaces.is_empty() {
+            let wan_set = format_iface_set(&wan_ifaces);
+            let _ = writeln!(
+                out,
+                "        iifname {iface_set} oifname {wan_set} accept comment \"container-to-wan\""
+            );
+        }
+    }
+
+    if cfg.containers.allow_lan_access {
+        let lan_ifaces: Vec<String> = cfg.lans.iter().map(|l| l.bridge.clone()).collect();
+        if !lan_ifaces.is_empty() {
+            let lan_set = format_iface_set(&lan_ifaces);
+            let _ = writeln!(
+                out,
+                "        iifname {iface_set} oifname {lan_set} accept comment \"container-to-lan\""
+            );
+        }
+    }
+}
+
+fn collect_wan_ifaces(cfg: &RouterConfig) -> Vec<String> {
+    if let Some(wan_zone) = cfg.firewall.zones.iter().find(|z| z.name == "wan")
+        && !wan_zone.interfaces.is_empty()
+    {
+        return wan_zone.interfaces.clone();
+    }
+    let mut out = Vec::new();
+    let mut has_pppoe = false;
+    for wan in &cfg.wans {
+        if !out.contains(&wan.device) {
+            out.push(wan.device.clone());
+        }
+        if wan.proto == WanProto::Pppoe {
+            has_pppoe = true;
+        }
+    }
+    if has_pppoe && !out.iter().any(|i| i == "ppp0") {
+        out.push("ppp0".to_string());
+    }
+    out
 }
 
 fn write_syn_flood_guard(out: &mut String, cfg: &RouterConfig, chain_name: &str) {
@@ -375,19 +459,31 @@ fn write_mangle_prerouting_chain(
         return;
     }
 
-    let lan_ifaces: Vec<String> = cfg.lans.iter().map(|l| l.bridge.clone()).collect();
-    let lan_set = format_iface_set(&lan_ifaces);
+    let mut mangle_ifaces: Vec<String> = cfg.lans.iter().map(|l| l.bridge.clone()).collect();
+    if cfg.containers.enabled && cfg.containers.multi_wan_enabled {
+        for iface in cfg.containers.effective_bridge_interfaces() {
+            if !mangle_ifaces.contains(&iface) {
+                mangle_ifaces.push(iface);
+            }
+        }
+    }
+    let iface_set = format_iface_set(&mangle_ifaces);
 
     out.push_str(
         "    chain mangle_prerouting {\n\
          \x20       type filter hook prerouting priority mangle; policy accept;\n",
     );
-    let _ = writeln!(out, "        iifname != {lan_set} return");
+    let _ = writeln!(out, "        iifname != {iface_set} return");
     out.push_str("        fib daddr type local return\n");
     for lan in &cfg.lans {
         if let Ok(net @ IpNet::V4(_)) = lan.cidr.parse::<IpNet>() {
             let _ = writeln!(out, "        ip daddr {net} return");
         }
+    }
+    if cfg.containers.enabled
+        && let Ok(net @ IpNet::V4(_)) = cfg.containers.default_subnet.parse::<IpNet>()
+    {
+        let _ = writeln!(out, "        ip daddr {net} return");
     }
     out.push_str("        ct mark != 0 meta mark set ct mark return\n");
 
@@ -578,6 +674,19 @@ fn format_addr_set(items: &[String]) -> String {
     }
 }
 
+fn format_port_set(ports: &[u16]) -> String {
+    if ports.len() == 1 {
+        ports[0].to_string()
+    } else {
+        let items = ports
+            .iter()
+            .map(ToString::to_string)
+            .collect::<Vec<_>>()
+            .join(", ");
+        format!("{{ {items} }}")
+    }
+}
+
 fn write_zone_verdict(out: &mut String, zone: &FirewallZone, dir_kw: &str, action: FirewallAction) {
     if zone.interfaces.is_empty() {
         return;
@@ -609,90 +718,5 @@ fn format_iface_set(interfaces: &[String]) -> String {
             .collect::<Vec<_>>()
             .join(", ");
         format!("{{ {items} }}")
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn renders_flowtable_syn_flood_and_masquerade() {
-        let cfg = RouterConfig::default();
-        let nft = render_nftables_ruleset(&cfg);
-        assert!(nft.contains("flowtable f_fastpath"));
-        assert!(nft.contains("oifname { \"eth0\", \"ppp0\" } masquerade"));
-        assert!(nft.contains("tcp flags syn tcp option maxseg size set rt mtu"));
-        assert!(nft.contains("meter syn_flood_input"));
-    }
-
-    #[test]
-    fn renders_multi_wan_weighted_mangle_rules() {
-        let mut cfg = RouterConfig::default();
-        let mut wan2 = cfg.wans[0].clone();
-        wan2.name = "wan2".to_string();
-        wan2.device = "eth4".to_string();
-        wan2.weight = 3;
-        cfg.wans[0].weight = 1;
-        cfg.wans.push(wan2);
-        cfg.multi_wan.enabled = true;
-        cfg.multi_wan.mode = MultiWanMode::LoadBalance;
-
-        let nft = render_nftables_ruleset(&cfg);
-        assert!(nft.contains("chain mangle_prerouting"));
-        assert!(nft.contains("ct mark != 0 meta mark set ct mark return"));
-        assert!(nft.contains(
-            "jhash ip saddr mod 4 map { 0 : 0x1065, 1 : 0x1066, 2 : 0x1066, 3 : 0x1066 }"
-        ));
-        assert!(nft.contains("ct state new ct mark set meta mark"));
-    }
-
-    #[test]
-    fn filters_missing_flowtable_devices_and_renders_acl_rules() {
-        let mut cfg = RouterConfig::default();
-        cfg.firewall.rules.push(FirewallRule {
-            name: "allow-https".to_string(),
-            enabled: true,
-            src_zone: "wan".to_string(),
-            dst_zone: None,
-            proto: TransportProto::Tcp,
-            src_ip: None,
-            dst_ip: None,
-            dst_port: Some("443".to_string()),
-            action: FirewallAction::Accept,
-        });
-        let live: HashSet<String> = ["br-lan".to_string()].into_iter().collect();
-        let nft = render_nftables_ruleset_with_options(&cfg, Some(&live), true);
-        assert!(nft.contains("devices = { \"br-lan\" }"));
-        assert!(!nft.contains("devices = { \"eth0\""));
-        assert!(nft.contains("tcp dport 443 accept comment \"acl:allow-https\""));
-    }
-
-    #[test]
-    fn renders_nat_loopback_upnp_and_ipv6_relay_rules() {
-        let mut cfg = RouterConfig::default();
-        cfg.upnp.enabled = true;
-        cfg.lans[0].ipv6_mode = Ipv6LanMode::Relay;
-        cfg.firewall
-            .port_forwards
-            .push(crabrouter_model::PortForwardRule {
-                name: "web-srv".to_string(),
-                enabled: true,
-                proto: TransportProto::Tcp,
-                src_zone: "wan".to_string(),
-                external_port: 8443,
-                dest_ip: "192.168.10.20".to_string(),
-                internal_port: 443,
-                reflection: true,
-            });
-        let nft = render_nftables_ruleset(&cfg);
-        assert!(nft.contains("udp dport { 1900, 5351 } accept comment \"upnp-natpmp-pcp\""));
-        assert!(nft.contains("meta l4proto ipv6-icmp accept comment \"ipv6-relay-ndp\""));
-        assert!(nft.contains(
-            "iifname \"br-lan\" ip daddr != 192.168.10.1 fib daddr type local tcp dport 8443 dnat to 192.168.10.20:443 comment \"hairpin:web-srv\""
-        ));
-        assert!(nft.contains(
-            "meta nfproto ipv4 ct status dnat oifname \"br-lan\" ip saddr 192.168.10.0/24 ip daddr 192.168.10.20 tcp dport 443 masquerade comment \"hairpin:web-srv\""
-        ));
     }
 }

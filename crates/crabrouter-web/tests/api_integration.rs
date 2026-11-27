@@ -12,7 +12,7 @@ use crabrouter_net::{
     DryRunNetworkBackend, EbpfEngine, WanStateObserver, spawn_multi_wan_engine,
     spawn_network_event_engine,
 };
-use crabrouter_services::{DdnsManager, DryRunSupervisor, TlsCertManager};
+use crabrouter_services::{DdnsManager, DryRunContainerBackend, DryRunSupervisor, TlsCertManager};
 use crabrouter_web::{AppState, LogHub, build_router};
 use http_body_util::BodyExt;
 use serde_json::{Value, json};
@@ -51,6 +51,7 @@ async fn setup_test_app() -> (Router, PathBuf) {
         ebpf,
         ddns,
         tls,
+        containers: Arc::new(DryRunContainerBackend::new()),
         logs: LogHub::new(),
         lease_path: dir.join("dnsmasq.leases"),
         ota_dir: dir.join("ota"),
@@ -455,6 +456,188 @@ async fn internal_callbacks_require_loopback_or_auth() {
         .await,
         StatusCode::OK
     );
+
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[tokio::test]
+async fn container_api_lifecycle_and_mount_security() {
+    let (app, dir) = setup_test_app().await;
+
+    let (st, info) = req_json(&app, "GET", "/api/containers/info", None, None).await;
+    assert_eq!(st, StatusCode::OK);
+    assert_eq!(info["available"], true);
+    assert_eq!(info["runtime"], "podman");
+
+    let (st, list) = req_json(&app, "GET", "/api/containers", None, None).await;
+    assert_eq!(st, StatusCode::OK);
+    assert!(list.as_array().is_some_and(|a| !a.is_empty()));
+
+    let (st, bad_mount) = req_json(
+        &app,
+        "POST",
+        "/api/containers",
+        None,
+        Some(json!({
+            "name": "evil",
+            "image": "alpine:latest",
+            "mounts": [{
+                "source": "/etc/shadow",
+                "target": "/mnt/shadow",
+                "read_only": true
+            }]
+        })),
+    )
+    .await;
+    assert_eq!(st, StatusCode::BAD_REQUEST);
+    assert!(
+        bad_mount["error"]
+            .as_str()
+            .is_some_and(|m| m.contains("allowed_volume_roots"))
+    );
+
+    let (st, created) = req_json(
+        &app,
+        "POST",
+        "/api/containers",
+        None,
+        Some(json!({
+            "name": "web-demo",
+            "image": "alpine:latest",
+            "ports": [{
+                "host_ip": "0.0.0.0",
+                "host_port": 8088,
+                "container_port": 80,
+                "protocol": "tcp"
+            }],
+            "mounts": [{
+                "source": "/var/lib/crabrouter/volumes/web-demo",
+                "target": "/data",
+                "read_only": false
+            }],
+            "start_immediately": false
+        })),
+    )
+    .await;
+    assert_eq!(st, StatusCode::OK);
+    assert_eq!(created["ok"], true);
+    let cid = created["id"].as_str().expect("container id").to_string();
+
+    let (st, _) = req_json(
+        &app,
+        "POST",
+        &format!("/api/containers/{cid}/start"),
+        None,
+        None,
+    )
+    .await;
+    assert_eq!(st, StatusCode::OK);
+
+    let (st, logs) = req_json(
+        &app,
+        "GET",
+        &format!("/api/containers/{cid}/logs?tail=50"),
+        None,
+        None,
+    )
+    .await;
+    assert_eq!(st, StatusCode::OK);
+    assert!(logs.as_array().is_some_and(|a| !a.is_empty()));
+
+    let (st, _) = req_json(
+        &app,
+        "POST",
+        &format!("/api/containers/{cid}/stop"),
+        None,
+        None,
+    )
+    .await;
+    assert_eq!(st, StatusCode::OK);
+
+    let (st, _) = req_json(
+        &app,
+        "DELETE",
+        &format!("/api/containers/{cid}"),
+        None,
+        None,
+    )
+    .await;
+    assert_eq!(st, StatusCode::OK);
+
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[tokio::test]
+async fn container_api_images_networks_and_volumes() {
+    let (app, dir) = setup_test_app().await;
+
+    let (st, _) = req_json(
+        &app,
+        "POST",
+        "/api/containers/images/pull",
+        None,
+        Some(json!({ "reference": "docker.io/library/busybox:latest" })),
+    )
+    .await;
+    assert_eq!(st, StatusCode::OK);
+
+    let (st, imgs) = req_json(&app, "GET", "/api/containers/images", None, None).await;
+    assert_eq!(st, StatusCode::OK);
+    assert!(imgs.as_array().is_some_and(|a| {
+        a.iter()
+            .any(|i| i["repo_tags"] == json!(["docker.io/library/busybox:latest"]))
+    }));
+
+    let (st, _) = req_json(
+        &app,
+        "POST",
+        "/api/containers/networks",
+        None,
+        Some(json!({
+            "name": "lan-macvlan",
+            "driver": "macvlan",
+            "subnet": "192.168.10.0/24",
+            "gateway": "192.168.10.1",
+            "parent_interface": "br-lan",
+            "internal": false
+        })),
+    )
+    .await;
+    assert_eq!(st, StatusCode::OK);
+
+    let (st, nets) = req_json(&app, "GET", "/api/containers/networks", None, None).await;
+    assert_eq!(st, StatusCode::OK);
+    assert!(
+        nets.as_array()
+            .is_some_and(|a| a.iter().any(|n| n["name"] == "lan-macvlan"))
+    );
+
+    let (st, _) = req_json(
+        &app,
+        "DELETE",
+        "/api/containers/networks/lan-macvlan",
+        None,
+        None,
+    )
+    .await;
+    assert_eq!(st, StatusCode::OK);
+
+    let (st, vols) = req_json(&app, "GET", "/api/containers/volumes", None, None).await;
+    assert_eq!(st, StatusCode::OK);
+    assert!(
+        vols.as_array()
+            .is_some_and(|a| a.iter().any(|v| v["name"] == "uptime-kuma-data"))
+    );
+
+    let (st, _) = req_json(
+        &app,
+        "DELETE",
+        "/api/containers/volumes/uptime-kuma-data",
+        None,
+        None,
+    )
+    .await;
+    assert_eq!(st, StatusCode::OK);
 
     let _ = std::fs::remove_dir_all(&dir);
 }

@@ -1,4 +1,5 @@
 pub mod api;
+pub mod containers_api;
 pub mod crabdns_proxy;
 pub mod ddns_tls_api;
 pub mod logs;
@@ -16,10 +17,10 @@ use axum::body::Body;
 use axum::extract::DefaultBodyLimit;
 use axum::http::{StatusCode, Uri, header};
 use axum::response::{IntoResponse, Response};
-use axum::routing::{any, get, post};
+use axum::routing::{any, delete, get, post};
 use crabrouter_core::RouterEngine;
 use crabrouter_net::{EbpfEngine, MultiWanManager, WanEventBus};
-use crabrouter_services::{DdnsManager, TlsCertManager};
+use crabrouter_services::{ContainerBackend, DdnsManager, TlsCertManager};
 use rust_embed::RustEmbed;
 use tower_http::cors::CorsLayer;
 
@@ -38,6 +39,7 @@ pub struct AppState {
     pub ebpf: EbpfEngine,
     pub ddns: DdnsManager,
     pub tls: TlsCertManager,
+    pub containers: Arc<dyn ContainerBackend>,
     pub logs: LogHub,
     pub lease_path: PathBuf,
     pub ota_dir: PathBuf,
@@ -105,11 +107,67 @@ pub fn build_router(state: AppState) -> Router {
         .route("/api/ota/apply", post(ota_api::ota_apply))
         .route("/api/ota/bless", post(ota_api::ota_bless))
         .route("/api/ota/reboot", post(ota_api::ota_reboot))
+        .merge(container_routes())
         .route("/crabdns", any(crabdns_proxy::proxy_crabdns))
         .route("/crabdns/{*path}", any(crabdns_proxy::proxy_crabdns))
         .with_state(state)
         .layer(CorsLayer::permissive())
         .fallback(static_handler)
+}
+
+fn container_routes() -> Router<AppState> {
+    Router::new()
+        .route("/api/containers/info", get(containers_api::containers_info))
+        .route(
+            "/api/containers",
+            get(containers_api::list_containers).post(containers_api::create_container),
+        )
+        .route("/api/containers/images", get(containers_api::list_images))
+        .route(
+            "/api/containers/images/pull",
+            post(containers_api::pull_image),
+        )
+        .route(
+            "/api/containers/images/{id}",
+            delete(containers_api::remove_image),
+        )
+        .route(
+            "/api/containers/networks",
+            get(containers_api::list_networks).post(containers_api::create_network),
+        )
+        .route(
+            "/api/containers/networks/{id}",
+            delete(containers_api::remove_network),
+        )
+        .route("/api/containers/volumes", get(containers_api::list_volumes))
+        .route(
+            "/api/containers/volumes/{name}",
+            delete(containers_api::remove_volume),
+        )
+        .route(
+            "/api/containers/{id}",
+            get(containers_api::inspect_container).delete(containers_api::remove_container),
+        )
+        .route(
+            "/api/containers/{id}/start",
+            post(containers_api::start_container),
+        )
+        .route(
+            "/api/containers/{id}/stop",
+            post(containers_api::stop_container),
+        )
+        .route(
+            "/api/containers/{id}/restart",
+            post(containers_api::restart_container),
+        )
+        .route(
+            "/api/containers/{id}/logs",
+            get(containers_api::container_logs),
+        )
+        .route(
+            "/api/containers/{id}/logs/ws",
+            get(containers_api::container_logs_ws),
+        )
 }
 
 async fn static_handler(uri: Uri) -> impl IntoResponse {

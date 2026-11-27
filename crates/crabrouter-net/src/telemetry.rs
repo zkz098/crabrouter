@@ -14,6 +14,12 @@ struct NetDevCounters {
     tx_packets: u64,
 }
 
+/// Returns `true` for ephemeral container veth interfaces (`veth*`) that should not pollute
+/// physical/bridge interface snapshots.
+pub fn is_ephemeral_container_iface(name: &str) -> bool {
+    name.starts_with("veth")
+}
+
 /// Reads current interface metadata and traffic counters from `/sys/class/net` and `/proc/net/dev`.
 pub fn read_host_interfaces() -> Result<Vec<HostInterfaceSnapshot>> {
     let counters = read_proc_net_dev().unwrap_or_default();
@@ -26,7 +32,7 @@ pub fn read_host_interfaces() -> Result<Vec<HostInterfaceSnapshot>> {
     for entry in fs::read_dir(sys_net)? {
         let entry = entry?;
         let name = entry.file_name().to_string_lossy().to_string();
-        if name == "lo" {
+        if name == "lo" || is_ephemeral_container_iface(&name) {
             continue;
         }
         let base = entry.path();
@@ -91,4 +97,19 @@ fn read_proc_net_dev() -> Result<HashMap<String, NetDevCounters>> {
         );
     }
     Ok(map)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::is_ephemeral_container_iface;
+
+    #[test]
+    fn filters_veth_but_keeps_bridges_and_nics() {
+        assert!(is_ephemeral_container_iface("veth1a2b3c"));
+        assert!(is_ephemeral_container_iface("veth0"));
+        assert!(!is_ephemeral_container_iface("eth0"));
+        assert!(!is_ephemeral_container_iface("br-lan"));
+        assert!(!is_ephemeral_container_iface("podman0"));
+        assert!(!is_ephemeral_container_iface("docker0"));
+    }
 }

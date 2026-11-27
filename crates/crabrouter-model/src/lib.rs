@@ -1,5 +1,6 @@
 pub mod bond;
 pub mod config;
+pub mod container;
 pub mod ebpf;
 pub mod error;
 pub mod firewall;
@@ -10,6 +11,12 @@ pub mod upnp;
 pub use bond::{BondConfig, BondLacpRate, BondMode, BondXmitHashPolicy, validate_bonds};
 pub use config::{
     DnsIntegrationConfig, RouterConfig, SystemConfig, WireGuardConfig, WireGuardPeer,
+};
+pub use container::{
+    ContainerActionResult, ContainerConfig, ContainerCreateRequest, ContainerImagePullRequest,
+    ContainerImageSummary, ContainerLogLine, ContainerMountSpec, ContainerNetworkCreateRequest,
+    ContainerNetworkSummary, ContainerPortBinding, ContainerRuntimeInfo, ContainerRuntimeKind,
+    ContainerSummary, ContainerVolumeSummary,
 };
 pub use ebpf::{DomainPolicyRule, EbpfConfig, EbpfRuntimeStatus, EbpfTrafficStat};
 pub use error::{ModelError, Result};

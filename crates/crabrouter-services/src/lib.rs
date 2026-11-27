@@ -1,5 +1,6 @@
 pub mod acme;
 pub mod cmd;
+pub mod containers;
 pub mod crabdns;
 pub mod ddns;
 pub mod dnsmasq;
@@ -24,6 +25,13 @@ pub enum ServiceError {
 }
 
 pub use acme::TlsCertManager;
+pub use containers::config::{
+    render_containers_conf, render_containers_slice, render_registries_conf, render_storage_conf,
+    sync_container_host_configs,
+};
+pub use containers::dry_run::DryRunContainerBackend;
+pub use containers::socket::SocketContainerBackend;
+pub use containers::{ContainerAction, ContainerBackend};
 pub use crabdns::render_crabdns_toml;
 pub use ddns::{DdnsManager, spawn_ddns_engine, spawn_ddns_engine_with_shutdown};
 pub use dnsmasq::{read_online_clients, render_dnsmasq_conf};

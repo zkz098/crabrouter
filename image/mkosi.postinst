@@ -12,6 +12,8 @@ if [[ -n "${BUILDROOT:-}" ]]; then
   systemctl --root="$BUILDROOT" enable systemd-boot-check-no-failures.service || true
   systemctl --root="$BUILDROOT" enable systemd-sysupdate.timer || true
   systemctl --root="$BUILDROOT" enable ssh.service || true
+  systemctl --root="$BUILDROOT" enable podman.socket || true
+  systemctl --root="$BUILDROOT" enable podman-restart.service || true
 
   # Optional build-time SSH authorized key injection for headless physical appliance recovery.
   if [[ -n "${CRABROUTER_SSH_AUTHORIZED_KEY:-}" ]] || [[ -n "${CRABROUTER_SSH_PUBKEY_FILE:-}" ]]; then
