@@ -16,12 +16,13 @@ use crabrouter_core::{CommitStatus, ConfigSnapshotSummary, CoreError};
 use crabrouter_model::{
     ConntrackEntry, ConntrackKillRequest, DhcpLeaseEntry, EbpfRuntimeStatus,
     HardwareHealthSnapshot, HostInterfaceSnapshot, LanConfig, MultiWanRuntimeStatus, RouterConfig,
-    UpnpLeaseEntry, WanConfig, WanRuntimeState,
+    UpnpLeaseEntry, WanConfig, WanRuntimeState, WolRequest, WolResult,
 };
 use crabrouter_net::{
     WanLeaseEvent, collect_hardware_health, kill_conntrack_flow, read_conntrack_table,
     read_host_interfaces, render_dhcpcd_conf, render_nftables_ruleset, render_nic_tuning_script,
     render_pppd_peer, render_systemd_link_files, render_tc_qos_script, render_udev_net_rules,
+    send_wol_packet,
 };
 use crabrouter_services::{
     SystemdUnitStatus, generate_wireguard_keypair as svc_gen_wg_keypair, read_online_clients,
@@ -741,4 +742,44 @@ async fn run_diag_command(bin: &str, args: &[&str], display_cmd: &str) -> DiagCo
             output: format!("command timed out after 35s: {display_cmd}"),
         },
     }
+}
+
+pub async fn send_wol(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(req): Json<WolRequest>,
+) -> Result<Json<WolResult>, ApiError> {
+    require_auth_if_initialized(&state, &headers)?;
+    let res = send_wol_packet(&req, state.dry_run)
+        .await
+        .map_err(|e| ApiError(CoreError::Transaction(e.to_string())))?;
+    Ok(Json(res))
+}
+
+#[derive(Serialize)]
+pub struct RedialWanResponse {
+    pub ok: bool,
+    pub wan_name: String,
+    pub message: String,
+}
+
+pub async fn redial_wan(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    AxumPath(name): AxumPath<String>,
+) -> Result<Json<RedialWanResponse>, ApiError> {
+    require_auth_if_initialized(&state, &headers)?;
+    let redialed = state.engine.redial_pppoe(&name).await?;
+    let message = if state.dry_run {
+        format!("dry-run: simulated PPPoE redial for WAN '{name}'")
+    } else if redialed {
+        format!("restarted PPPoE session for WAN '{name}'")
+    } else {
+        format!("WAN '{name}' has no active PPPoE session")
+    };
+    Ok(Json(RedialWanResponse {
+        ok: state.dry_run || redialed,
+        wan_name: name,
+        message,
+    }))
 }

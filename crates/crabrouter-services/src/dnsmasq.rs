@@ -54,6 +54,19 @@ pub fn render_dnsmasq_conf(cfg: &RouterConfig) -> Result<String> {
         write_lan_section(&mut out, lan)?;
     }
 
+    if !cfg.dns.custom_hosts.is_empty() {
+        out.push_str("# Custom static DNS host records\n");
+        for entry in &cfg.dns.custom_hosts {
+            let _ = writeln!(
+                out,
+                "host-record={},{}",
+                entry.hostname.trim(),
+                entry.ip.trim()
+            );
+        }
+        out.push('\n');
+    }
+
     write_vlan_ipv6_ra(&mut out, cfg);
 
     Ok(out)
@@ -99,6 +112,15 @@ fn write_lan_section(out: &mut String, lan: &crabrouter_model::LanConfig) -> Res
                 lan.name,
                 lan.name,
             );
+            for opt in &lan.custom_options {
+                let _ = writeln!(
+                    out,
+                    "dhcp-option=tag:{},{},{}",
+                    lan.name,
+                    opt.option.trim(),
+                    opt.value.trim()
+                );
+            }
         }
 
         for lease in &lan.static_leases {
@@ -308,5 +330,23 @@ mod tests {
             "dhcp-range=set:vlan20-v6,::1,::ffff:ffff:ffff:ffff,constructor:eth1.20,ra-names,slaac,64,43200s"
         ));
         assert!(conf.contains("dhcp-host=aa:bb:cc:11:22:33,192.168.10.50,nas"));
+    }
+
+    #[test]
+    fn renders_custom_dhcp_options_and_custom_hosts() {
+        use crabrouter_model::{CustomHostEntry, DhcpCustomOption};
+
+        let mut cfg = RouterConfig::default();
+        cfg.lans[0].custom_options.push(DhcpCustomOption {
+            option: "42".to_string(),
+            value: "192.168.10.1".to_string(),
+        });
+        cfg.dns.custom_hosts.push(CustomHostEntry {
+            hostname: "pve.home".to_string(),
+            ip: "192.168.10.10".to_string(),
+        });
+        let conf = render_dnsmasq_conf(&cfg).unwrap();
+        assert!(conf.contains("dhcp-option=tag:lan,42,192.168.10.1"));
+        assert!(conf.contains("host-record=pve.home,192.168.10.10"));
     }
 }

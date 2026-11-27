@@ -38,6 +38,8 @@ import type { TracerouteRequest } from "./types/TracerouteRequest";
 import type { UpnpLeaseEntry } from "./types/UpnpLeaseEntry";
 import type { WanRuntimeState } from "./types/WanRuntimeState";
 import type { WireGuardKeypairResponse } from "./types/WireGuardKeypairResponse";
+import type { WolRequest } from "./types/WolRequest";
+import type { WolResult } from "./types/WolResult";
 
 async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
   const res = await fetch(url, {
@@ -353,4 +355,21 @@ export function blessOtaBoot(): Promise<OtaCommandResult> {
 
 export function rebootSystem(): Promise<OtaCommandResult> {
   return fetchJson<OtaCommandResult>("/api/ota/reboot", { method: "POST" });
+}
+
+export function sendWol(req: WolRequest): Promise<WolResult> {
+  return fetchJson<WolResult>("/api/wol", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(req),
+  });
+}
+
+export function redialWan(
+  name: string,
+): Promise<{ ok: boolean; wan_name: string; message: string }> {
+  return fetchJson<{ ok: boolean; wan_name: string; message: string }>(
+    `/api/wans/${encodeURIComponent(name)}/redial`,
+    { method: "POST" },
+  );
 }

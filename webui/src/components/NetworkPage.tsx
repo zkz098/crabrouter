@@ -6,6 +6,7 @@ import {
   getEbpfStatus,
   getMultiWanStatus,
   getTlsStatus,
+  redialWan,
   triggerDdnsSync,
   triggerMultiWanProbe,
   triggerTlsRenew,
@@ -211,6 +212,9 @@ export function NetworkPage(props: Props) {
       health_check_enabled: true,
       probe_targets: [],
       mac_override: null,
+      modem_cidr: null,
+      pppoe_lcp_interval: null,
+      pppoe_lcp_failure: null,
     });
     props.onChange(next);
   }
@@ -637,29 +641,88 @@ export function NetworkPage(props: Props) {
                   </Show>
 
                   <Show when={wan.proto === "pppoe"}>
-                    <div class="mt-3 grid gap-3 sm:grid-cols-2">
-                      <label class="block text-xs">
-                        <span class="text-[#666666] dark:text-[#a1a1aa]">{t("netPppoeUser")}</span>
-                        <input
-                          type="text"
-                          value={wan.pppoe_username ?? ""}
-                          onInput={(e) =>
-                            updateWan(idx(), { pppoe_username: e.currentTarget.value })
-                          }
-                          class="mt-1 w-full rounded-lg border border-[#eaeaea] dark:border-[#262626] bg-white dark:bg-[#000000] text-[#171717] dark:text-[#ededed] outline-none focus:border-[#171717] dark:focus:border-[#ededed] px-2.5 py-1.5 text-xs"
-                        />
-                      </label>
-                      <label class="block text-xs">
-                        <span class="text-[#666666] dark:text-[#a1a1aa]">{t("netPppoePass")}</span>
-                        <input
-                          type="password"
-                          value={wan.pppoe_password ?? ""}
-                          onInput={(e) =>
-                            updateWan(idx(), { pppoe_password: e.currentTarget.value })
-                          }
-                          class="mt-1 w-full rounded-lg border border-[#eaeaea] dark:border-[#262626] bg-white dark:bg-[#000000] text-[#171717] dark:text-[#ededed] outline-none focus:border-[#171717] dark:focus:border-[#ededed] px-2.5 py-1.5 text-xs"
-                        />
-                      </label>
+                    <div class="mt-3 space-y-3">
+                      <div class="grid gap-3 sm:grid-cols-2">
+                        <label class="block text-xs">
+                          <span class="text-[#666666] dark:text-[#a1a1aa]">
+                            {t("netPppoeUser")}
+                          </span>
+                          <input
+                            type="text"
+                            value={wan.pppoe_username ?? ""}
+                            onInput={(e) =>
+                              updateWan(idx(), { pppoe_username: e.currentTarget.value })
+                            }
+                            class="mt-1 w-full rounded-lg border border-[#eaeaea] dark:border-[#262626] bg-white dark:bg-[#000000] text-[#171717] dark:text-[#ededed] outline-none focus:border-[#171717] dark:focus:border-[#ededed] px-2.5 py-1.5 text-xs"
+                          />
+                        </label>
+                        <label class="block text-xs">
+                          <span class="text-[#666666] dark:text-[#a1a1aa]">
+                            {t("netPppoePass")}
+                          </span>
+                          <input
+                            type="password"
+                            value={wan.pppoe_password ?? ""}
+                            onInput={(e) =>
+                              updateWan(idx(), { pppoe_password: e.currentTarget.value })
+                            }
+                            class="mt-1 w-full rounded-lg border border-[#eaeaea] dark:border-[#262626] bg-white dark:bg-[#000000] text-[#171717] dark:text-[#ededed] outline-none focus:border-[#171717] dark:focus:border-[#ededed] px-2.5 py-1.5 text-xs"
+                          />
+                        </label>
+                      </div>
+                      <div class="grid gap-3 sm:grid-cols-4 items-end">
+                        <label class="block text-xs sm:col-span-2">
+                          <span class="text-[#666666] dark:text-[#a1a1aa]">
+                            光猫桥接管理 IP (CIDR)
+                          </span>
+                          <input
+                            type="text"
+                            placeholder="如 192.168.1.2/24"
+                            value={wan.modem_cidr ?? ""}
+                            onInput={(e) =>
+                              updateWan(idx(), { modem_cidr: e.currentTarget.value || null })
+                            }
+                            class="mt-1 w-full rounded-lg border border-[#eaeaea] dark:border-[#262626] bg-white dark:bg-[#000000] text-[#171717] dark:text-[#ededed] outline-none focus:border-[#171717] dark:focus:border-[#ededed] px-2.5 py-1.5 font-mono text-xs"
+                          />
+                        </label>
+                        <label class="block text-xs">
+                          <span class="text-[#666666] dark:text-[#a1a1aa]">LCP 间隔 (秒)</span>
+                          <input
+                            type="number"
+                            min={1}
+                            placeholder="15"
+                            value={wan.pppoe_lcp_interval ?? ""}
+                            onInput={(e) => {
+                              const v = Number(e.currentTarget.value);
+                              updateWan(idx(), { pppoe_lcp_interval: v > 0 ? v : null });
+                            }}
+                            class="mt-1 w-full rounded-lg border border-[#eaeaea] dark:border-[#262626] bg-white dark:bg-[#000000] text-[#171717] dark:text-[#ededed] outline-none focus:border-[#171717] dark:focus:border-[#ededed] px-2.5 py-1.5 font-mono text-xs"
+                          />
+                        </label>
+                        <div class="flex items-center gap-2">
+                          <label class="block flex-1 text-xs">
+                            <span class="text-[#666666] dark:text-[#a1a1aa]">LCP 超限</span>
+                            <input
+                              type="number"
+                              min={1}
+                              placeholder="3"
+                              value={wan.pppoe_lcp_failure ?? ""}
+                              onInput={(e) => {
+                                const v = Number(e.currentTarget.value);
+                                updateWan(idx(), { pppoe_lcp_failure: v > 0 ? v : null });
+                              }}
+                              class="mt-1 w-full rounded-lg border border-[#eaeaea] dark:border-[#262626] bg-white dark:bg-[#000000] text-[#171717] dark:text-[#ededed] outline-none focus:border-[#171717] dark:focus:border-[#ededed] px-2.5 py-1.5 font-mono text-xs"
+                            />
+                          </label>
+                          <button
+                            type="button"
+                            onClick={() => void redialWan(wan.name)}
+                            class="mt-4 rounded-lg border border-[#eaeaea] dark:border-[#262626] bg-white dark:bg-[#111111] hover:bg-[#f4f4f5] dark:hover:bg-[#1a1a1a] px-2.5 py-1.5 text-xs font-medium text-[#171717] dark:text-[#ededed] cursor-pointer"
+                          >
+                            重拨
+                          </button>
+                        </div>
+                      </div>
                     </div>
                   </Show>
                 </div>
@@ -2155,6 +2218,146 @@ export function NetworkPage(props: Props) {
             </Show>
           </div>
         </Show>
+      </section>
+
+      {/* DHCP Custom Options & Static DNS Hosts */}
+      <section class="rounded-xl border border-[#eaeaea] dark:border-[#262626] bg-white dark:bg-[#0a0a0a] p-4 sm:p-5 transition-colors hover:border-[#d4d4d8] dark:hover:border-[#3a3a3a]">
+        <div class="grid gap-6 lg:grid-cols-2">
+          <div>
+            <div class="mb-3 flex items-center justify-between gap-2">
+              <div>
+                <h2 class="text-sm font-medium text-[#171717] dark:text-[#ededed]">
+                  自定义 DHCP Options (主 LAN)
+                </h2>
+                <p class="mt-0.5 text-xs text-[#666666] dark:text-[#a1a1aa]">
+                  下发 NTP (42)、TFTP (66) 或自定义 dnsmasq dhcp-option。
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  const next = structuredClone(props.draft);
+                  if (next.lans[0]) {
+                    next.lans[0].custom_options.push({ option: "42", value: "192.168.10.1" });
+                    props.onChange(next);
+                  }
+                }}
+                class="rounded-lg border border-[#eaeaea] dark:border-[#262626] bg-white dark:bg-[#111111] hover:bg-[#f4f4f5] dark:hover:bg-[#1a1a1a] px-2.5 py-1 text-xs font-medium text-[#171717] dark:text-[#ededed] cursor-pointer"
+              >
+                + 添加 Option
+              </button>
+            </div>
+            <div class="space-y-2">
+              <For each={props.draft.lans[0]?.custom_options ?? []}>
+                {(opt, optIdx) => (
+                  <div class="grid grid-cols-5 items-center gap-2 rounded-lg border border-[#eaeaea] dark:border-[#262626] bg-[#fafafa] dark:bg-[#111111] p-2 text-xs">
+                    <input
+                      type="text"
+                      value={opt.option}
+                      placeholder="42 或 option:ntp-server"
+                      onInput={(e) => {
+                        const next = structuredClone(props.draft);
+                        next.lans[0].custom_options[optIdx()].option = e.currentTarget.value;
+                        props.onChange(next);
+                      }}
+                      class="col-span-2 rounded border border-[#eaeaea] dark:border-[#262626] bg-white dark:bg-[#000000] px-2 py-1 font-mono text-xs text-[#171717] dark:text-[#ededed]"
+                    />
+                    <input
+                      type="text"
+                      value={opt.value}
+                      placeholder="值 (如 192.168.10.1)"
+                      onInput={(e) => {
+                        const next = structuredClone(props.draft);
+                        next.lans[0].custom_options[optIdx()].value = e.currentTarget.value;
+                        props.onChange(next);
+                      }}
+                      class="col-span-2 rounded border border-[#eaeaea] dark:border-[#262626] bg-white dark:bg-[#000000] px-2 py-1 font-mono text-xs text-[#171717] dark:text-[#ededed]"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const next = structuredClone(props.draft);
+                        next.lans[0].custom_options.splice(optIdx(), 1);
+                        props.onChange(next);
+                      }}
+                      class="text-right text-xs text-rose-600 dark:text-rose-400 bg-transparent border-0 cursor-pointer"
+                    >
+                      删除
+                    </button>
+                  </div>
+                )}
+              </For>
+            </div>
+          </div>
+
+          <div>
+            <div class="mb-3 flex items-center justify-between gap-2">
+              <div>
+                <h2 class="text-sm font-medium text-[#171717] dark:text-[#ededed]">
+                  自定义静态 DNS Hosts
+                </h2>
+                <p class="mt-0.5 text-xs text-[#666666] dark:text-[#a1a1aa]">
+                  映射内网域名到指定 IPv4/IPv6（自动同步 crabdns 与 dnsmasq）。
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  const next = structuredClone(props.draft);
+                  next.dns.custom_hosts.push({
+                    hostname: `host${next.dns.custom_hosts.length + 1}.lan`,
+                    ip: "192.168.10.10",
+                  });
+                  props.onChange(next);
+                }}
+                class="rounded-lg border border-[#eaeaea] dark:border-[#262626] bg-white dark:bg-[#111111] hover:bg-[#f4f4f5] dark:hover:bg-[#1a1a1a] px-2.5 py-1 text-xs font-medium text-[#171717] dark:text-[#ededed] cursor-pointer"
+              >
+                + 添加 Host
+              </button>
+            </div>
+            <div class="space-y-2">
+              <For each={props.draft.dns.custom_hosts}>
+                {(host, hostIdx) => (
+                  <div class="grid grid-cols-5 items-center gap-2 rounded-lg border border-[#eaeaea] dark:border-[#262626] bg-[#fafafa] dark:bg-[#111111] p-2 text-xs">
+                    <input
+                      type="text"
+                      value={host.hostname}
+                      placeholder="nas.lan"
+                      onInput={(e) => {
+                        const next = structuredClone(props.draft);
+                        next.dns.custom_hosts[hostIdx()].hostname = e.currentTarget.value;
+                        props.onChange(next);
+                      }}
+                      class="col-span-2 rounded border border-[#eaeaea] dark:border-[#262626] bg-white dark:bg-[#000000] px-2 py-1 font-mono text-xs text-[#171717] dark:text-[#ededed]"
+                    />
+                    <input
+                      type="text"
+                      value={host.ip}
+                      placeholder="192.168.10.10"
+                      onInput={(e) => {
+                        const next = structuredClone(props.draft);
+                        next.dns.custom_hosts[hostIdx()].ip = e.currentTarget.value;
+                        props.onChange(next);
+                      }}
+                      class="col-span-2 rounded border border-[#eaeaea] dark:border-[#262626] bg-white dark:bg-[#000000] px-2 py-1 font-mono text-xs text-[#171717] dark:text-[#ededed]"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const next = structuredClone(props.draft);
+                        next.dns.custom_hosts.splice(hostIdx(), 1);
+                        props.onChange(next);
+                      }}
+                      class="text-right text-xs text-rose-600 dark:text-rose-400 bg-transparent border-0 cursor-pointer"
+                    >
+                      删除
+                    </button>
+                  </div>
+                )}
+              </For>
+            </div>
+          </div>
+        </div>
       </section>
 
       <NicTuningSection

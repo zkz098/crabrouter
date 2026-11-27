@@ -116,3 +116,43 @@ fn renders_container_firewall_and_multi_wan_rules_when_enabled() {
     );
     assert!(nft_lan.contains("iifname != { \"br-lan\", \"podman*\" } return"));
 }
+
+#[test]
+fn renders_ipv6_suffix_acl_nat66_nptv6_and_modem_bridge() {
+    use crabrouter_model::{FirewallAction, FirewallRule, Ipv6NatMode, TransportProto};
+
+    let mut cfg = RouterConfig::default();
+    cfg.wans[0].modem_cidr = Some("192.168.1.2/24".to_string());
+    cfg.firewall.ipv6_nat_mode = Ipv6NatMode::Masquerade;
+    cfg.firewall.rules.push(FirewallRule {
+        name: "allow-nas-v6".to_string(),
+        enabled: true,
+        src_zone: "wan".to_string(),
+        dst_zone: Some("lan".to_string()),
+        proto: TransportProto::Tcp,
+        src_ip: None,
+        dst_ip: Some("::1234/::ffff:ffff:ffff:ffff".to_string()),
+        dst_port: Some("443".to_string()),
+        action: FirewallAction::Accept,
+    });
+
+    let nft = render_nftables_ruleset(&cfg);
+    assert!(nft.contains("ip6 daddr & ::ffff:ffff:ffff:ffff == ::1234"));
+    assert!(
+        nft.contains(
+            "meta nfproto ipv6 oifname { \"eth0\", \"ppp0\" } masquerade comment \"nat66\""
+        )
+    );
+    assert!(nft.contains("meta nfproto ipv4 oifname \"eth0\" ip daddr 192.168.1.0/24 masquerade comment \"modem-bridge:wan\""));
+
+    cfg.firewall.ipv6_nat_mode = Ipv6NatMode::Nptv6;
+    cfg.firewall.nptv6_internal_prefix = Some("fd00:10::/64".to_string());
+    cfg.firewall.nptv6_external_prefix = Some("2001:db8:1::/64".to_string());
+    let nft_npt = render_nftables_ruleset(&cfg);
+    assert!(nft_npt.contains(
+        "ip6 daddr 2001:db8:1::/64 dnat ip6 prefix to fd00:10::/64 comment \"nptv6-in\""
+    ));
+    assert!(nft_npt.contains(
+        "ip6 saddr fd00:10::/64 snat ip6 prefix to 2001:db8:1::/64 comment \"nptv6-out\""
+    ));
+}

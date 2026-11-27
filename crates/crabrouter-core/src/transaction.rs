@@ -133,6 +133,10 @@ impl RouterEngine {
         Ok(self.services.query_unit_statuses(&cfg).await?)
     }
 
+    pub async fn redial_pppoe(&self, wan_name: &str) -> Result<bool> {
+        Ok(self.net.redial_pppoe(wan_name).await?)
+    }
+
     pub async fn restore_snapshot(self: &Arc<Self>, generation: u64) -> Result<CommitStatus> {
         let snap = self.db.get_history_snapshot(generation)?.ok_or_else(|| {
             CoreError::Transaction(format!("snapshot generation {generation} not found"))

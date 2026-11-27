@@ -539,6 +539,9 @@ mod tests {
             health_check_enabled: true,
             probe_targets: Vec::new(),
             mac_override: None,
+            modem_cidr: None,
+            pppoe_lcp_interval: None,
+            pppoe_lcp_failure: None,
         }
     }
 

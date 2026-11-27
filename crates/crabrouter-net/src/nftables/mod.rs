@@ -4,7 +4,8 @@ mod tests;
 
 use extensions::{
     write_crowdsec_drop_rules, write_crowdsec_sets, write_iptv_forward_rules,
-    write_iptv_input_rules, write_mdns_input_rules,
+    write_iptv_input_rules, write_ipv6_nat_postrouting, write_ipv6_nat_prerouting,
+    write_mdns_input_rules, write_modem_bridge_postrouting,
 };
 
 use std::collections::HashSet;
@@ -16,7 +17,7 @@ use std::time::Duration;
 
 use crabrouter_model::{
     FirewallAction, FirewallRule, FirewallZone, Ipv6LanMode, MultiWanMode, RouterConfig,
-    TransportProto, WanProto, wan_fwmark, wan_table_id,
+    TransportProto, WanProto, parse_ipv6_mask_expr, wan_fwmark, wan_table_id,
 };
 use ipnet::IpNet;
 use tokio::io::AsyncWriteExt;
@@ -445,6 +446,9 @@ fn format_ip_match(raw: Option<&str>, dir: &str) -> Option<String> {
             IpAddr::V6(_) => format!("ip6 {dir} {addr}"),
         });
     }
+    if let Some((addr, mask)) = parse_ipv6_mask_expr(val) {
+        return Some(format!("ip6 {dir} & {mask} == {addr}"));
+    }
     None
 }
 
@@ -604,6 +608,7 @@ fn write_prerouting_chain(out: &mut String, cfg: &RouterConfig) {
             }
         }
     }
+    write_ipv6_nat_prerouting(out, cfg);
     out.push_str("    }\n\n");
 }
 
@@ -618,6 +623,8 @@ fn write_postrouting_chain(out: &mut String, cfg: &RouterConfig) {
             let _ = writeln!(out, "        meta nfproto ipv4 oifname {ifaces} masquerade");
         }
     }
+    write_ipv6_nat_postrouting(out, cfg);
+    write_modem_bridge_postrouting(out, cfg);
     write_hairpin_postrouting(out, cfg);
     out.push_str("    }\n");
 }

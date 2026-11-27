@@ -1,3 +1,5 @@
+use crate::dhcp_wol::DhcpCustomOption;
+pub use crate::dhcp_wol::is_valid_unicast_mac;
 use crate::error::{ModelError, Result};
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
@@ -55,6 +57,16 @@ pub struct WanConfig {
     /// Optional cloned unicast MAC address (`aa:bb:cc:dd:ee:ff`) applied to the WAN device.
     #[serde(default)]
     pub mac_override: Option<String>,
+    /// Optional optical-modem management subnet IPv4 CIDR (e.g. `192.168.1.2/24`) assigned
+    /// to the physical WAN device alongside `PPPoE` so LAN clients can reach the bridge modem UI.
+    #[serde(default)]
+    pub modem_cidr: Option<String>,
+    /// Optional `PPPoE` LCP echo interval in seconds (default 15).
+    #[serde(default)]
+    pub pppoe_lcp_interval: Option<u16>,
+    /// Optional `PPPoE` LCP echo failure threshold before redialing (default 3).
+    #[serde(default)]
+    pub pppoe_lcp_failure: Option<u8>,
 }
 
 /// IPv6 provisioning mode for a LAN interface.
@@ -100,6 +112,8 @@ pub struct LanConfig {
     pub dhcp_lease_secs: u32,
     #[serde(default)]
     pub static_leases: Vec<DhcpStaticLease>,
+    #[serde(default)]
+    pub custom_options: Vec<DhcpCustomOption>,
     #[serde(default = "default_true")]
     pub ipv6_ra_enabled: bool,
     #[serde(default)]
@@ -129,23 +143,6 @@ pub struct VlanConfig {
     pub ipv6_ra_enabled: bool,
     #[serde(default)]
     pub ipv6_subnet_id: Option<u8>,
-}
-
-/// Validates that a MAC string is a valid non-zero, non-broadcast unicast Ethernet MAC.
-pub fn is_valid_unicast_mac(mac: &str) -> bool {
-    let mut bytes = [0u8; 6];
-    let mut count = 0usize;
-    for part in mac.split(':') {
-        if count >= 6 || part.len() != 2 {
-            return false;
-        }
-        let Ok(b) = u8::from_str_radix(part, 16) else {
-            return false;
-        };
-        bytes[count] = b;
-        count += 1;
-    }
-    count == 6 && bytes != [0u8; 6] && bytes != [0xff; 6] && (bytes[0] & 0x01) == 0
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]

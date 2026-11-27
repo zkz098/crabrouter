@@ -67,6 +67,7 @@ pub fn build_router(state: AppState) -> Router {
             get(nic_tuning_api::interface_capabilities),
         )
         .route("/api/wans/status", get(api::wan_status))
+        .route("/api/wans/{name}/redial", post(api::redial_wan))
         .route("/api/wans/multi-wan/status", get(api::multi_wan_status))
         .route("/api/wans/multi-wan/probe", post(api::multi_wan_probe_now))
         .route("/api/ebpf/status", get(api::ebpf_status))
@@ -79,6 +80,7 @@ pub fn build_router(state: AppState) -> Router {
         .route("/api/crowdsec/sync", post(crowdsec_api::crowdsec_sync_now))
         .route("/api/net/wan-event", post(api::ingest_wan_event))
         .route("/api/clients", get(api::online_clients))
+        .route("/api/wol", post(api::send_wol))
         .route("/api/upnp/leases", get(api::upnp_leases))
         .route("/api/conntrack", get(api::list_conntrack))
         .route("/api/conntrack/kill", post(api::kill_conntrack))

@@ -3,6 +3,7 @@ import { getCrowdSecStatus, getUpnpLeases, triggerCrowdSecSync } from "../api";
 import { t } from "../i18n";
 import type { CrowdSecConfig } from "../types/CrowdSecConfig";
 import type { FirewallAction } from "../types/FirewallAction";
+import type { Ipv6NatMode } from "../types/Ipv6NatMode";
 import type { RouterConfig } from "../types/RouterConfig";
 import type { TransportProto } from "../types/TransportProto";
 import type { UpnpConfig } from "../types/UpnpConfig";
@@ -164,6 +165,55 @@ export function FirewallPage(props: Props) {
               class={`mt-1 ${INPUT_CLS} font-mono`}
             />
           </label>
+        </div>
+
+        <div class="mt-4 grid gap-3 border-t border-[#eaeaea] pt-3.5 dark:border-[#262626] sm:grid-cols-3">
+          <label class="block text-xs">
+            <span class="text-[#666666] dark:text-[#a1a1aa]">IPv6 NAT 模式 (NAT66 / NPTv6)</span>
+            <select
+              value={props.draft.firewall.ipv6_nat_mode}
+              onChange={(e) => {
+                const next = structuredClone(props.draft);
+                next.firewall.ipv6_nat_mode = e.currentTarget.value as Ipv6NatMode;
+                props.onChange(next);
+              }}
+              class={`mt-1 ${INPUT_CLS}`}
+            >
+              <option value="disabled">禁用 (纯路由)</option>
+              <option value="masquerade">NAT66 (Masquerade)</option>
+              <option value="nptv6">NPTv6 (1:1 前缀转换)</option>
+            </select>
+          </label>
+          <Show when={props.draft.firewall.ipv6_nat_mode === "nptv6"}>
+            <label class="block text-xs">
+              <span class="text-[#666666] dark:text-[#a1a1aa]">NPTv6 内网前缀 (ULA)</span>
+              <input
+                type="text"
+                placeholder="fd00:10::/64"
+                value={props.draft.firewall.nptv6_internal_prefix ?? ""}
+                onInput={(e) => {
+                  const next = structuredClone(props.draft);
+                  next.firewall.nptv6_internal_prefix = e.currentTarget.value || null;
+                  props.onChange(next);
+                }}
+                class={`mt-1 ${INPUT_CLS} font-mono`}
+              />
+            </label>
+            <label class="block text-xs">
+              <span class="text-[#666666] dark:text-[#a1a1aa]">NPTv6 外网前缀 (WAN)</span>
+              <input
+                type="text"
+                placeholder="2001:db8:1::/64"
+                value={props.draft.firewall.nptv6_external_prefix ?? ""}
+                onInput={(e) => {
+                  const next = structuredClone(props.draft);
+                  next.firewall.nptv6_external_prefix = e.currentTarget.value || null;
+                  props.onChange(next);
+                }}
+                class={`mt-1 ${INPUT_CLS} font-mono`}
+              />
+            </label>
+          </Show>
         </div>
       </section>
 
@@ -362,7 +412,7 @@ export function FirewallPage(props: Props) {
                 <input
                   type="text"
                   value={rule.src_ip ?? ""}
-                  placeholder={t("fwSrcIpPlaceholder")}
+                  placeholder="源 IP / CIDR / ::1234/::ffff:ffff:ffff:ffff"
                   onInput={(e) => {
                     const next = structuredClone(props.draft);
                     next.firewall.rules[idx()].src_ip = e.currentTarget.value || null;

@@ -15,6 +15,8 @@ use crate::Result;
 pub fn render_pppd_peer(wan: &WanConfig) -> String {
     let user = wan.pppoe_username.as_deref().unwrap_or("");
     let mtu = wan.mtu.min(1492);
+    let lcp_interval = wan.pppoe_lcp_interval.unwrap_or(15).max(1);
+    let lcp_failure = wan.pppoe_lcp_failure.unwrap_or(3).max(1);
     let ipv6_lines = if wan.ipv6_pd {
         "+ipv6\nipv6 ,\n"
     } else {
@@ -29,8 +31,8 @@ pub fn render_pppd_peer(wan: &WanConfig) -> String {
          persist\n\
          maxfail 0\n\
          holdoff 5\n\
-         lcp-echo-interval 15\n\
-         lcp-echo-failure 3\n\
+         lcp-echo-interval {lcp_interval}\n\
+         lcp-echo-failure {lcp_failure}\n\
          mtu {mtu}\n\
          mru {mtu}\n\
          defaultroute\n\
@@ -262,6 +264,29 @@ impl PppdManager {
 
         Ok(())
     }
+
+    /// Aborts and restarts the supervised `pppd` session for `wan_name`, returning `true` if found.
+    pub async fn redial(&self, wan_name: &str) -> Result<bool> {
+        let mut guard = self.sessions.lock().await;
+        let Some(old) = guard.remove(wan_name) else {
+            return Ok(false);
+        };
+        old.task.abort();
+        let peer_name = format!("crabrouter-{wan_name}");
+        let wan_label = wan_name.to_string();
+        let task = tokio::spawn(async move {
+            supervise_pppd_loop(&wan_label, &peer_name).await;
+        });
+        guard.insert(
+            wan_name.to_string(),
+            PppdSession {
+                spec_hash: old.spec_hash,
+                task,
+            },
+        );
+        tracing::info!(wan = %wan_name, "triggered manual PPPoE redial");
+        Ok(true)
+    }
 }
 
 async fn supervise_pppd_loop(wan_name: &str, peer_name: &str) {
@@ -316,6 +341,9 @@ mod tests {
             health_check_enabled: true,
             probe_targets: Vec::new(),
             mac_override: None,
+            modem_cidr: None,
+            pppoe_lcp_interval: None,
+            pppoe_lcp_failure: None,
         };
         let peer = render_pppd_peer(&wan);
         assert!(peer.contains("plugin rp-pppoe.so"));

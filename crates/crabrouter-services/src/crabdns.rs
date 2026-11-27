@@ -29,10 +29,24 @@ struct CrabDnsToml<'a> {
 pub fn render_crabdns_toml(cfg: &RouterConfig) -> Result<String> {
     let dnsmasq_upstream = format!("udp://127.0.0.1:{}", cfg.dns.dnsmasq_dns_port);
     let mut split_dns = Vec::new();
+    let mut seen_domains = std::collections::HashSet::new();
     for lan in &cfg.lans {
-        if !lan.domain.trim().is_empty() {
+        let dom = lan.domain.trim();
+        if !dom.is_empty() && seen_domains.insert(dom.to_string()) {
             split_dns.push(SplitDnsEntry {
-                domain: lan.domain.as_str(),
+                domain: dom,
+                upstreams: vec![dnsmasq_upstream.clone()],
+            });
+        }
+    }
+    for host in &cfg.dns.custom_hosts {
+        let h = host.hostname.trim();
+        let already_covered = seen_domains
+            .iter()
+            .any(|d| h == d || h.ends_with(&format!(".{d}")));
+        if !h.is_empty() && !already_covered && seen_domains.insert(h.to_string()) {
+            split_dns.push(SplitDnsEntry {
+                domain: h,
                 upstreams: vec![dnsmasq_upstream.clone()],
             });
         }

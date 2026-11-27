@@ -1,5 +1,5 @@
 use std::collections::HashSet;
-use std::net::IpAddr;
+use std::net::{IpAddr, Ipv6Addr};
 
 use ipnet::IpNet;
 use serde::{Deserialize, Serialize};
@@ -78,6 +78,18 @@ pub struct PortForwardRule {
     pub reflection: bool,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default, TS)]
+#[serde(rename_all = "snake_case")]
+#[ts(export)]
+pub enum Ipv6NatMode {
+    #[default]
+    Disabled,
+    /// Standard IPv6 masquerade (NAT66) on masquerade-enabled WAN zones.
+    Masquerade,
+    /// Stateless 1:1 IPv6 Network Prefix Translation (`NPTv6`) via `snat/dnat ip6 prefix to`.
+    Nptv6,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[ts(export)]
 #[allow(clippy::struct_excessive_bools)]
@@ -93,6 +105,15 @@ pub struct FirewallConfig {
     /// Global switch for NAT loopback (hairpin NAT) on enabled port forwards.
     #[serde(default = "default_true")]
     pub nat_loopback: bool,
+    /// IPv6 NAT mode (`disabled`, `masquerade` for NAT66, or `nptv6` for 1:1 prefix translation).
+    #[serde(default)]
+    pub ipv6_nat_mode: Ipv6NatMode,
+    /// Internal ULA/LAN IPv6 prefix for `NPTv6` (e.g. `fd00:10::/64`).
+    #[serde(default)]
+    pub nptv6_internal_prefix: Option<String>,
+    /// External WAN IPv6 prefix for `NPTv6` (e.g. `2001:db8:1::/64`).
+    #[serde(default)]
+    pub nptv6_external_prefix: Option<String>,
     #[serde(default)]
     pub zones: Vec<FirewallZone>,
     #[serde(default)]
@@ -109,6 +130,9 @@ impl Default for FirewallConfig {
             syn_flood_rate: default_syn_flood_rate(),
             mss_clamping: true,
             nat_loopback: true,
+            ipv6_nat_mode: Ipv6NatMode::Disabled,
+            nptv6_internal_prefix: None,
+            nptv6_external_prefix: None,
             zones: vec![
                 FirewallZone {
                     name: "lan".to_string(),
@@ -170,15 +194,72 @@ impl FirewallConfig {
                 ModelError::Validation(format!("port forward '{}' invalid dest_ip: {e}", fwd.name))
             })?;
         }
+
+        if self.ipv6_nat_mode == Ipv6NatMode::Nptv6 {
+            validate_nptv6_prefixes(
+                self.nptv6_internal_prefix.as_deref(),
+                self.nptv6_external_prefix.as_deref(),
+            )?;
+        }
         Ok(())
     }
+}
+
+/// Parses an IPv6 suffix/bitwise mask expression `<ipv6_addr>/<ipv6_mask>`
+/// (for example `::1234/::ffff:ffff:ffff:ffff`).
+pub fn parse_ipv6_mask_expr(raw: &str) -> Option<(Ipv6Addr, Ipv6Addr)> {
+    let (addr_s, mask_s) = raw.trim().split_once('/')?;
+    let addr = addr_s.trim().parse::<Ipv6Addr>().ok()?;
+    let mask = mask_s.trim().parse::<Ipv6Addr>().ok()?;
+    Some((addr, mask))
+}
+
+fn validate_nptv6_prefixes(internal: Option<&str>, external: Option<&str>) -> Result<()> {
+    let int_raw = internal
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .ok_or_else(|| {
+            ModelError::Validation("NPTv6 requires nptv6_internal_prefix".to_string())
+        })?;
+    let ext_raw = external
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .ok_or_else(|| {
+            ModelError::Validation("NPTv6 requires nptv6_external_prefix".to_string())
+        })?;
+    let IpNet::V6(int_v6) = int_raw.parse::<IpNet>().map_err(|e| {
+        ModelError::Validation(format!("invalid nptv6_internal_prefix '{int_raw}': {e}"))
+    })?
+    else {
+        return Err(ModelError::Validation(format!(
+            "nptv6_internal_prefix '{int_raw}' must be an IPv6 CIDR"
+        )));
+    };
+    let IpNet::V6(ext_v6) = ext_raw.parse::<IpNet>().map_err(|e| {
+        ModelError::Validation(format!("invalid nptv6_external_prefix '{ext_raw}': {e}"))
+    })?
+    else {
+        return Err(ModelError::Validation(format!(
+            "nptv6_external_prefix '{ext_raw}' must be an IPv6 CIDR"
+        )));
+    };
+    if int_v6.prefix_len() != ext_v6.prefix_len() || !(1..=64).contains(&int_v6.prefix_len()) {
+        return Err(ModelError::Validation(
+            "NPTv6 internal and external prefixes must have matching prefix lengths in 1..=64"
+                .to_string(),
+        ));
+    }
+    Ok(())
 }
 
 fn validate_opt_ip_or_net(val: Option<&str>, rule_name: &str, field: &str) -> Result<()> {
     let Some(raw) = val.map(str::trim).filter(|s| !s.is_empty()) else {
         return Ok(());
     };
-    if raw.parse::<IpNet>().is_err() && raw.parse::<IpAddr>().is_err() {
+    if raw.parse::<IpNet>().is_err()
+        && raw.parse::<IpAddr>().is_err()
+        && parse_ipv6_mask_expr(raw).is_none()
+    {
         return Err(ModelError::Validation(format!(
             "firewall rule '{rule_name}' invalid {field} '{raw}'"
         )));

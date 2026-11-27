@@ -1,6 +1,7 @@
 use std::fmt::Write;
 
-use crabrouter_model::{InterfaceRole, RouterConfig};
+use crabrouter_model::{InterfaceRole, Ipv6NatMode, RouterConfig};
+use ipnet::IpNet;
 
 use super::format_iface_set;
 
@@ -117,6 +118,87 @@ fn resolve_mdns_ifaces(cfg: &RouterConfig) -> Vec<String> {
         }
     }
     out
+}
+
+pub(super) fn write_ipv6_nat_prerouting(out: &mut String, cfg: &RouterConfig) {
+    if cfg.firewall.ipv6_nat_mode != Ipv6NatMode::Nptv6 {
+        return;
+    }
+    let Some(int_prefix) = cfg.firewall.nptv6_internal_prefix.as_deref() else {
+        return;
+    };
+    let Some(ext_prefix) = cfg.firewall.nptv6_external_prefix.as_deref() else {
+        return;
+    };
+    for zone in &cfg.firewall.zones {
+        if zone.masquerade && !zone.interfaces.is_empty() {
+            let ifaces = format_iface_set(&zone.interfaces);
+            let _ = writeln!(
+                out,
+                "        iifname {ifaces} ip6 daddr {} dnat ip6 prefix to {} comment \"nptv6-in\"",
+                ext_prefix.trim(),
+                int_prefix.trim()
+            );
+        }
+    }
+}
+
+pub(super) fn write_ipv6_nat_postrouting(out: &mut String, cfg: &RouterConfig) {
+    match cfg.firewall.ipv6_nat_mode {
+        Ipv6NatMode::Disabled => {}
+        Ipv6NatMode::Masquerade => {
+            for zone in &cfg.firewall.zones {
+                if zone.masquerade && !zone.interfaces.is_empty() {
+                    let ifaces = format_iface_set(&zone.interfaces);
+                    let _ = writeln!(
+                        out,
+                        "        meta nfproto ipv6 oifname {ifaces} masquerade comment \"nat66\""
+                    );
+                }
+            }
+        }
+        Ipv6NatMode::Nptv6 => {
+            let Some(int_prefix) = cfg.firewall.nptv6_internal_prefix.as_deref() else {
+                return;
+            };
+            let Some(ext_prefix) = cfg.firewall.nptv6_external_prefix.as_deref() else {
+                return;
+            };
+            for zone in &cfg.firewall.zones {
+                if zone.masquerade && !zone.interfaces.is_empty() {
+                    let ifaces = format_iface_set(&zone.interfaces);
+                    let _ = writeln!(
+                        out,
+                        "        oifname {ifaces} ip6 saddr {} snat ip6 prefix to {} comment \"nptv6-out\"",
+                        int_prefix.trim(),
+                        ext_prefix.trim()
+                    );
+                }
+            }
+        }
+    }
+}
+
+pub(super) fn write_modem_bridge_postrouting(out: &mut String, cfg: &RouterConfig) {
+    for wan in &cfg.wans {
+        let Some(modem_cidr) = wan
+            .modem_cidr
+            .as_deref()
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+        else {
+            continue;
+        };
+        if let Ok(IpNet::V4(net)) = modem_cidr.parse::<IpNet>() {
+            let _ = writeln!(
+                out,
+                "        meta nfproto ipv4 oifname \"{}\" ip daddr {} masquerade comment \"modem-bridge:{}\"",
+                wan.device,
+                net.trunc(),
+                wan.name
+            );
+        }
+    }
 }
 
 fn resolve_iptv_downstream_ifaces(cfg: &RouterConfig) -> Vec<String> {

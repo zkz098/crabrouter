@@ -5,4 +5,17 @@ export type WanConfig = { name: string, device: string, proto: WanProto, static_
 /**
  * Optional cloned unicast MAC address (`aa:bb:cc:dd:ee:ff`) applied to the WAN device.
  */
-mac_override: string | null, };
+mac_override: string | null, 
+/**
+ * Optional optical-modem management subnet IPv4 CIDR (e.g. `192.168.1.2/24`) assigned
+ * to the physical WAN device alongside `PPPoE` so LAN clients can reach the bridge modem UI.
+ */
+modem_cidr: string | null, 
+/**
+ * Optional `PPPoE` LCP echo interval in seconds (default 15).
+ */
+pppoe_lcp_interval: number | null, 
+/**
+ * Optional `PPPoE` LCP echo failure threshold before redialing (default 3).
+ */
+pppoe_lcp_failure: number | null, };

@@ -54,6 +54,9 @@ impl Default for NetworkPaths {
 pub trait NetworkBackend: Send + Sync {
     fn apply_network_and_firewall<'a>(&'a self, cfg: &'a RouterConfig)
     -> BoxFuture<'a, Result<()>>;
+    fn redial_pppoe<'a>(&'a self, _wan_name: &'a str) -> BoxFuture<'a, Result<bool>> {
+        Box::pin(async { Ok(false) })
+    }
 }
 
 #[derive(Debug, Default)]
@@ -125,25 +128,23 @@ impl NetworkBackend for LinuxNetworkBackend {
                 &self.paths.systemd_network_dir,
                 &self.paths.udev_rules_path,
             )?;
-
             sync_dhcpcd_files(
                 cfg,
                 &self.paths.dhcpcd_conf_path,
                 &self.paths.dhcpcd_hook_path,
                 &self.paths.hook_endpoint_url,
             )?;
-
             apply_rtnetlink_diff(cfg).await?;
             apply::apply_ipv6_relay_sysctls(cfg);
             apply_nic_tuning(cfg).await?;
-
             self.pppd.sync(cfg).await?;
-
             apply_nft_with_precheck(cfg).await?;
-
             apply_tc_qos(cfg).await?;
             Ok(())
         })
+    }
+    fn redial_pppoe<'a>(&'a self, wan_name: &'a str) -> BoxFuture<'a, Result<bool>> {
+        Box::pin(async move { self.pppd.redial(wan_name).await })
     }
 }
 
@@ -420,14 +421,19 @@ fn collect_desired_addresses(cfg: &RouterConfig) -> HashMap<String, HashSet<IpNe
         }
     }
     for wan in &cfg.wans {
-        if wan.proto == WanProto::Static
-            && let Some(cidr) = wan.static_cidr.as_deref()
-            && let Ok(net) = cidr.parse::<IpNet>()
-        {
-            desired_by_iface
-                .entry(wan.device.clone())
-                .or_default()
-                .insert(net);
+        let cidrs = [
+            (wan.proto == WanProto::Static)
+                .then_some(wan.static_cidr.as_deref())
+                .flatten(),
+            wan.modem_cidr.as_deref(),
+        ];
+        for cidr in cidrs.into_iter().flatten() {
+            if let Ok(net) = cidr.parse::<IpNet>() {
+                desired_by_iface
+                    .entry(wan.device.clone())
+                    .or_default()
+                    .insert(net);
+            }
         }
     }
     for vlan in &cfg.vlans {

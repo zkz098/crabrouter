@@ -8,6 +8,7 @@ use ts_rs::TS;
 use crate::bond::{BondConfig, validate_bonds};
 use crate::container::ContainerConfig;
 use crate::crowdsec::CrowdSecConfig;
+use crate::dhcp_wol::{CustomHostEntry, validate_custom_hosts, validate_dhcp_custom_options};
 use crate::ebpf::EbpfConfig;
 use crate::error::{ModelError, Result};
 use crate::firewall::FirewallConfig;
@@ -37,6 +38,9 @@ pub struct DnsIntegrationConfig {
     /// Enable `crabdns` `DoT` / `DoH` listeners if TLS cert is configured.
     #[serde(default = "default_true")]
     pub encrypted_dns_enabled: bool,
+    /// Custom static DNS host records (`host-record=<hostname>,<ip>` in `dnsmasq`).
+    #[serde(default)]
+    pub custom_hosts: Vec<CustomHostEntry>,
 }
 
 impl Default for DnsIntegrationConfig {
@@ -47,6 +51,7 @@ impl Default for DnsIntegrationConfig {
             public_upstreams: default_public_upstreams(),
             dnsmasq_dns_port: default_dnsmasq_port(),
             encrypted_dns_enabled: true,
+            custom_hosts: Vec::new(),
         }
     }
 }
@@ -248,6 +253,7 @@ impl RouterConfig {
         self.ddns.validate()?;
         self.acme.validate()?;
         self.upnp.validate()?;
+        validate_custom_hosts(&self.dns.custom_hosts)?;
         validate_nic_tuning(&self.nic_tuning)?;
         self.containers
             .validate(self.dns.crabdns_port, self.dns.dnsmasq_dns_port)?;
@@ -295,6 +301,7 @@ impl RouterConfig {
                     wan.name
                 )));
             }
+            validate_wan_modem_cidr(wan)?;
             match wan.proto {
                 WanProto::Static => {
                     let cidr = wan.static_cidr.as_deref().ok_or_else(|| {
@@ -379,6 +386,7 @@ impl RouterConfig {
                     ))
                 })?;
             }
+            validate_dhcp_custom_options(&lan.name, &lan.custom_options)?;
             if let Some(ula) = lan
                 .ipv6_ula_cidr
                 .as_deref()
@@ -631,6 +639,30 @@ impl RouterConfig {
     }
 }
 
+fn validate_wan_modem_cidr(wan: &WanConfig) -> Result<()> {
+    let Some(modem_cidr) = wan
+        .modem_cidr
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+    else {
+        return Ok(());
+    };
+    let net: IpNet = modem_cidr.parse().map_err(|e| {
+        ModelError::Validation(format!(
+            "WAN '{}' invalid modem_cidr '{modem_cidr}': {e}",
+            wan.name
+        ))
+    })?;
+    if !matches!(net, IpNet::V4(_)) {
+        return Err(ModelError::Validation(format!(
+            "WAN '{}' modem_cidr '{modem_cidr}' must be an IPv4 CIDR",
+            wan.name
+        )));
+    }
+    Ok(())
+}
+
 pub fn is_valid_mac(mac: &str) -> bool {
     let parts: Vec<&str> = mac.split(':').collect();
     parts.len() == 6
@@ -720,6 +752,9 @@ fn default_wans() -> Vec<WanConfig> {
         health_check_enabled: true,
         probe_targets: Vec::new(),
         mac_override: None,
+        modem_cidr: None,
+        pppoe_lcp_interval: None,
+        pppoe_lcp_failure: None,
     }]
 }
 
@@ -735,6 +770,7 @@ fn default_lans() -> Vec<LanConfig> {
         dhcp_limit: 150,
         dhcp_lease_secs: 43_200,
         static_leases: Vec::new(),
+        custom_options: Vec::new(),
         ipv6_ra_enabled: true,
         ipv6_mode: Ipv6LanMode::Server,
         ipv6_relay_wan: None,

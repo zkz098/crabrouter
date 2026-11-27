@@ -1,6 +1,6 @@
 import QRCode from "qrcode";
 import { For, Show, createSignal } from "solid-js";
-import { generateWireGuardKeypair } from "../api";
+import { generateWireGuardKeypair, sendWol } from "../api";
 import { t } from "../i18n";
 import type { DhcpLeaseEntry } from "../types/DhcpLeaseEntry";
 import type { RouterConfig } from "../types/RouterConfig";
@@ -33,6 +33,22 @@ export function ClientsWgPage(props: Props) {
   const [qrPeerName, setQrPeerName] = createSignal<string>("");
   const [endpointHost, setEndpointHost] = createSignal(window.location.hostname || "router.lan");
   const [busyKey, setBusyKey] = createSignal(false);
+  const [wolMac, setWolMac] = createSignal("");
+  const [wolBroadcast, setWolBroadcast] = createSignal("");
+  const [wolNotice, setWolNotice] = createSignal<string | null>(null);
+
+  async function wakeMac(mac: string, broadcast?: string) {
+    try {
+      const res = await sendWol({
+        mac,
+        broadcast_ip: broadcast?.trim() ? broadcast.trim() : null,
+        port: 9,
+      });
+      setWolNotice(res.message);
+    } catch (err) {
+      setWolNotice(err instanceof Error ? err.message : String(err));
+    }
+  }
 
   const primaryLan = () => props.draft.lans[0];
 
@@ -176,21 +192,30 @@ export function ClientsWgPage(props: Props) {
                         </span>
                       </td>
                       <td class="py-2.5 text-right">
-                        <Show when={!client.is_static}>
+                        <div class="inline-flex items-center gap-1.5">
                           <button
                             type="button"
-                            onClick={() =>
-                              addStaticLease(
-                                client.mac,
-                                client.ip,
-                                client.hostname === "-" ? "" : client.hostname,
-                              )
-                            }
+                            onClick={() => wakeMac(client.mac)}
                             class="rounded-lg border border-[#eaeaea] dark:border-[#262626] bg-white dark:bg-[#111111] hover:bg-[#f4f4f5] dark:hover:bg-[#1a1a1a] px-2.5 py-1 text-xs font-medium text-[#171717] dark:text-[#ededed] cursor-pointer transition-colors"
                           >
-                            {t("clMakeStatic")}
+                            WOL 唤醒
                           </button>
-                        </Show>
+                          <Show when={!client.is_static}>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                addStaticLease(
+                                  client.mac,
+                                  client.ip,
+                                  client.hostname === "-" ? "" : client.hostname,
+                                )
+                              }
+                              class="rounded-lg border border-[#eaeaea] dark:border-[#262626] bg-white dark:bg-[#111111] hover:bg-[#f4f4f5] dark:hover:bg-[#1a1a1a] px-2.5 py-1 text-xs font-medium text-[#171717] dark:text-[#ededed] cursor-pointer transition-colors"
+                            >
+                              {t("clMakeStatic")}
+                            </button>
+                          </Show>
+                        </div>
                       </td>
                     </tr>
                   )}
@@ -199,6 +224,33 @@ export function ClientsWgPage(props: Props) {
             </table>
           </div>
         </Show>
+        <div class="mt-4 flex flex-wrap items-center gap-2 border-t border-[#eaeaea] pt-3.5 dark:border-[#262626]">
+          <input
+            type="text"
+            value={wolMac()}
+            placeholder="WOL MAC (如 aa:bb:cc:11:22:33)"
+            onInput={(e) => setWolMac(e.currentTarget.value)}
+            class={`${INPUT_CLS} max-w-[220px] font-mono`}
+          />
+          <input
+            type="text"
+            value={wolBroadcast()}
+            placeholder="广播地址 (默认 255.255.255.255)"
+            onInput={(e) => setWolBroadcast(e.currentTarget.value)}
+            class={`${INPUT_CLS} max-w-[220px] font-mono`}
+          />
+          <button
+            type="button"
+            onClick={() => wakeMac(wolMac(), wolBroadcast())}
+            disabled={!wolMac().trim()}
+            class={BTN_OUTLINE}
+          >
+            发送 WOL 魔术包
+          </button>
+          <Show when={wolNotice()}>
+            {(msg) => <span class="text-xs text-[#666666] dark:text-[#a1a1aa]">{msg()}</span>}
+          </Show>
+        </div>
       </section>
 
       {/* DHCP Static Leases */}

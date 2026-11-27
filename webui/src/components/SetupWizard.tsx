@@ -94,6 +94,9 @@ export function SetupWizard(props: Props) {
       health_check_enabled: true,
       probe_targets: [],
       mac_override: null,
+      modem_cidr: null,
+      pppoe_lcp_interval: null,
+      pppoe_lcp_failure: null,
     };
 
     const lan: LanConfig = {
@@ -107,6 +110,7 @@ export function SetupWizard(props: Props) {
       dhcp_limit: 150,
       dhcp_lease_secs: 43200,
       static_leases: [],
+      custom_options: [],
       ipv6_ra_enabled: true,
       ipv6_mode: "server",
       ipv6_relay_wan: null,

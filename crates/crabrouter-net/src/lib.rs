@@ -13,6 +13,7 @@ pub mod pins;
 pub mod pppoe;
 pub mod qos;
 pub mod telemetry;
+pub mod wol;
 
 use thiserror::Error;
 
@@ -65,3 +66,4 @@ pub use pppoe::{
 };
 pub use qos::{apply_tc_qos, render_tc_qos_script};
 pub use telemetry::read_host_interfaces;
+pub use wol::send_wol_packet;

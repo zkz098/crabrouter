@@ -3,6 +3,7 @@ pub mod bond;
 pub mod config;
 pub mod container;
 pub mod crowdsec;
+pub mod dhcp_wol;
 pub mod ebpf;
 pub mod error;
 pub mod firewall;
@@ -28,10 +29,15 @@ pub use container::{
     ContainerSummary, ContainerVolumeSummary,
 };
 pub use crowdsec::{CrowdSecConfig, CrowdSecDecision, CrowdSecStatus};
+pub use dhcp_wol::{
+    CustomHostEntry, DhcpCustomOption, WolRequest, WolResult, validate_custom_hosts,
+    validate_dhcp_custom_options, validate_wol_mac,
+};
 pub use ebpf::{DomainPolicyRule, EbpfConfig, EbpfRuntimeStatus, EbpfTrafficStat};
 pub use error::{ModelError, Result};
 pub use firewall::{
-    FirewallAction, FirewallConfig, FirewallRule, FirewallZone, PortForwardRule, TransportProto,
+    FirewallAction, FirewallConfig, FirewallRule, FirewallZone, Ipv6NatMode, PortForwardRule,
+    TransportProto, parse_ipv6_mask_expr,
 };
 pub use multicast::{IptvConfig, MdnsConfig};
 pub use network::{
