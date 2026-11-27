@@ -1,3 +1,4 @@
+pub mod app_store;
 pub mod bond;
 pub mod config;
 pub mod container;
@@ -8,8 +9,14 @@ pub mod firewall;
 pub mod multicast;
 pub mod network;
 pub mod nic_tuning;
+pub mod sysext;
 pub mod upnp;
 
+pub use app_store::{
+    APP_CONTAINER_PREFIX, AppCatalogEntry, AppCategory, AppFieldSpec, AppFieldType,
+    AppInstallRequest, InstalledApp, app_container_name, build_app_container_request,
+    builtin_app_catalog,
+};
 pub use bond::{BondConfig, BondLacpRate, BondMode, BondXmitHashPolicy, validate_bonds};
 pub use config::{
     DnsIntegrationConfig, RouterConfig, SystemConfig, WireGuardConfig, WireGuardPeer,
@@ -39,5 +46,8 @@ pub use network::{
 pub use nic_tuning::{
     EffectiveNicTuning, NicCapabilitiesSnapshot, NicOffloadCapabilities, NicTuningConfig,
     NicTuningProfile, OffloadFeatureState, RpsMode, is_valid_cpu_mask, validate_nic_tuning,
+};
+pub use sysext::{
+    SysextActionResult, SysextImageStatus, SysextRuntimeStatus, sanitize_sysext_filename,
 };
 pub use upnp::{UpnpConfig, UpnpLeaseEntry};

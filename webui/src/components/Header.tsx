@@ -8,6 +8,7 @@ export type PageTab =
   | "firewall"
   | "qos_conntrack"
   | "clients"
+  | "extensions"
   | "ota"
   | "diagnostics";
 
@@ -17,6 +18,7 @@ export const NAV_ITEMS: Array<{ key: PageTab; label: () => string; icon: string 
   { key: "firewall", label: () => t("navFirewall"), icon: "i-ri-shield-flash-line" },
   { key: "qos_conntrack", label: () => t("navQosConntrack"), icon: "i-ri-speed-up-line" },
   { key: "clients", label: () => t("navClients"), icon: "i-ri-computer-line" },
+  { key: "extensions", label: () => t("navExtensions"), icon: "i-ri-apps-2-line" },
   { key: "ota", label: () => t("navOta"), icon: "i-ri-download-cloud-2-line" },
   { key: "diagnostics", label: () => t("navDiagnostics"), icon: "i-ri-terminal-box-line" },
 ];

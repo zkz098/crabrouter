@@ -10,3 +10,4 @@ enable systemd-sysupdate.timer
 enable ssh.service
 enable podman.socket
 enable podman-restart.service
+enable systemd-sysext.service

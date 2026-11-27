@@ -3,6 +3,7 @@ pub mod containers_api;
 pub mod crabdns_proxy;
 pub mod crowdsec_api;
 pub mod ddns_tls_api;
+pub mod extensions_api;
 pub mod logs;
 pub mod metrics;
 pub mod nic_tuning_api;
@@ -46,6 +47,7 @@ pub struct AppState {
     pub lease_path: PathBuf,
     pub ota_dir: PathBuf,
     pub sysupdate_dir: PathBuf,
+    pub sysext_dir: PathBuf,
     pub dry_run: bool,
 }
 
@@ -111,12 +113,31 @@ pub fn build_router(state: AppState) -> Router {
         .route("/api/ota/apply", post(ota_api::ota_apply))
         .route("/api/ota/bless", post(ota_api::ota_bless))
         .route("/api/ota/reboot", post(ota_api::ota_reboot))
+        .merge(extension_routes())
         .merge(container_routes())
         .route("/crabdns", any(crabdns_proxy::proxy_crabdns))
         .route("/crabdns/{*path}", any(crabdns_proxy::proxy_crabdns))
         .with_state(state)
         .layer(CorsLayer::permissive())
         .fallback(static_handler)
+}
+
+fn extension_routes() -> Router<AppState> {
+    Router::new()
+        .route("/api/apps/catalog", get(extensions_api::apps_catalog))
+        .route("/api/apps/installed", get(extensions_api::apps_installed))
+        .route("/api/apps/install", post(extensions_api::apps_install))
+        .route("/api/apps/{id}/start", post(extensions_api::apps_start))
+        .route("/api/apps/{id}/stop", post(extensions_api::apps_stop))
+        .route("/api/apps/{id}", delete(extensions_api::apps_uninstall))
+        .route("/api/sysext/status", get(extensions_api::sysext_status))
+        .route(
+            "/api/sysext/upload",
+            post(extensions_api::sysext_upload).layer(DefaultBodyLimit::disable()),
+        )
+        .route("/api/sysext/refresh", post(extensions_api::sysext_refresh))
+        .route("/api/sysext/unmerge", post(extensions_api::sysext_unmerge))
+        .route("/api/sysext/{name}", delete(extensions_api::sysext_delete))
 }
 
 fn container_routes() -> Router<AppState> {

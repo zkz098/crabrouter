@@ -179,6 +179,7 @@ async fn main() -> anyhow::Result<()> {
         lease_path: cli.leases.clone(),
         ota_dir,
         sysupdate_dir: PathBuf::from("/etc/sysupdate.d"),
+        sysext_dir: PathBuf::from("/var/lib/extensions"),
         dry_run: cli.dry_run,
     });
 

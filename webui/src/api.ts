@@ -1,9 +1,12 @@
+import type { AppCatalogEntry } from "./types/AppCatalogEntry";
+import type { AppInstallRequest } from "./types/AppInstallRequest";
 import type { AuthTokenResponse } from "./types/AuthTokenResponse";
 import type { CommitStatus } from "./types/CommitStatus";
 import type { ConfigSnapshotSummary } from "./types/ConfigSnapshotSummary";
 import type { ConntrackEntry } from "./types/ConntrackEntry";
 import type { ConntrackKillRequest } from "./types/ConntrackKillRequest";
 import type { ConntrackKillResponse } from "./types/ConntrackKillResponse";
+import type { ContainerActionResult } from "./types/ContainerActionResult";
 import type { CrabDnsAggregateStatus } from "./types/CrabDnsAggregateStatus";
 import type { CrowdSecStatus } from "./types/CrowdSecStatus";
 import type { DdnsRuntimeStatus } from "./types/DdnsRuntimeStatus";
@@ -12,6 +15,7 @@ import type { DiagCommandResult } from "./types/DiagCommandResult";
 import type { EbpfRuntimeStatus } from "./types/EbpfRuntimeStatus";
 import type { HardwareHealthSnapshot } from "./types/HardwareHealthSnapshot";
 import type { HostInterfaceSnapshot } from "./types/HostInterfaceSnapshot";
+import type { InstalledApp } from "./types/InstalledApp";
 import type { Iperf3Request } from "./types/Iperf3Request";
 import type { LogEvent } from "./types/LogEvent";
 import type { LoginRequest } from "./types/LoginRequest";
@@ -26,6 +30,8 @@ import type { RouterConfig } from "./types/RouterConfig";
 import type { SetupInitRequest } from "./types/SetupInitRequest";
 import type { SetupStatusResponse } from "./types/SetupStatusResponse";
 import type { StagedOtaImage } from "./types/StagedOtaImage";
+import type { SysextActionResult } from "./types/SysextActionResult";
+import type { SysextRuntimeStatus } from "./types/SysextRuntimeStatus";
 import type { SystemdUnitStatus } from "./types/SystemdUnitStatus";
 import type { TlsRuntimeStatus } from "./types/TlsRuntimeStatus";
 import type { TracerouteRequest } from "./types/TracerouteRequest";
@@ -142,6 +148,71 @@ export function getCrowdSecStatus(): Promise<CrowdSecStatus> {
 
 export function triggerCrowdSecSync(): Promise<CrowdSecStatus> {
   return fetchJson<CrowdSecStatus>("/api/crowdsec/sync", { method: "POST" });
+}
+
+export function getAppCatalog(): Promise<AppCatalogEntry[]> {
+  return fetchJson<AppCatalogEntry[]>("/api/apps/catalog");
+}
+
+export function getInstalledApps(): Promise<InstalledApp[]> {
+  return fetchJson<InstalledApp[]>("/api/apps/installed");
+}
+
+export function installApp(req: AppInstallRequest): Promise<ContainerActionResult> {
+  return fetchJson<ContainerActionResult>("/api/apps/install", {
+    method: "POST",
+    body: JSON.stringify(req),
+  });
+}
+
+export function startApp(id: string): Promise<ContainerActionResult> {
+  return fetchJson<ContainerActionResult>(`/api/apps/${encodeURIComponent(id)}/start`, {
+    method: "POST",
+  });
+}
+
+export function stopApp(id: string): Promise<ContainerActionResult> {
+  return fetchJson<ContainerActionResult>(`/api/apps/${encodeURIComponent(id)}/stop`, {
+    method: "POST",
+  });
+}
+
+export function uninstallApp(id: string): Promise<ContainerActionResult> {
+  return fetchJson<ContainerActionResult>(`/api/apps/${encodeURIComponent(id)}`, {
+    method: "DELETE",
+  });
+}
+
+export function getSysextStatus(): Promise<SysextRuntimeStatus> {
+  return fetchJson<SysextRuntimeStatus>("/api/sysext/status");
+}
+
+export async function uploadSysextImage(file: File): Promise<SysextActionResult> {
+  const form = new FormData();
+  form.append("file", file, file.name);
+  const res = await fetch("/api/sysext/upload", {
+    method: "POST",
+    body: form,
+    credentials: "same-origin",
+  });
+  if (!res.ok) {
+    throw new Error((await res.text()) || `HTTP ${res.status}`);
+  }
+  return (await res.json()) as SysextActionResult;
+}
+
+export function refreshSysext(): Promise<SysextActionResult> {
+  return fetchJson<SysextActionResult>("/api/sysext/refresh", { method: "POST" });
+}
+
+export function unmergeSysext(): Promise<SysextActionResult> {
+  return fetchJson<SysextActionResult>("/api/sysext/unmerge", { method: "POST" });
+}
+
+export function deleteSysextImage(name: string): Promise<SysextActionResult> {
+  return fetchJson<SysextActionResult>(`/api/sysext/${encodeURIComponent(name)}`, {
+    method: "DELETE",
+  });
 }
 
 export function getClients(): Promise<DhcpLeaseEntry[]> {

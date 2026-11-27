@@ -1,4 +1,5 @@
 pub mod acme;
+pub mod app_store;
 pub mod cmd;
 pub mod containers;
 pub mod crabdns;
@@ -10,6 +11,7 @@ pub mod ipv6_relay;
 pub mod mdns;
 pub mod ota;
 pub mod supervisor;
+pub mod sysext;
 pub mod upnp;
 pub mod wireguard;
 
@@ -28,6 +30,9 @@ pub enum ServiceError {
 }
 
 pub use acme::TlsCertManager;
+pub use app_store::{
+    install_catalog_app, list_installed_apps, toggle_catalog_app, uninstall_catalog_app,
+};
 pub use containers::config::{
     render_containers_conf, render_containers_slice, render_registries_conf, render_storage_conf,
     sync_container_host_configs,
@@ -49,6 +54,7 @@ pub use ota::{
     trigger_reboot_via_dbus,
 };
 pub use supervisor::{DryRunSupervisor, ServiceSupervisor, SystemdSupervisor, SystemdUnitStatus};
+pub use sysext::{query_sysext_status, refresh_sysext, remove_sysext_image, unmerge_sysext};
 pub use upnp::{parse_upnp_leases, read_upnp_leases, render_miniupnpd_conf};
 pub use wireguard::{
     WireGuardKeypair, derive_public_key, generate_wireguard_keypair, render_wg_quick_conf,

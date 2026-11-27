@@ -59,6 +59,7 @@ async fn setup_test_app() -> (Router, PathBuf) {
         lease_path: dir.join("dnsmasq.leases"),
         ota_dir: dir.join("ota"),
         sysupdate_dir: dir.join("sysupdate.d"),
+        sysext_dir: dir.join("extensions"),
         dry_run: true,
     });
     (app, dir)

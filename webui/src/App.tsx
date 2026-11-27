@@ -32,6 +32,7 @@ import { ClientsWgPage } from "./components/ClientsWgPage";
 import { CommitConfirmModal } from "./components/CommitConfirmModal";
 import { ConntrackQosPage } from "./components/ConntrackQosPage";
 import { DiagnosticsPage } from "./components/DiagnosticsPage";
+import { ExtensionsPage } from "./components/ExtensionsPage";
 import { FirewallPage } from "./components/FirewallPage";
 import { Header, type PageTab } from "./components/Header";
 import { LoginView } from "./components/LoginView";
@@ -321,6 +322,16 @@ export default function App() {
                     clients={clients() ?? []}
                     onRefreshClients={() => void refetchClients()}
                     onChange={(next) => setDraft(next)}
+                  />
+                </Match>
+                <Match when={tab() === "extensions"}>
+                  <ExtensionsPage
+                    draft={activeDraft()}
+                    onEnableContainers={() => {
+                      const next = structuredClone(activeDraft());
+                      next.containers.enabled = true;
+                      setDraft(next);
+                    }}
                   />
                 </Match>
                 <Match when={tab() === "ota"}>
