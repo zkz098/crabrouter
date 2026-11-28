@@ -9,6 +9,7 @@ type PreviewTab =
   | "tc_qos"
   | "crabdns"
   | "dnsmasq"
+  | "chrony"
   | "wg_quick"
   | "miniupnpd"
   | "ndppd"
@@ -40,6 +41,8 @@ export function ServicesPreviewPage(props: Props) {
         return p.crabdns;
       case "dnsmasq":
         return p.dnsmasq;
+      case "chrony":
+        return p.chrony;
       case "wg_quick":
         return p.wg_quick;
       case "miniupnpd":
@@ -113,6 +116,7 @@ export function ServicesPreviewPage(props: Props) {
                   "tc_qos",
                   "crabdns",
                   "dnsmasq",
+                  "chrony",
                   "wg_quick",
                   "miniupnpd",
                   "ndppd",

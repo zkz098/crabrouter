@@ -1,5 +1,6 @@
 pub mod acme;
 pub mod app_store;
+pub mod chrony;
 pub mod cmd;
 pub mod containers;
 pub mod crabdns;
@@ -34,6 +35,7 @@ pub use acme::TlsCertManager;
 pub use app_store::{
     install_catalog_app, list_installed_apps, toggle_catalog_app, uninstall_catalog_app,
 };
+pub use chrony::render_chrony_conf;
 pub use containers::config::{
     render_containers_conf, render_containers_slice, render_registries_conf, render_storage_conf,
     sync_container_host_configs,
@@ -41,7 +43,7 @@ pub use containers::config::{
 pub use containers::dry_run::DryRunContainerBackend;
 pub use containers::socket::SocketContainerBackend;
 pub use containers::{ContainerAction, ContainerBackend};
-pub use crabdns::render_crabdns_toml;
+pub use crabdns::{render_crabdns_toml, render_crabdns_toml_with_isp_dns};
 pub use crowdsec::{CrowdSecManager, render_crowdsec_acquis_yaml, render_crowdsec_bouncer_conf};
 pub use ddns::{DdnsManager, spawn_ddns_engine, spawn_ddns_engine_with_shutdown};
 pub use dnsmasq::{read_online_clients, render_dnsmasq_conf};

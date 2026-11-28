@@ -138,14 +138,17 @@ async fn run_event_loop(
             .as_ref()
             .map_or_else(Vec::new, |s| s.ipv6_slices.clone());
 
+        let prev_gw = prev.as_ref().and_then(|s| s.gateway.clone());
         let updated = build_updated_wan_state(&cfg, wan, prev.as_ref(), &ev);
         let new_ip = updated.ip.clone();
+        let new_gw = updated.gateway.clone();
         let new_slices = updated.ipv6_slices.clone();
 
-        states
-            .write()
-            .await
-            .insert(wan_name.clone(), updated.clone());
+        let wan_states: Vec<WanRuntimeState> = {
+            let mut guard = states.write().await;
+            guard.insert(wan_name.clone(), updated.clone());
+            guard.values().cloned().collect()
+        };
         observer.on_wan_state_updated(updated);
 
         if !dry_run
@@ -160,11 +163,13 @@ async fn run_event_loop(
         }
 
         let ip_changed = prev_ip.is_some() && prev_ip != new_ip;
+        let gw_changed = prev_gw != new_gw && new_gw.is_some();
         let ifindex_changed =
             prev_ifindex.is_some() && ev.ifindex.is_some() && prev_ifindex != ev.ifindex;
 
         if !dry_run
             && (ip_changed
+                || gw_changed
                 || ifindex_changed
                 || matches!(ev.event.as_str(), "up" | "ipv6_up" | "BOUND" | "BOUND6"))
         {
@@ -172,6 +177,11 @@ async fn run_event_loop(
                 && ip_changed
             {
                 flush_conntrack_for_wan(Some(old_ip), None, dry_run).await;
+            }
+            if let Err(err) =
+                crate::netlink::apply_rtnetlink_diff_with_wans(&cfg, &wan_states, &[]).await
+            {
+                tracing::warn!(wan = %wan_name, error = %err, "event-driven rtnetlink route sync failed");
             }
             if let Err(err) = apply_nft_with_precheck(&cfg).await {
                 tracing::error!(wan = %wan_name, error = %err, "event-driven nftables refresh failed");

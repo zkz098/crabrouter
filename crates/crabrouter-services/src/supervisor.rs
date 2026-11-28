@@ -7,10 +7,11 @@ use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 use zbus::OwnedObjectPath;
 
+use crate::chrony::render_chrony_conf;
 use crate::containers::config::{
     render_containers_conf, render_registries_conf, sync_container_host_configs,
 };
-use crate::crabdns::render_crabdns_toml;
+use crate::crabdns::{render_crabdns_toml, render_crabdns_toml_with_isp_dns};
 use crate::crowdsec::{render_crowdsec_acquis_yaml, render_crowdsec_bouncer_conf};
 use crate::dnsmasq::render_dnsmasq_conf;
 use crate::iptv::{render_igmpproxy_conf, render_udpxy_env};
@@ -58,6 +59,20 @@ trait SystemdUnit {
 
 pub trait ServiceSupervisor: Send + Sync {
     fn sync_services<'a>(&'a self, cfg: &'a RouterConfig) -> BoxFuture<'a, Result<()>>;
+    fn sync_services_with_isp_dns<'a>(
+        &'a self,
+        cfg: &'a RouterConfig,
+        _isp_dns: &'a [String],
+    ) -> BoxFuture<'a, Result<()>> {
+        self.sync_services(cfg)
+    }
+    fn sync_crabdns_with_isp_dns<'a>(
+        &'a self,
+        _cfg: &'a RouterConfig,
+        _isp_dns: &'a [String],
+    ) -> BoxFuture<'a, Result<()>> {
+        Box::pin(async { Ok(()) })
+    }
     fn query_unit_statuses<'a>(
         &'a self,
         cfg: &'a RouterConfig,
@@ -72,6 +87,7 @@ impl ServiceSupervisor for DryRunSupervisor {
         Box::pin(async move {
             let dnsmasq = render_dnsmasq_conf(cfg)?;
             let crabdns = render_crabdns_toml(cfg)?;
+            let chrony = render_chrony_conf(cfg);
             let miniupnpd = render_miniupnpd_conf(cfg);
             let ndppd = render_ndppd_conf(cfg);
             let avahi = render_avahi_daemon_conf(cfg);
@@ -92,6 +108,7 @@ impl ServiceSupervisor for DryRunSupervisor {
             tracing::info!(
                 dnsmasq_bytes = dnsmasq.len(),
                 crabdns_bytes = crabdns.len(),
+                chrony_bytes = chrony.len(),
                 miniupnpd_bytes = miniupnpd.len(),
                 ndppd_bytes = ndppd.len(),
                 avahi_bytes = avahi.len(),
@@ -129,6 +146,12 @@ impl ServiceSupervisor for DryRunSupervisor {
                 },
                 SystemdUnitStatus {
                     unit: "chrony.service".to_string(),
+                    load_state: "dry-run".to_string(),
+                    active_state: "active".to_string(),
+                    sub_state: "running".to_string(),
+                },
+                SystemdUnitStatus {
+                    unit: "crabrouter-dhcpcd.service".to_string(),
                     load_state: "dry-run".to_string(),
                     active_state: "active".to_string(),
                     sub_state: "running".to_string(),
@@ -186,10 +209,19 @@ impl Default for SystemdSupervisor {
 
 impl ServiceSupervisor for SystemdSupervisor {
     fn sync_services<'a>(&'a self, cfg: &'a RouterConfig) -> BoxFuture<'a, Result<()>> {
+        self.sync_services_with_isp_dns(cfg, &[])
+    }
+
+    fn sync_services_with_isp_dns<'a>(
+        &'a self,
+        cfg: &'a RouterConfig,
+        isp_dns: &'a [String],
+    ) -> BoxFuture<'a, Result<()>> {
         Box::pin(async move {
             tokio::fs::create_dir_all(&self.runtime_dir).await?;
             let dnsmasq_path = self.runtime_dir.join("dnsmasq.conf");
             let crabdns_path = self.runtime_dir.join("crabdns.toml");
+            let chrony_path = self.runtime_dir.join("chrony.conf");
             let miniupnpd_path = self.runtime_dir.join("miniupnpd.conf");
             let ndppd_path = self.runtime_dir.join("ndppd.conf");
             let avahi_path = self.runtime_dir.join("avahi-daemon.conf");
@@ -199,7 +231,12 @@ impl ServiceSupervisor for SystemdSupervisor {
             let crowdsec_acquis_path = self.runtime_dir.join("crowdsec-acquis.yaml");
 
             write_atomic(&dnsmasq_path, &render_dnsmasq_conf(cfg)?).await?;
-            write_atomic(&crabdns_path, &render_crabdns_toml(cfg)?).await?;
+            write_atomic(
+                &crabdns_path,
+                &render_crabdns_toml_with_isp_dns(cfg, isp_dns)?,
+            )
+            .await?;
+            write_atomic(&chrony_path, &render_chrony_conf(cfg)).await?;
             write_atomic(&miniupnpd_path, &render_miniupnpd_conf(cfg)).await?;
             write_atomic(&ndppd_path, &render_ndppd_conf(cfg)).await?;
             write_atomic(&avahi_path, &render_avahi_daemon_conf(cfg)).await?;
@@ -225,6 +262,7 @@ impl ServiceSupervisor for SystemdSupervisor {
             reload_unit_via_dbus(&mgr, "dnsmasq.service", true).await?;
             reload_unit_via_dbus(&mgr, "crabdns.service", true).await?;
             reload_unit_via_dbus(&mgr, "chrony.service", false).await?;
+            reload_unit_via_dbus(&mgr, "crabrouter-dhcpcd.service", false).await?;
 
             let wg_unit = format!("wg-quick@{}.service", cfg.wireguard.interface);
             sync_optional_unit(&mgr, &wg_unit, cfg.wireguard.enabled, true).await?;
@@ -259,6 +297,29 @@ impl ServiceSupervisor for SystemdSupervisor {
         })
     }
 
+    fn sync_crabdns_with_isp_dns<'a>(
+        &'a self,
+        cfg: &'a RouterConfig,
+        isp_dns: &'a [String],
+    ) -> BoxFuture<'a, Result<()>> {
+        Box::pin(async move {
+            tokio::fs::create_dir_all(&self.runtime_dir).await?;
+            let crabdns_path = self.runtime_dir.join("crabdns.toml");
+            write_atomic(
+                &crabdns_path,
+                &render_crabdns_toml_with_isp_dns(cfg, isp_dns)?,
+            )
+            .await?;
+            let conn = zbus::Connection::system().await.map_err(|e| {
+                ServiceError::Orchestration(format!("systemd D-Bus connect failed: {e}"))
+            })?;
+            let mgr = SystemdManagerProxy::new(&conn).await.map_err(|e| {
+                ServiceError::Orchestration(format!("systemd Manager proxy failed: {e}"))
+            })?;
+            reload_unit_via_dbus(&mgr, "crabdns.service", true).await
+        })
+    }
+
     fn query_unit_statuses<'a>(
         &'a self,
         cfg: &'a RouterConfig,
@@ -279,6 +340,7 @@ impl ServiceSupervisor for SystemdSupervisor {
                 "crabdns.service".to_string(),
                 "dnsmasq.service".to_string(),
                 "chrony.service".to_string(),
+                "crabrouter-dhcpcd.service".to_string(),
                 format!("wg-quick@{}.service", cfg.wireguard.interface),
                 "miniupnpd.service".to_string(),
                 "ndppd.service".to_string(),

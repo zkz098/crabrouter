@@ -3,9 +3,11 @@ mod extensions;
 mod tests;
 
 use extensions::{
-    write_crowdsec_drop_rules, write_crowdsec_sets, write_iptv_forward_rules,
-    write_iptv_input_rules, write_ipv6_nat_postrouting, write_ipv6_nat_prerouting,
-    write_mdns_input_rules, write_modem_bridge_postrouting,
+    collect_lan_interfaces, write_crowdsec_drop_rules, write_crowdsec_sets,
+    write_iptv_forward_rules, write_iptv_input_rules, write_ipv6_nat_postrouting,
+    write_ipv6_nat_prerouting, write_mangle_bypass_nets, write_mdns_input_rules,
+    write_modem_bridge_postrouting, write_wireguard_forward_rules, write_wireguard_input_rules,
+    write_wireguard_postrouting_rules,
 };
 
 use std::collections::HashSet;
@@ -192,9 +194,9 @@ fn collect_flowtable_devices(cfg: &RouterConfig) -> Vec<String> {
             devs.push(wan.device.clone());
         }
     }
-    for lan in &cfg.lans {
-        if !devs.contains(&lan.bridge) {
-            devs.push(lan.bridge.clone());
+    for lan_iface in collect_lan_interfaces(cfg) {
+        if !devs.contains(&lan_iface) {
+            devs.push(lan_iface);
         }
     }
     devs
@@ -225,6 +227,7 @@ fn write_input_chain(out: &mut String, cfg: &RouterConfig) {
         }
     }
     write_container_input_rules(out, cfg);
+    write_wireguard_input_rules(out, cfg);
     for rule in cfg
         .firewall
         .rules
@@ -261,6 +264,7 @@ fn write_forward_chain(out: &mut String, cfg: &RouterConfig, has_flowtable: bool
         out.push_str("        meta l4proto ipv6-icmp accept comment \"ipv6-relay-ndp\"\n");
     }
     write_container_forward_rules(out, cfg);
+    write_wireguard_forward_rules(out, cfg);
     for rule in cfg
         .firewall
         .rules
@@ -475,7 +479,7 @@ fn write_mangle_prerouting_chain(
         return;
     }
 
-    let mut mangle_ifaces: Vec<String> = cfg.lans.iter().map(|l| l.bridge.clone()).collect();
+    let mut mangle_ifaces = collect_lan_interfaces(cfg);
     if cfg.containers.enabled && cfg.containers.multi_wan_enabled {
         for iface in cfg.containers.effective_bridge_interfaces() {
             if !mangle_ifaces.contains(&iface) {
@@ -491,16 +495,7 @@ fn write_mangle_prerouting_chain(
     );
     let _ = writeln!(out, "        iifname != {iface_set} return");
     out.push_str("        fib daddr type local return\n");
-    for lan in &cfg.lans {
-        if let Ok(net @ IpNet::V4(_)) = lan.cidr.parse::<IpNet>() {
-            let _ = writeln!(out, "        ip daddr {net} return");
-        }
-    }
-    if cfg.containers.enabled
-        && let Ok(net @ IpNet::V4(_)) = cfg.containers.default_subnet.parse::<IpNet>()
-    {
-        let _ = writeln!(out, "        ip daddr {net} return");
-    }
+    write_mangle_bypass_nets(out, cfg);
     out.push_str("        ct mark != 0 meta mark set ct mark return\n");
 
     if cfg.multi_wan.mode == MultiWanMode::Failover || candidates.len() == 1 {
@@ -626,6 +621,7 @@ fn write_postrouting_chain(out: &mut String, cfg: &RouterConfig) {
     }
     write_ipv6_nat_postrouting(out, cfg);
     write_modem_bridge_postrouting(out, cfg);
+    write_wireguard_postrouting_rules(out, cfg, &collect_wan_ifaces(cfg));
     write_hairpin_postrouting(out, cfg);
     out.push_str("    }\n");
 }
@@ -684,7 +680,7 @@ fn port_forward_protos(proto: TransportProto) -> Vec<&'static str> {
 }
 
 fn collect_lan_v4_info(cfg: &RouterConfig) -> (Vec<String>, Vec<String>, Vec<String>) {
-    let mut ifaces = Vec::new();
+    let mut ifaces = collect_lan_interfaces(cfg);
     let mut router_ips = Vec::new();
     let mut nets = Vec::new();
     for lan in &cfg.lans {
@@ -696,6 +692,15 @@ fn collect_lan_v4_info(cfg: &RouterConfig) -> (Vec<String>, Vec<String>, Vec<Str
             nets.push(v4.trunc().to_string());
         }
     }
+    for vlan in &cfg.vlans {
+        if vlan.role == crabrouter_model::InterfaceRole::Lan
+            && let Some(cidr) = vlan.cidr.as_deref()
+            && let Ok(IpNet::V4(v4)) = cidr.parse::<IpNet>()
+        {
+            router_ips.push(v4.addr().to_string());
+            nets.push(v4.trunc().to_string());
+        }
+    }
     (ifaces, router_ips, nets)
 }
 
@@ -703,7 +708,7 @@ fn upnp_lan_ifaces(cfg: &RouterConfig) -> Vec<String> {
     if !cfg.upnp.lan_interfaces.is_empty() {
         return cfg.upnp.lan_interfaces.clone();
     }
-    cfg.lans.iter().map(|l| l.bridge.clone()).collect()
+    collect_lan_interfaces(cfg)
 }
 
 fn format_addr_set(items: &[String]) -> String {

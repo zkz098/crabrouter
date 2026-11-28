@@ -1,4 +1,5 @@
-import { For, Show, createSignal } from "solid-js";
+import { For, Show, createResource, createSignal } from "solid-js";
+import { getDailyTraffic } from "../api";
 import { t } from "../i18n";
 import type { PageTab } from "../nav";
 import type { CrabDnsAggregateStatus } from "../types/CrabDnsAggregateStatus";
@@ -35,6 +36,7 @@ function formatBytes(bytes: number): string {
 
 export function OverviewPage(props: Props) {
   const [guideOpen, setGuideOpen] = createSignal(true);
+  const [dailyTraffic] = createResource(() => getDailyTraffic());
 
   const memUsedPct = () => {
     const m = props.metrics;
@@ -502,6 +504,57 @@ export function OverviewPage(props: Props) {
             </tbody>
           </table>
         </div>
+      </section>
+
+      <section class="rounded-xl border border-[#e9ecef] dark:border-[#232a3b] bg-white dark:bg-[#131722] p-4 sm:p-5 argon-card">
+        <h3 class="mb-3.5 text-sm font-semibold text-[#172b4d] dark:text-[#eef1f6]">
+          每日流量统计报表 (持久化)
+        </h3>
+        <Show
+          when={(dailyTraffic()?.length ?? 0) > 0}
+          fallback={
+            <p class="text-xs text-[#525f7f] dark:text-[#a3adc2]">
+              暂无历史流量记录，守护进程每 30 秒自动累计一次接口流量。
+            </p>
+          }
+        >
+          <div class="overflow-x-auto">
+            <table class="w-full text-left text-xs">
+              <thead>
+                <tr class="border-b border-[#e9ecef] dark:border-[#232a3b] text-[#8898aa] dark:text-[#6c7893]">
+                  <th class="pb-2 pr-4 font-medium">日期</th>
+                  <th class="pb-2 pr-4 font-medium">接口</th>
+                  <th class="pb-2 pr-4 font-medium">下行 (RX)</th>
+                  <th class="pb-2 pr-4 font-medium">上行 (TX)</th>
+                  <th class="pb-2 font-medium">总计</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-[#e9ecef] dark:divide-[#232a3b]">
+                <For each={dailyTraffic()}>
+                  {(row) => (
+                    <tr class="hover:bg-[#f8f9fe] dark:hover:bg-[#1a1f2e]/60 transition-colors">
+                      <td class="py-2 pr-4 font-mono text-[#172b4d] dark:text-[#eef1f6]">
+                        {row.date}
+                      </td>
+                      <td class="py-2 pr-4 font-mono text-[#5e72e4] dark:text-[#8090f7]">
+                        {row.interface}
+                      </td>
+                      <td class="py-2 pr-4 font-mono tabular-nums text-sky-600 dark:text-sky-400">
+                        {formatBytes(row.rx_bytes)}
+                      </td>
+                      <td class="py-2 pr-4 font-mono tabular-nums text-emerald-600 dark:text-emerald-400">
+                        {formatBytes(row.tx_bytes)}
+                      </td>
+                      <td class="py-2 font-mono tabular-nums text-[#525f7f] dark:text-[#a3adc2]">
+                        {formatBytes(row.rx_bytes + row.tx_bytes)}
+                      </td>
+                    </tr>
+                  )}
+                </For>
+              </tbody>
+            </table>
+          </div>
+        </Show>
       </section>
     </div>
   );

@@ -23,6 +23,10 @@ dnsmasq_dns_port: number,
  */
 encrypted_dns_enabled: boolean, 
 /**
+ * Merge ISP-assigned DNS servers from WAN DHCP/PPPoE leases into `crabdns` upstreams.
+ */
+use_isp_dns: boolean, 
+/**
  * Custom static DNS host records (`host-record=<hostname>,<ip>` in `dnsmasq`).
  */
 custom_hosts: Array<CustomHostEntry>, };

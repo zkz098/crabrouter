@@ -41,6 +41,9 @@ pub struct DnsIntegrationConfig {
     /// Enable `crabdns` `DoT` / `DoH` listeners if TLS cert is configured.
     #[serde(default = "default_true")]
     pub encrypted_dns_enabled: bool,
+    /// Merge ISP-assigned DNS servers from WAN DHCP/PPPoE leases into `crabdns` upstreams.
+    #[serde(default)]
+    pub use_isp_dns: bool,
     /// Custom static DNS host records (`host-record=<hostname>,<ip>` in `dnsmasq`).
     #[serde(default)]
     pub custom_hosts: Vec<CustomHostEntry>,
@@ -54,6 +57,7 @@ impl Default for DnsIntegrationConfig {
             public_upstreams: default_public_upstreams(),
             dnsmasq_dns_port: default_dnsmasq_port(),
             encrypted_dns_enabled: true,
+            use_isp_dns: false,
             custom_hosts: Vec::new(),
         }
     }
@@ -128,6 +132,10 @@ pub struct SystemConfig {
     #[serde(default = "default_commit_confirm_secs")]
     #[ts(type = "number")]
     pub commit_confirm_timeout_secs: u64,
+    #[serde(default = "default_ntp_servers")]
+    pub ntp_servers: Vec<String>,
+    #[serde(default)]
+    pub ntp_server_enabled: bool,
 }
 
 impl Default for SystemConfig {
@@ -143,6 +151,8 @@ impl Default for SystemConfig {
             web_tls_key: None,
             ota_update_url: default_ota_url(),
             commit_confirm_timeout_secs: default_commit_confirm_secs(),
+            ntp_servers: default_ntp_servers(),
+            ntp_server_enabled: false,
         }
     }
 }
@@ -718,6 +728,14 @@ fn default_ota_url() -> String {
 
 const fn default_commit_confirm_secs() -> u64 {
     60
+}
+
+fn default_ntp_servers() -> Vec<String> {
+    vec![
+        "pool.ntp.org".to_string(),
+        "time.cloudflare.com".to_string(),
+        "ntp.aliyun.com".to_string(),
+    ]
 }
 
 fn default_wans() -> Vec<WanConfig> {

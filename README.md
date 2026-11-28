@@ -37,7 +37,15 @@ cargo run -p crabrouter-daemon -- --dry-run
 On a Debian/Ubuntu host with `mkosi`, `qemu-utils`, `xorriso`, and `mtools` installed (or via GitHub Actions `.github/workflows/image.yml`):
 
 ```bash
+# Default: Debian 13 (Trixie) Linux 6.12 LTS kernel
 bash image/scripts/build-image.sh
+
+# HWE: Newer Linux kernel & hardware firmware from trixie-backports
+CRABROUTER_KERNEL=hwe bash image/scripts/build-image.sh
+# Or: just build-hyperv hwe / bash image/scripts/build-image.sh --hwe
+
+# Optional: use a local Debian mirror (e.g. TUNA / USTC)
+CRABROUTER_DEBIAN_MIRROR=https://mirrors.tuna.tsinghua.edu.cn bash image/scripts/build-image.sh
 ```
 
 This produces `image/mkosi.output/crabrouter.raw`, Hyper-V Generation 2 `crabrouter.vhdx` (disable Secure Boot in Gen 2 VM settings), and UEFI Live/Installer `crabrouter-live.iso`.

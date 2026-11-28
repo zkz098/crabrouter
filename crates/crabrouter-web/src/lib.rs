@@ -1,4 +1,5 @@
 pub mod api;
+pub mod backup_traffic_api;
 pub mod containers_api;
 pub mod crabdns_proxy;
 pub mod crowdsec_api;
@@ -86,6 +87,12 @@ pub fn build_router(state: AppState) -> Router {
         .route("/api/conntrack/kill", post(api::kill_conntrack))
         .route("/api/config", get(api::get_config))
         .route("/api/config/preview", get(api::preview_rendered))
+        .route("/api/config/export", get(backup_traffic_api::export_config))
+        .route(
+            "/api/config/import",
+            post(backup_traffic_api::import_config),
+        )
+        .route("/api/traffic/daily", get(backup_traffic_api::daily_traffic))
         .route("/api/config/commit", post(api::begin_commit))
         .route("/api/config/confirm", post(api::confirm_commit))
         .route("/api/config/rollback", post(api::rollback_commit))

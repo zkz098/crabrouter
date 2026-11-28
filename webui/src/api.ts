@@ -2,7 +2,9 @@ import type { AppCatalogEntry } from "./types/AppCatalogEntry";
 import type { AppInstallRequest } from "./types/AppInstallRequest";
 import type { AuthTokenResponse } from "./types/AuthTokenResponse";
 import type { CommitStatus } from "./types/CommitStatus";
+import type { ConfigImportRequest } from "./types/ConfigImportRequest";
 import type { ConfigSnapshotSummary } from "./types/ConfigSnapshotSummary";
+import type { DailyTrafficRecord } from "./types/DailyTrafficRecord";
 import type { ConntrackEntry } from "./types/ConntrackEntry";
 import type { ConntrackKillRequest } from "./types/ConntrackKillRequest";
 import type { ConntrackKillResponse } from "./types/ConntrackKillResponse";
@@ -269,6 +271,27 @@ export function restoreConfigSnapshot(generation: number): Promise<CommitStatus>
   return fetchJson<CommitStatus>(`/api/config/history/${generation}/restore`, {
     method: "POST",
   });
+}
+
+export async function exportConfigBackup(): Promise<string> {
+  const res = await fetch("/api/config/export", { credentials: "same-origin" });
+  if (!res.ok) {
+    throw new Error(`HTTP ${res.status}`);
+  }
+  return res.text();
+}
+
+export function importConfigBackup(configToml: string): Promise<CommitStatus> {
+  const body: ConfigImportRequest = { config_toml: configToml };
+  return fetchJson<CommitStatus>("/api/config/import", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+}
+
+export function getDailyTraffic(): Promise<DailyTrafficRecord[]> {
+  return fetchJson<DailyTrafficRecord[]>("/api/traffic/daily");
 }
 
 export function generateWireGuardKeypair(): Promise<WireGuardKeypairResponse> {

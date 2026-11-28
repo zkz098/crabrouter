@@ -7,6 +7,80 @@ EXTRA_BIN="$IMAGE_DIR/mkosi.extra/usr/local/bin"
 REPART_DST="$IMAGE_DIR/mkosi.extra/usr/share/crabrouter/repart.d"
 OUT_DIR="$IMAGE_DIR/mkosi.output"
 VERSION="${CRABROUTER_VERSION:-0.1.0}"
+KERNEL_VARIANT="${CRABROUTER_KERNEL:-lts}"
+DEBIAN_MIRROR="${CRABROUTER_DEBIAN_MIRROR:-}"
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --hwe)
+      KERNEL_VARIANT="hwe"
+      shift
+      ;;
+    --lts)
+      KERNEL_VARIANT="lts"
+      shift
+      ;;
+    --kernel=*)
+      KERNEL_VARIANT="${1#*=}"
+      shift
+      ;;
+    --kernel)
+      KERNEL_VARIANT="${2:-}"
+      shift 2
+      ;;
+    --mirror=*)
+      DEBIAN_MIRROR="${1#*=}"
+      shift
+      ;;
+    --mirror)
+      DEBIAN_MIRROR="${2:-}"
+      shift 2
+      ;;
+    *)
+      echo "error: unknown argument '$1' (expected --lts, --hwe, --kernel <lts|hwe>, or --mirror <url>)" >&2
+      exit 1
+      ;;
+  esac
+done
+
+case "$KERNEL_VARIANT" in
+  lts)
+    MKOSI_PROFILE_ARGS=()
+    ;;
+  hwe)
+    MKOSI_PROFILE_ARGS=(--profile=hwe)
+    ;;
+  *)
+    echo "error: unsupported CRABROUTER_KERNEL='$KERNEL_VARIANT' (expected 'lts' or 'hwe')" >&2
+    exit 1
+    ;;
+esac
+
+MKOSI_MIRROR_ARGS=()
+BACKPORTS_SOURCES="$IMAGE_DIR/mkosi.profiles/hwe/mkosi.sandbox/etc/apt/sources.list.d/trixie-backports.sources"
+BACKPORTS_BACKUP=""
+ISO_STAGE=""
+
+cleanup() {
+  if [[ -n "$BACKPORTS_BACKUP" ]] && [[ -f "$BACKPORTS_BACKUP" ]]; then
+    mv -f "$BACKPORTS_BACKUP" "$BACKPORTS_SOURCES"
+  fi
+  if [[ -n "$ISO_STAGE" ]] && [[ -d "$ISO_STAGE" ]]; then
+    rm -rf "$ISO_STAGE"
+  fi
+}
+trap cleanup EXIT
+
+if [[ -n "$DEBIAN_MIRROR" ]]; then
+  DEBIAN_MIRROR="${DEBIAN_MIRROR%/}"
+  DEBIAN_MIRROR="${DEBIAN_MIRROR%/debian}"
+  MKOSI_MIRROR_ARGS=(--mirror="$DEBIAN_MIRROR")
+  if [[ "$KERNEL_VARIANT" == "hwe" ]] && [[ -f "$BACKPORTS_SOURCES" ]]; then
+    BACKPORTS_BACKUP="$(mktemp)"
+    cp "$BACKPORTS_SOURCES" "$BACKPORTS_BACKUP"
+    sed -i "s|^URIs: .*|URIs: ${DEBIAN_MIRROR}/debian|" "$BACKPORTS_SOURCES"
+  fi
+fi
 
 echo "==> 1. Building WebUI & release Rust binaries"
 (cd "$REPO_ROOT/webui" && pnpm install --frozen-lockfile && pnpm build)
@@ -16,7 +90,7 @@ mkdir -p "$EXTRA_BIN" "$REPART_DST"
 install -m 0755 "$REPO_ROOT/target/release/crabrouter-daemon" "$EXTRA_BIN/crabrouterd"
 install -m 0755 "$REPO_ROOT/target/release/crabrouter-cli" "$EXTRA_BIN/crabctl"
 cp "$IMAGE_DIR"/mkosi.repart/*.conf "$REPART_DST/"
-sed -i -E '/^(CopyFiles|ExcludeFiles)=|^Format=squashfs$/d' "$REPART_DST/"*.conf
+sed -i -E '/^(CopyFiles|ExcludeFiles)=|^Format=squashfs$|^Compression(Level)?=/d' "$REPART_DST/"*.conf
 
 if [[ -d "${CRABDNS_DIR:-$HOME/projects/crabdns}" ]]; then
   bash "$IMAGE_DIR/scripts/bundle-crabdns.sh"
@@ -29,8 +103,8 @@ if ! command -v mkosi >/dev/null 2>&1; then
   exit 1
 fi
 
-echo "==> 2. Building Debian 13 (Trixie) UEFI appliance image with mkosi ($(mkosi --version))"
-(cd "$IMAGE_DIR" && mkosi --image-version="$VERSION" --force)
+echo "==> 2. Building Debian 13 (Trixie) UEFI appliance image (kernel=$KERNEL_VARIANT, mkosi $(mkosi --version))"
+(cd "$IMAGE_DIR" && mkosi "${MKOSI_PROFILE_ARGS[@]}" "${MKOSI_MIRROR_ARGS[@]}" --image-version="$VERSION" --force)
 
 RAW_IMG="$(find "$OUT_DIR" -maxdepth 1 -name 'crabrouter*.raw' ! -name '*.root-*' | head -n 1 || true)"
 if [[ -n "$RAW_IMG" ]] && [[ -f "$RAW_IMG" ]] && command -v qemu-img >/dev/null 2>&1; then
@@ -42,12 +116,11 @@ else
 fi
 
 if [[ "${BUILD_ISO:-1}" == "1" ]] && command -v xorriso >/dev/null 2>&1 && command -v mcopy >/dev/null 2>&1 && command -v mkfs.vfat >/dev/null 2>&1; then
-  echo "==> 4. Building UEFI Live/Installer ISO for Hyper-V / bare-metal USB"
-  (cd "$IMAGE_DIR" && mkosi --format=uki --split-artifacts=no --output=crabrouter-live --image-version="$VERSION" --force)
+  echo "==> 4. Building UEFI Live/Installer ISO for Hyper-V / bare-metal USB (kernel=$KERNEL_VARIANT)"
+  (cd "$IMAGE_DIR" && mkosi "${MKOSI_PROFILE_ARGS[@]}" "${MKOSI_MIRROR_ARGS[@]}" --format=uki --split-artifacts=no --output=crabrouter-live --image-version="$VERSION" --force)
   LIVE_EFI="$(find "$OUT_DIR" -maxdepth 1 -name 'crabrouter-live*.efi' | head -n 1 || true)"
   if [[ -n "$LIVE_EFI" ]]; then
     ISO_STAGE="$(mktemp -d)"
-    trap 'rm -rf "$ISO_STAGE"' EXIT
     mkdir -p "$ISO_STAGE/iso/crabrouter"
     ESP_IMG="$ISO_STAGE/efiboot.img"
     ESP_SIZE_MB=$(( ($(stat -c%s "$LIVE_EFI") / 1048576) + 32 ))

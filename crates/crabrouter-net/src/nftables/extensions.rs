@@ -213,3 +213,98 @@ fn resolve_iptv_downstream_ifaces(cfg: &RouterConfig) -> Vec<String> {
     }
     cfg.lans.iter().map(|l| l.bridge.clone()).collect()
 }
+
+pub(super) fn collect_lan_interfaces(cfg: &RouterConfig) -> Vec<String> {
+    let mut ifaces = Vec::new();
+    for lan in &cfg.lans {
+        if !ifaces.contains(&lan.bridge) {
+            ifaces.push(lan.bridge.clone());
+        }
+    }
+    for vlan in &cfg.vlans {
+        if vlan.role == crabrouter_model::InterfaceRole::Lan {
+            let name = format!("{}.{}", vlan.parent, vlan.id);
+            if !ifaces.contains(&name) {
+                ifaces.push(name);
+            }
+        }
+    }
+    ifaces
+}
+
+pub(super) fn write_wireguard_input_rules(out: &mut String, cfg: &RouterConfig) {
+    if !cfg.wireguard.enabled {
+        return;
+    }
+    let iface = cfg.wireguard.interface.trim();
+    if iface.is_empty() {
+        return;
+    }
+    let _ = writeln!(
+        out,
+        "        udp dport {} accept comment \"wireguard-in\"",
+        cfg.wireguard.listen_port
+    );
+    let _ = writeln!(
+        out,
+        "        iifname \"{iface}\" accept comment \"wireguard-iface-in\""
+    );
+}
+
+pub(super) fn write_wireguard_forward_rules(out: &mut String, cfg: &RouterConfig) {
+    if !cfg.wireguard.enabled {
+        return;
+    }
+    let iface = cfg.wireguard.interface.trim();
+    if iface.is_empty() {
+        return;
+    }
+    let _ = writeln!(
+        out,
+        "        iifname \"{iface}\" accept comment \"wireguard-fwd-in\""
+    );
+    let _ = writeln!(
+        out,
+        "        oifname \"{iface}\" accept comment \"wireguard-fwd-out\""
+    );
+}
+
+pub(super) fn write_wireguard_postrouting_rules(
+    out: &mut String,
+    cfg: &RouterConfig,
+    wan_ifaces: &[String],
+) {
+    if !cfg.wireguard.enabled || wan_ifaces.is_empty() {
+        return;
+    }
+    let iface = cfg.wireguard.interface.trim();
+    if iface.is_empty() {
+        return;
+    }
+    let wan_set = format_iface_set(wan_ifaces);
+    let _ = writeln!(
+        out,
+        "        meta nfproto ipv4 iifname \"{iface}\" oifname {wan_set} masquerade comment \"wireguard-nat\""
+    );
+}
+
+pub(super) fn write_mangle_bypass_nets(out: &mut String, cfg: &RouterConfig) {
+    for lan in &cfg.lans {
+        if let Ok(net @ IpNet::V4(_)) = lan.cidr.parse::<IpNet>() {
+            let _ = writeln!(out, "        ip daddr {net} return");
+        }
+    }
+    for vlan in &cfg.vlans {
+        if vlan.role == crabrouter_model::InterfaceRole::Lan
+            && let Some(cidr) = vlan.cidr.as_deref()
+            && let Ok(net @ IpNet::V4(_)) = cidr.parse::<IpNet>()
+        {
+            let _ = writeln!(out, "        ip daddr {net} return");
+        }
+    }
+    if cfg.containers.enabled
+        && let Ok(net @ IpNet::V4(_)) = cfg.containers.default_subnet.parse::<IpNet>()
+    {
+        let _ = writeln!(out, "        ip daddr {net} return");
+    }
+}

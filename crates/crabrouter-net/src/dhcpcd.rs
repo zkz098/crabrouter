@@ -116,8 +116,18 @@ pub fn render_dhcpcd_hook_script(endpoint_url: &str) -> String {
                  *) PD_PREFIX=\"$PD_PREFIX/$PD_LEN\" ;;\n\
                esac\n\
              fi\n\
-             PAYLOAD=$(printf '{{\"source\":\"dhcpcd\",\"wan_name\":\"%s\",\"device\":\"%s\",\"event\":\"%s\",\"ip\":\"%s\",\"gateway\":\"%s\",\"ipv6_addr\":\"%s\",\"ipv6_pd_prefix\":\"%s\",\"dns_servers\":[]}}' \\\n\
-               \"$interface\" \"$interface\" \"$reason\" \"${{new_ip_address:-}}\" \"${{new_routers%% *}}\" \"${{new_dhcp6_ia_na1_ia_addr1:-}}\" \"$PD_PREFIX\")\n\
+             DNS_JSON=\"[\"
+             FIRST=1
+             for d in ${{new_domain_name_servers:-}} ${{new_dhcp6_name_servers:-}}; do
+               if [ -n \"$d\" ]; then
+                 if [ \"$FIRST\" -eq 0 ]; then DNS_JSON=\"$DNS_JSON,\"; fi
+                 DNS_JSON=\"$DNS_JSON\\\"$d\\\"\"
+                 FIRST=0
+               fi
+             done
+             DNS_JSON=\"$DNS_JSON]\"
+             PAYLOAD=$(printf '{{\"source\":\"dhcpcd\",\"wan_name\":\"%s\",\"device\":\"%s\",\"event\":\"%s\",\"ip\":\"%s\",\"gateway\":\"%s\",\"ipv6_addr\":\"%s\",\"ipv6_pd_prefix\":\"%s\",\"dns_servers\":%s}}' \\\n\
+               \"$interface\" \"$interface\" \"$reason\" \"${{new_ip_address:-}}\" \"${{new_routers%% *}}\" \"${{new_dhcp6_ia_na1_ia_addr1:-}}\" \"$PD_PREFIX\" \"$DNS_JSON\")\n\
              if command -v curl >/dev/null 2>&1; then\n\
                curl -fsS -X POST -H 'Content-Type: application/json' -d \"$PAYLOAD\" '{endpoint_url}' >/dev/null 2>&1 || true\n\
              fi\n\

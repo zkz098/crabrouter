@@ -146,6 +146,16 @@ impl RouterEngine {
         self.begin_commit(cfg).await
     }
 
+    pub fn export_config_toml(&self) -> Result<String> {
+        let cfg = self.active.load_full();
+        toml::to_string_pretty(&*cfg).map_err(|e| CoreError::Toml(e.to_string()))
+    }
+
+    pub async fn import_config_toml(self: &Arc<Self>, raw: &str) -> Result<CommitStatus> {
+        let cfg: RouterConfig = toml::from_str(raw).map_err(|e| CoreError::Toml(e.to_string()))?;
+        self.begin_commit(cfg).await
+    }
+
     /// Applies `next` immediately and arms an automatic rollback timer unless `confirm_commit`
     /// is called before `commit_confirm_timeout_secs` elapses.
     pub async fn begin_commit(self: &Arc<Self>, next: RouterConfig) -> Result<CommitStatus> {
@@ -305,7 +315,16 @@ impl RouterEngine {
 
     async fn apply_runtime(&self, cfg: &RouterConfig) -> Result<()> {
         self.net.apply_network_and_firewall(cfg).await?;
-        self.services.sync_services(cfg).await?;
+        let isp_dns: Vec<String> = self
+            .db
+            .list_wan_states()
+            .unwrap_or_default()
+            .into_iter()
+            .flat_map(|w| w.dns_servers)
+            .collect();
+        self.services
+            .sync_services_with_isp_dns(cfg, &isp_dns)
+            .await?;
         if let Some(ebpf) = self.ebpf.get()
             && let Err(err) = ebpf.sync_config(cfg).await
         {
@@ -323,6 +342,25 @@ impl WanStateObserver for RouterEngine {
     fn on_wan_state_updated(&self, state: WanRuntimeState) {
         if let Err(err) = self.db.upsert_wan_state(&state) {
             tracing::warn!(wan = %state.wan_name, error = %err, "failed to persist WAN state in redb");
+        }
+        let cfg = self.active.load_full();
+        if cfg.dns.use_isp_dns
+            && !state.dns_servers.is_empty()
+            && let Ok(handle) = tokio::runtime::Handle::try_current()
+        {
+            let services = Arc::clone(&self.services);
+            let isp_dns: Vec<String> = self
+                .db
+                .list_wan_states()
+                .unwrap_or_default()
+                .into_iter()
+                .flat_map(|w| w.dns_servers)
+                .collect();
+            handle.spawn(async move {
+                if let Err(err) = services.sync_crabdns_with_isp_dns(&cfg, &isp_dns).await {
+                    tracing::warn!(error = %err, "failed to sync crabdns with ISP DNS");
+                }
+            });
         }
     }
 }

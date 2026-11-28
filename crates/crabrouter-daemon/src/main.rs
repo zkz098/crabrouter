@@ -186,6 +186,7 @@ async fn main() -> anyhow::Result<()> {
     let shutdown_handle = Handle::new();
     let server_tasks = spawn_web_listeners(&cfg, &cli, &app, &shutdown_handle).await?;
     sd_notify("READY=1");
+    spawn_traffic_recorder(Arc::clone(&engine), shutdown_rx.clone());
     spawn_watchdog_and_autobless(cli.dry_run, shutdown_rx);
 
     tracing::info!(
@@ -269,6 +270,47 @@ fn spawn_crowdsec_sync_loop(
         }
     });
     crowdsec
+}
+
+fn spawn_traffic_recorder(
+    engine: Arc<RouterEngine>,
+    mut shutdown: tokio::sync::watch::Receiver<bool>,
+) {
+    tokio::spawn(async move {
+        let mut prev: std::collections::HashMap<String, (u64, u64)> =
+            std::collections::HashMap::new();
+        loop {
+            if let Ok(ifaces) = crabrouter_net::read_host_interfaces() {
+                let mut deltas = Vec::new();
+                for iface in ifaces {
+                    if iface.name == "lo" || iface.name.starts_with("ifb-") {
+                        continue;
+                    }
+                    if let Some(&(last_rx, last_tx)) = prev.get(&iface.name) {
+                        let rx_d = iface.rx_bytes.saturating_sub(last_rx);
+                        let tx_d = iface.tx_bytes.saturating_sub(last_tx);
+                        if rx_d > 0 || tx_d > 0 {
+                            deltas.push((iface.name.clone(), rx_d, tx_d));
+                        }
+                    }
+                    prev.insert(iface.name, (iface.rx_bytes, iface.tx_bytes));
+                }
+                if !deltas.is_empty()
+                    && let Err(err) = engine.db().record_today_traffic_deltas(&deltas)
+                {
+                    tracing::debug!(error = %err, "failed to record daily traffic deltas");
+                }
+            }
+            tokio::select! {
+                () = tokio::time::sleep(std::time::Duration::from_secs(30)) => {}
+                _ = shutdown.changed() => {
+                    if *shutdown.borrow() {
+                        break;
+                    }
+                }
+            }
+        }
+    });
 }
 
 fn spawn_watchdog_and_autobless(dry_run: bool, mut shutdown: tokio::sync::watch::Receiver<bool>) {

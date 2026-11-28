@@ -17,6 +17,7 @@ const PENDING_TABLE: TableDefinition<&str, &str> = TableDefinition::new("pending
 const HISTORY_TABLE: TableDefinition<u64, &str> = TableDefinition::new("config_history");
 const WAN_STATE_TABLE: TableDefinition<&str, &str> = TableDefinition::new("wan_states");
 const SESSIONS_TABLE: TableDefinition<&str, &str> = TableDefinition::new("sessions");
+const TRAFFIC_DAILY_TABLE: TableDefinition<&str, &str> = TableDefinition::new("traffic_daily");
 
 const ADMIN_KEY: &str = "primary";
 const PENDING_KEY: &str = "active";
@@ -49,6 +50,17 @@ pub struct ConfigSnapshot {
     pub created_at: DateTime<Utc>,
     pub summary: String,
     pub config_toml: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct DailyTrafficRecord {
+    pub date: String,
+    pub interface: String,
+    #[ts(type = "number")]
+    pub rx_bytes: u64,
+    #[ts(type = "number")]
+    pub tx_bytes: u64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
@@ -98,6 +110,9 @@ impl StateDb {
                 .map_err(|e| CoreError::Db(e.to_string()))?;
             let _ = txn
                 .open_table(SESSIONS_TABLE)
+                .map_err(|e| CoreError::Db(e.to_string()))?;
+            let _ = txn
+                .open_table(TRAFFIC_DAILY_TABLE)
                 .map_err(|e| CoreError::Db(e.to_string()))?;
         }
         txn.commit().map_err(|e| CoreError::Db(e.to_string()))?;
@@ -414,6 +429,84 @@ impl StateDb {
             out.push(state);
         }
         out.sort_by(|a, b| a.wan_name.cmp(&b.wan_name));
+        Ok(out)
+    }
+
+    pub fn record_today_traffic_deltas(&self, deltas: &[(String, u64, u64)]) -> Result<()> {
+        let date = Utc::now().format("%Y-%m-%d").to_string();
+        self.record_traffic_deltas(&date, deltas)
+    }
+
+    pub fn record_traffic_deltas(&self, date: &str, deltas: &[(String, u64, u64)]) -> Result<()> {
+        if deltas.is_empty() {
+            return Ok(());
+        }
+        let txn = self
+            .db
+            .begin_write()
+            .map_err(|e| CoreError::Db(e.to_string()))?;
+        {
+            let mut table = txn
+                .open_table(TRAFFIC_DAILY_TABLE)
+                .map_err(|e| CoreError::Db(e.to_string()))?;
+            for (iface, rx_delta, tx_delta) in deltas {
+                if *rx_delta == 0 && *tx_delta == 0 {
+                    continue;
+                }
+                let key = format!("{date}:{iface}");
+                let mut rec = match table
+                    .get(key.as_str())
+                    .map_err(|e| CoreError::Db(e.to_string()))?
+                {
+                    Some(raw) => serde_json::from_str::<DailyTrafficRecord>(raw.value()).unwrap_or(
+                        DailyTrafficRecord {
+                            date: date.to_string(),
+                            interface: iface.clone(),
+                            rx_bytes: 0,
+                            tx_bytes: 0,
+                        },
+                    ),
+                    None => DailyTrafficRecord {
+                        date: date.to_string(),
+                        interface: iface.clone(),
+                        rx_bytes: 0,
+                        tx_bytes: 0,
+                    },
+                };
+                rec.rx_bytes = rec.rx_bytes.saturating_add(*rx_delta);
+                rec.tx_bytes = rec.tx_bytes.saturating_add(*tx_delta);
+                let encoded =
+                    serde_json::to_string(&rec).map_err(|e| CoreError::Db(e.to_string()))?;
+                table
+                    .insert(key.as_str(), encoded.as_str())
+                    .map_err(|e| CoreError::Db(e.to_string()))?;
+            }
+        }
+        txn.commit().map_err(|e| CoreError::Db(e.to_string()))?;
+        Ok(())
+    }
+
+    pub fn list_daily_traffic(&self, max_records: usize) -> Result<Vec<DailyTrafficRecord>> {
+        let txn = self
+            .db
+            .begin_read()
+            .map_err(|e| CoreError::Db(e.to_string()))?;
+        let table = txn
+            .open_table(TRAFFIC_DAILY_TABLE)
+            .map_err(|e| CoreError::Db(e.to_string()))?;
+        let mut out = Vec::new();
+        for item in table.iter().map_err(|e| CoreError::Db(e.to_string()))? {
+            let (_, val) = item.map_err(|e| CoreError::Db(e.to_string()))?;
+            let rec: DailyTrafficRecord =
+                serde_json::from_str(val.value()).map_err(|e| CoreError::Db(e.to_string()))?;
+            out.push(rec);
+        }
+        out.sort_by(|a, b| {
+            b.date
+                .cmp(&a.date)
+                .then_with(|| a.interface.cmp(&b.interface))
+        });
+        out.truncate(max_records);
         Ok(out)
     }
 }

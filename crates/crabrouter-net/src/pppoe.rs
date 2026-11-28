@@ -73,8 +73,18 @@ pub fn render_pppd_hook_script(endpoint_url: &str, is_up: bool) -> String {
          IPLOCAL=\"$4\"\n\
          IPREMOTE=\"$5\"\n\
          WAN_NAME=\"${{6:-$IFACE}}\"\n\
-         PAYLOAD=$(printf '{{\"source\":\"pppd\",\"wan_name\":\"%s\",\"device\":\"%s\",\"event\":\"{state}\",\"ip\":\"%s\",\"gateway\":\"%s\",\"dns_servers\":[]}}' \\\n\
-           \"$WAN_NAME\" \"$IFACE\" \"$IPLOCAL\" \"$IPREMOTE\")\n\
+         DNS_JSON=\"[\"\n\
+         FIRST=1\n\
+         for d in \"${{DNS1:-}}\" \"${{DNS2:-}}\"; do\n\
+           if [ -n \"$d\" ]; then\n\
+             if [ \"$FIRST\" -eq 0 ]; then DNS_JSON=\"$DNS_JSON,\"; fi\n\
+             DNS_JSON=\"$DNS_JSON\\\"$d\\\"\"\n\
+             FIRST=0\n\
+           fi\n\
+         done\n\
+         DNS_JSON=\"$DNS_JSON]\"\n\
+         PAYLOAD=$(printf '{{\"source\":\"pppd\",\"wan_name\":\"%s\",\"device\":\"%s\",\"event\":\"{state}\",\"ip\":\"%s\",\"gateway\":\"%s\",\"dns_servers\":%s}}' \\\n\
+           \"$WAN_NAME\" \"$IFACE\" \"$IPLOCAL\" \"$IPREMOTE\" \"$DNS_JSON\")\n\
          if command -v curl >/dev/null 2>&1; then\n\
            curl -fsS -X POST -H 'Content-Type: application/json' -d \"$PAYLOAD\" '{endpoint_url}' >/dev/null 2>&1 || true\n\
          fi\n"

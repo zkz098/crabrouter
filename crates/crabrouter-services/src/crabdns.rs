@@ -14,7 +14,7 @@ struct SplitDnsEntry<'a> {
 struct CrabDnsToml<'a> {
     listen_dns: String,
     listen_web: String,
-    upstreams: &'a [String],
+    upstreams: Vec<String>,
     doh_enabled: bool,
     private_ptr_enabled: bool,
     private_ptr_upstreams: Vec<String>,
@@ -23,10 +23,16 @@ struct CrabDnsToml<'a> {
     split_dns: Vec<SplitDnsEntry<'a>>,
 }
 
+/// Renders `crabdns.toml` without dynamic ISP DNS servers.
+pub fn render_crabdns_toml(cfg: &RouterConfig) -> Result<String> {
+    render_crabdns_toml_with_isp_dns(cfg, &[])
+}
+
 /// Renders a `crabdns.toml` matching `crabdns-core::Config` for the frontline `:53` role:
 /// - Handles LAN client queries directly (preserving real client IP for ACL/groups/logs)
 /// - Routes local LAN domains (`*.lan`, etc.) and private PTR lookups to `dnsmasq` at `127.0.0.1:<dnsmasq_dns_port>`
-pub fn render_crabdns_toml(cfg: &RouterConfig) -> Result<String> {
+/// - Optionally merges ISP-assigned DNS servers when `cfg.dns.use_isp_dns` is enabled
+pub fn render_crabdns_toml_with_isp_dns(cfg: &RouterConfig, isp_dns: &[String]) -> Result<String> {
     let dnsmasq_upstream = format!("udp://127.0.0.1:{}", cfg.dns.dnsmasq_dns_port);
     let mut split_dns = Vec::new();
     let mut seen_domains = std::collections::HashSet::new();
@@ -52,10 +58,12 @@ pub fn render_crabdns_toml(cfg: &RouterConfig) -> Result<String> {
         }
     }
 
+    let upstreams = build_upstreams(cfg, isp_dns);
+
     let doc = CrabDnsToml {
         listen_dns: format!("0.0.0.0:{}", cfg.dns.crabdns_port),
         listen_web: format!("127.0.0.1:{}", cfg.dns.crabdns_web_port),
-        upstreams: &cfg.dns.public_upstreams,
+        upstreams,
         doh_enabled: cfg.dns.encrypted_dns_enabled,
         private_ptr_enabled: true,
         private_ptr_upstreams: vec![dnsmasq_upstream],
@@ -65,6 +73,34 @@ pub fn render_crabdns_toml(cfg: &RouterConfig) -> Result<String> {
     };
 
     toml::to_string_pretty(&doc).map_err(|e| ServiceError::Render(e.to_string()))
+}
+
+fn build_upstreams(cfg: &RouterConfig, isp_dns: &[String]) -> Vec<String> {
+    let mut out = Vec::new();
+    if cfg.dns.use_isp_dns {
+        for raw in isp_dns {
+            let trimmed = raw.trim();
+            if trimmed.is_empty() {
+                continue;
+            }
+            let formatted = if trimmed.contains("://") {
+                trimmed.to_string()
+            } else if trimmed.contains(':') {
+                format!("udp://[{trimmed}]:53")
+            } else {
+                format!("udp://{trimmed}:53")
+            };
+            if !out.contains(&formatted) {
+                out.push(formatted);
+            }
+        }
+    }
+    for u in &cfg.dns.public_upstreams {
+        if !out.contains(u) {
+            out.push(u.clone());
+        }
+    }
+    out
 }
 
 #[cfg(test)]

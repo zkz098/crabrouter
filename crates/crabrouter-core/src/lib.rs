@@ -26,6 +26,6 @@ pub enum CoreError {
     Auth(String),
 }
 
-pub use db::{ConfigSnapshot, ConfigSnapshotSummary, StateDb};
+pub use db::{ConfigSnapshot, ConfigSnapshotSummary, DailyTrafficRecord, StateDb};
 pub use store::ConfigStore;
 pub use transaction::{CommitStatus, PendingCommit, RouterEngine};

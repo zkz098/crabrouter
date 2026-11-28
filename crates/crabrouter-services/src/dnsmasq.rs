@@ -67,7 +67,7 @@ pub fn render_dnsmasq_conf(cfg: &RouterConfig) -> Result<String> {
         out.push('\n');
     }
 
-    write_vlan_ipv6_ra(&mut out, cfg);
+    write_vlan_dhcpv4_and_ra(&mut out, cfg);
 
     Ok(out)
 }
@@ -179,21 +179,71 @@ fn write_lan_ipv6_ra(
     );
 }
 
-fn write_vlan_ipv6_ra(out: &mut String, cfg: &RouterConfig) {
+fn write_vlan_dhcpv4_and_ra(out: &mut String, cfg: &RouterConfig) {
     for vlan in &cfg.vlans {
-        if vlan.role != InterfaceRole::Lan || !vlan.ipv6_ra_enabled {
+        if vlan.role != InterfaceRole::Lan {
             continue;
         }
         let ifname = format!("{}.{}", vlan.parent, vlan.id);
-        let v6_tag = format!("vlan{}-v6", vlan.id);
-        let _ = writeln!(
-            out,
-            "# VLAN '{ifname}' IPv6-PD /64 RA\n\
-             interface={ifname}\n\
-             dhcp-range=set:{v6_tag},::1,::ffff:ffff:ffff:ffff,constructor:{ifname},ra-names,slaac,64,43200s\n\
-             dhcp-option=tag:{v6_tag},option6:dns-server,[fe80::]\n"
-        );
+        let iface_emitted = write_single_vlan_dhcpv4(out, vlan, &ifname);
+
+        if vlan.ipv6_ra_enabled {
+            if !iface_emitted {
+                let _ = writeln!(out, "# VLAN '{ifname}' IPv6-PD /64 RA\ninterface={ifname}");
+            }
+            let v6_tag = format!("vlan{}-v6", vlan.id);
+            let _ = writeln!(
+                out,
+                "dhcp-range=set:{v6_tag},::1,::ffff:ffff:ffff:ffff,constructor:{ifname},ra-names,slaac,64,43200s\n\
+                 dhcp-option=tag:{v6_tag},option6:dns-server,[fe80::]"
+            );
+        }
+
+        if iface_emitted || vlan.ipv6_ra_enabled {
+            out.push('\n');
+        }
     }
+}
+
+fn write_single_vlan_dhcpv4(
+    out: &mut String,
+    vlan: &crabrouter_model::VlanConfig,
+    ifname: &str,
+) -> bool {
+    let Some(cidr_str) = vlan.cidr.as_deref() else {
+        return false;
+    };
+    let Ok(IpNet::V4(v4_net)) = cidr_str.parse::<IpNet>() else {
+        return false;
+    };
+    let base = u32::from(v4_net.network());
+    let broadcast = u32::from(v4_net.broadcast());
+    let usable = broadcast.saturating_sub(base);
+    if usable < 4 {
+        return false;
+    }
+    let offset = if usable > 120 { 100 } else { 2 };
+    let start_u32 = base.saturating_add(offset);
+    let end_u32 = start_u32
+        .saturating_add(149)
+        .min(broadcast.saturating_sub(1));
+    if start_u32 > end_u32 {
+        return false;
+    }
+    let start_ip = Ipv4Addr::from(start_u32);
+    let end_ip = Ipv4Addr::from(end_u32);
+    let router_ip = v4_net.addr();
+    let tag = format!("vlan{}", vlan.id);
+    let _ = writeln!(
+        out,
+        "# VLAN '{ifname}' DHCPv4\n\
+         interface={ifname}\n\
+         dhcp-range=set:{tag},{start_ip},{end_ip},{},43200s\n\
+         dhcp-option=tag:{tag},option:router,{router_ip}\n\
+         dhcp-option=tag:{tag},option:dns-server,{router_ip}",
+        v4_net.netmask()
+    );
+    true
 }
 
 /// Reads active DHCP leases from `dnsmasq.leases` merged with `/proc/net/arp` neighbours
@@ -260,7 +310,12 @@ pub fn read_online_clients(
         }
     }
 
-    let lan_bridges: HashSet<&str> = cfg.lans.iter().map(|l| l.bridge.as_str()).collect();
+    let mut lan_ifaces: HashSet<String> = cfg.lans.iter().map(|l| l.bridge.clone()).collect();
+    for vlan in &cfg.vlans {
+        if vlan.role == InterfaceRole::Lan {
+            lan_ifaces.insert(format!("{}.{}", vlan.parent, vlan.id));
+        }
+    }
     if let Ok(raw_arp) = fs::read_to_string(arp_path) {
         for line in raw_arp.lines().skip(1) {
             let cols: Vec<&str> = line.split_whitespace().collect();
@@ -271,7 +326,7 @@ pub fn read_online_clients(
             let flags = cols[2];
             let mac = cols[3].to_ascii_lowercase();
             let dev = cols[5];
-            if flags == "0x0" || mac == "00:00:00:00:00:00" || !lan_bridges.contains(dev) {
+            if flags == "0x0" || mac == "00:00:00:00:00:00" || !lan_ifaces.contains(dev) {
                 continue;
             }
             by_mac.entry(mac.clone()).or_insert_with(|| DhcpLeaseEntry {
@@ -326,6 +381,12 @@ mod tests {
         assert!(conf.contains(
             "dhcp-range=set:lan-v6,::1,::ffff:ffff:ffff:ffff,constructor:br-lan,ra-names,slaac,64,43200s"
         ));
+        assert!(
+            conf.contains(
+                "dhcp-range=set:vlan20,192.168.20.100,192.168.20.249,255.255.255.0,43200s"
+            )
+        );
+        assert!(conf.contains("dhcp-option=tag:vlan20,option:router,192.168.20.1"));
         assert!(conf.contains(
             "dhcp-range=set:vlan20-v6,::1,::ffff:ffff:ffff:ffff,constructor:eth1.20,ra-names,slaac,64,43200s"
         ));

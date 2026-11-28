@@ -36,13 +36,19 @@ dev-daemon:
 dev-ui:
     cd webui && pnpm dev
 
-# Build Debian 13 (Trixie) immutable appliance image via mkosi
+# Build Debian 13 (Trixie) immutable appliance image via mkosi (kernel: lts | hwe)
 bundle-crabdns:
     bash image/scripts/bundle-crabdns.sh
 
-build-image: build bundle-crabdns
-    cd image && mkosi --force
+build-image kernel="lts": build bundle-crabdns
+    #!/usr/bin/env bash
+    set -euo pipefail
+    case "{{kernel}}" in
+        lts) (cd image && mkosi --force) ;;
+        hwe) (cd image && mkosi --profile=hwe --force) ;;
+        *) echo "error: unsupported kernel '{{kernel}}' (expected 'lts' or 'hwe')" >&2; exit 1 ;;
+    esac
 
-# Build full appliance artifacts (raw + Hyper-V vhdx + UEFI live iso)
-build-hyperv:
-    bash image/scripts/build-image.sh
+# Build full appliance artifacts (raw + Hyper-V vhdx + UEFI live iso; kernel: lts | hwe)
+build-hyperv kernel="lts":
+    CRABROUTER_KERNEL="{{kernel}}" bash image/scripts/build-image.sh

@@ -1,0 +1,9 @@
+# Keep all general userspace packages on stable Debian 13 (Trixie)
+Package: *
+Pin: release a=trixie-backports
+Pin-Priority: 100
+
+# Upgrade only kernel, kernel base, and hardware firmware/microcode from trixie-backports
+Package: linux-image-amd64 linux-image-*-amd64 linux-base linux-sysctl-defaults firmware-* intel-microcode amd64-microcode
+Pin: release a=trixie-backports
+Pin-Priority: 990

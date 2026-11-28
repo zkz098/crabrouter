@@ -26,8 +26,8 @@ use crabrouter_net::{
 };
 use crabrouter_services::{
     SystemdUnitStatus, generate_wireguard_keypair as svc_gen_wg_keypair, read_online_clients,
-    read_upnp_leases, render_avahi_daemon_conf, render_containers_conf, render_crabdns_toml,
-    render_crowdsec_bouncer_conf, render_dnsmasq_conf, render_igmpproxy_conf,
+    read_upnp_leases, render_avahi_daemon_conf, render_chrony_conf, render_containers_conf,
+    render_crabdns_toml, render_crowdsec_bouncer_conf, render_dnsmasq_conf, render_igmpproxy_conf,
     render_miniupnpd_conf, render_ndppd_conf, render_registries_conf, render_udpxy_env,
     render_wg_quick_conf,
 };
@@ -59,6 +59,7 @@ pub struct RenderedConfigsPreview {
     pub tc_qos: String,
     pub dnsmasq: String,
     pub crabdns: String,
+    pub chrony: String,
     pub dhcpcd: String,
     pub udev_rules: String,
     pub wg_quick: String,
@@ -415,6 +416,7 @@ pub async fn preview_rendered(
         tc_qos: render_tc_qos_script(&cfg),
         dnsmasq: render_dnsmasq_conf(&cfg)?,
         crabdns: render_crabdns_toml(&cfg)?,
+        chrony: render_chrony_conf(&cfg),
         dhcpcd: render_dhcpcd_conf(&cfg),
         udev_rules: render_udev_net_rules(&cfg.interface_pins),
         wg_quick,

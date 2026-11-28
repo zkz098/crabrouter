@@ -41,6 +41,10 @@ jobs:
   build-image:
     needs: check
     runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        kernel: [lts, hwe]
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -69,7 +73,9 @@ jobs:
           sudo pip3 install --break-system-packages --upgrade "git+https://github.com/systemd/mkosi.git@v27.1"
           sudo ln -sf /usr/local/bin/mkosi /usr/bin/mkosi
           mkosi --version
-      - name: Build release appliance & mkosi UEFI image
+      - name: Build release appliance & mkosi UEFI image (${{ matrix.kernel }})
+        env:
+          CRABROUTER_KERNEL: ${{ matrix.kernel }}
         run: |
           sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 || true
           chmod +x image/mkosi.postinst image/scripts/*.sh
@@ -92,7 +98,7 @@ jobs:
       - name: Upload mkosi output artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: crabrouter-debian13-image
+          name: crabrouter-debian13-image-${{ matrix.kernel }}
           compression-level: 0
           path: |
             image/mkosi.output/*.zst
