@@ -2,6 +2,7 @@
 Description=CrabRouter udpxy IPTV multicast-to-HTTP relay
 After=network-online.target crabrouterd.service
 Wants=network-online.target
+ConditionFileIsExecutable=/usr/bin/udpxy
 
 [Service]
 Type=simple
