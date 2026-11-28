@@ -14,6 +14,8 @@ import {
 } from "../api";
 import type { AppCatalogEntry } from "../types/AppCatalogEntry";
 import type { RouterConfig } from "../types/RouterConfig";
+import { t } from "../i18n";
+import { GuideBanner, PageHeader } from "./ui/ArgonPrimitives";
 
 interface Props {
   draft: RouterConfig;
@@ -132,7 +134,14 @@ export function ExtensionsPage(props: Props) {
   };
 
   return (
-    <div class="space-y-5 sm:space-y-6 animate-view-enter">
+    <div class="space-y-5 animate-view-enter">
+      <PageHeader title={t("navExtensions")} subtitle={t("descExtensions")} />
+      <GuideBanner
+        title={t("extGuideTitle")}
+        description={t("extGuideDesc")}
+        variant="info"
+        dismissible
+      />
       <Show when={errorMsg()}>
         <div class="rounded-xl border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-xs text-rose-600 dark:text-rose-400">
           {errorMsg()}

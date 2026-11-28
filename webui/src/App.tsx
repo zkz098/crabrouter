@@ -34,14 +34,17 @@ import { ConntrackQosPage } from "./components/ConntrackQosPage";
 import { DiagnosticsPage } from "./components/DiagnosticsPage";
 import { ExtensionsPage } from "./components/ExtensionsPage";
 import { FirewallPage } from "./components/FirewallPage";
-import { Header, type PageTab } from "./components/Header";
 import { LoginView } from "./components/LoginView";
-import { MobileNav } from "./components/MobileNav";
 import { NetworkPage } from "./components/NetworkPage";
 import { OtaPage } from "./components/OtaPage";
 import { OverviewPage } from "./components/OverviewPage";
+import { ServicesPreviewPage } from "./components/ServicesPreviewPage";
 import { SetupWizard } from "./components/SetupWizard";
+import { SidebarNav } from "./components/SidebarNav";
+import { SystemSettingsPage } from "./components/SystemSettingsPage";
+import { TopBar } from "./components/TopBar";
 import { t } from "./i18n";
+import type { PageTab } from "./nav";
 import "./theme";
 import type { RouterConfig } from "./types/RouterConfig";
 import type { SystemMetricsSnapshot } from "./types/SystemMetricsSnapshot";
@@ -70,6 +73,7 @@ export default function App() {
   const [metrics, setMetrics] = createSignal<SystemMetricsSnapshot | null>(null);
   const [wsConnected, setWsConnected] = createSignal(false);
   const [tab, setTab] = createSignal<PageTab>("overview");
+  const [mobileMenuOpen, setMobileMenuOpen] = createSignal(false);
   const [draft, setDraft] = createSignal<RouterConfig | null>(null);
   const [busy, setBusy] = createSignal(false);
   const [errorMsg, setErrorMsg] = createSignal<string | null>(null);
@@ -228,130 +232,189 @@ export default function App() {
 
       <Match when={isReady() && draft()}>
         {(activeDraft) => (
-          <div class="min-h-screen vercel-grid-bg bg-[#fafafa] dark:bg-black text-[#171717] dark:text-[#ededed] transition-colors">
-            <Header
+          <div class="min-h-screen argon-bg text-[#172b4d] dark:text-[#eef1f6] flex transition-colors">
+            <SidebarNav
               hostname={config()?.system.hostname ?? "CrabRouter"}
               generation={status()?.active_generation ?? "-"}
               wsConnected={wsConnected()}
               tab={tab()}
+              mobileOpen={mobileMenuOpen()}
+              onCloseMobile={() => setMobileMenuOpen(false)}
               onSelectTab={setTab}
-              onRefresh={() => void refreshAll()}
               onLogout={() => void handleLogout()}
             />
 
-            <main class="max-w-6xl mx-auto px-4 sm:px-6 pt-5 pb-24 md:py-7 space-y-6">
-              <Show when={errorMsg()}>
-                {(msg) => (
-                  <div class="rounded-xl border border-rose-500/25 bg-rose-500/10 px-4 py-3 text-xs text-rose-600 dark:text-rose-400 flex items-center gap-2 animate-toast-in">
-                    <span class="i-ri-error-warning-line text-sm shrink-0" />
-                    <span>{msg()}</span>
-                  </div>
-                )}
-              </Show>
+            <div class="flex-1 min-w-0 flex flex-col">
+              <TopBar
+                tab={tab()}
+                wsConnected={wsConnected()}
+                isDirty={isDirty()}
+                pending={Boolean(status()?.pending)}
+                busy={busy()}
+                onOpenMobileMenu={() => setMobileMenuOpen(true)}
+                onRefresh={() => void refreshAll()}
+                onDiscard={() => {
+                  const base = config();
+                  if (base) {
+                    setDraft(structuredClone(base));
+                  }
+                }}
+                onApply={() => void handleBeginCommit()}
+              />
 
-              <Show when={isDirty() && !status()?.pending}>
-                <div class="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 animate-toast-in">
-                  <div class="flex items-center gap-2 text-xs text-amber-800 dark:text-amber-200">
-                    <span class="i-ri-edit-circle-line text-sm text-amber-600 dark:text-amber-400 shrink-0" />
-                    <span>{t("dirtyDraftBanner")}</span>
+              <main class="flex-1 w-full max-w-6xl mx-auto px-4 sm:px-6 py-5 sm:py-6 space-y-5">
+                <Show when={errorMsg()}>
+                  {(msg) => (
+                    <div class="rounded-xl border border-rose-500/25 bg-rose-500/10 px-4 py-3 text-xs text-rose-600 dark:text-rose-400 flex items-center gap-2 animate-toast-in">
+                      <span class="i-ri-error-warning-line text-sm shrink-0" />
+                      <span>{msg()}</span>
+                    </div>
+                  )}
+                </Show>
+
+                <Show when={isDirty() && !status()?.pending}>
+                  <div class="sm:hidden flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 animate-toast-in">
+                    <div class="flex items-center gap-2 text-xs text-amber-800 dark:text-amber-200">
+                      <span class="i-ri-edit-circle-line text-sm text-amber-600 dark:text-amber-400 shrink-0" />
+                      <span>{t("dirtyDraftBanner")}</span>
+                    </div>
+                    <div class="flex gap-2">
+                      <button
+                        type="button"
+                        disabled={busy()}
+                        onClick={() => {
+                          const base = config();
+                          if (base) {
+                            setDraft(structuredClone(base));
+                          }
+                        }}
+                        class="rounded-lg border border-[#e9ecef] dark:border-[#232a3b] bg-white dark:bg-[#131722] px-3 py-1.5 text-xs font-medium text-[#172b4d] dark:text-[#eef1f6] cursor-pointer"
+                      >
+                        {t("discardDraft")}
+                      </button>
+                      <button
+                        type="button"
+                        disabled={busy()}
+                        onClick={() => void handleBeginCommit()}
+                        class="rounded-lg bg-[#5e72e4] hover:bg-[#4c60d4] px-4 py-1.5 text-xs font-medium text-white border-0 cursor-pointer disabled:opacity-50"
+                      >
+                        {busy() ? t("applyingChanges") : t("applyChanges")}
+                      </button>
+                    </div>
                   </div>
-                  <div class="flex gap-2">
-                    <button
-                      type="button"
-                      disabled={busy()}
-                      onClick={() => {
-                        const base = config();
-                        if (base) {
-                          setDraft(structuredClone(base));
-                        }
+                </Show>
+
+                <Switch>
+                  <Match when={tab() === "overview"}>
+                    <OverviewPage
+                      config={activeDraft()}
+                      interfaces={interfaces() ?? []}
+                      wanStates={wanStates() ?? []}
+                      dnsStatus={dnsStatus()}
+                      hardware={hardwareHealth()}
+                      metrics={metrics()}
+                      onNavigate={setTab}
+                    />
+                  </Match>
+                  <Match when={tab() === "conntrack"}>
+                    <ConntrackQosPage
+                      mode="conntrack"
+                      draft={activeDraft()}
+                      interfaces={interfaces() ?? []}
+                      entries={conntrack() ?? []}
+                      onRefresh={() => void refetchConntrack()}
+                      onChange={(next) => setDraft(next)}
+                    />
+                  </Match>
+                  <Match when={tab() === "services"}>
+                    <ServicesPreviewPage
+                      serviceStatuses={serviceStatuses() ?? []}
+                      preview={preview()}
+                    />
+                  </Match>
+                  <Match when={tab() === "system"}>
+                    <SystemSettingsPage
+                      config={activeDraft()}
+                      history={history() ?? []}
+                      onChangeConfig={(next) => setDraft(next)}
+                      onRestoreHistory={(gen) => void handleRestoreHistory(gen)}
+                    />
+                  </Match>
+                  <Match when={tab() === "interfaces"}>
+                    <NetworkPage
+                      section="interfaces"
+                      draft={activeDraft()}
+                      interfaces={interfaces() ?? []}
+                      wanStates={wanStates() ?? []}
+                      onChange={(next) => setDraft(next)}
+                    />
+                  </Match>
+                  <Match when={tab() === "routing"}>
+                    <NetworkPage
+                      section="routing"
+                      draft={activeDraft()}
+                      interfaces={interfaces() ?? []}
+                      wanStates={wanStates() ?? []}
+                      onChange={(next) => setDraft(next)}
+                    />
+                  </Match>
+                  <Match when={tab() === "dns"}>
+                    <NetworkPage
+                      section="dns"
+                      draft={activeDraft()}
+                      interfaces={interfaces() ?? []}
+                      wanStates={wanStates() ?? []}
+                      onChange={(next) => setDraft(next)}
+                    />
+                  </Match>
+                  <Match when={tab() === "qos"}>
+                    <ConntrackQosPage
+                      mode="qos"
+                      draft={activeDraft()}
+                      interfaces={interfaces() ?? []}
+                      entries={conntrack() ?? []}
+                      onRefresh={() => void refetchConntrack()}
+                      onChange={(next) => setDraft(next)}
+                    />
+                  </Match>
+                  <Match when={tab() === "firewall"}>
+                    <FirewallPage draft={activeDraft()} onChange={(next) => setDraft(next)} />
+                  </Match>
+                  <Match when={tab() === "clients"}>
+                    <ClientsWgPage
+                      draft={activeDraft()}
+                      clients={clients() ?? []}
+                      onRefreshClients={() => void refetchClients()}
+                      onChange={(next) => setDraft(next)}
+                    />
+                  </Match>
+                  <Match when={tab() === "extensions"}>
+                    <ExtensionsPage
+                      draft={activeDraft()}
+                      onEnableContainers={() => {
+                        const next = structuredClone(activeDraft());
+                        next.containers.enabled = true;
+                        setDraft(next);
                       }}
-                      class="rounded-lg border border-[#eaeaea] dark:border-[#262626] bg-white dark:bg-[#111111] hover:bg-[#f4f4f5] dark:hover:bg-[#1a1a1a] px-3 py-1.5 text-xs font-medium text-[#171717] dark:text-[#ededed] cursor-pointer transition-all active:scale-[0.97]"
-                    >
-                      {t("discardDraft")}
-                    </button>
-                    <button
-                      type="button"
-                      disabled={busy()}
-                      onClick={() => void handleBeginCommit()}
-                      class="rounded-lg bg-[#171717] hover:bg-[#383838] dark:bg-[#ededed] dark:hover:bg-[#d4d4d8] px-4 py-1.5 text-xs font-medium text-white dark:text-[#0a0a0a] border-0 cursor-pointer transition-all active:scale-[0.97] disabled:opacity-50"
-                    >
-                      {busy() ? t("applyingChanges") : t("applyChanges")}
-                    </button>
-                  </div>
-                </div>
-              </Show>
-
-              <Switch>
-                <Match when={tab() === "overview"}>
-                  <OverviewPage
-                    config={activeDraft()}
-                    interfaces={interfaces() ?? []}
-                    wanStates={wanStates() ?? []}
-                    serviceStatuses={serviceStatuses() ?? []}
-                    dnsStatus={dnsStatus()}
-                    hardware={hardwareHealth()}
-                    metrics={metrics()}
-                    preview={preview()}
-                    history={history() ?? []}
-                    onChangeConfig={(next) => setDraft(next)}
-                    onRestoreHistory={(gen) => void handleRestoreHistory(gen)}
-                  />
-                </Match>
-                <Match when={tab() === "network"}>
-                  <NetworkPage
-                    draft={activeDraft()}
-                    interfaces={interfaces() ?? []}
-                    wanStates={wanStates() ?? []}
-                    onChange={(next) => setDraft(next)}
-                  />
-                </Match>
-                <Match when={tab() === "firewall"}>
-                  <FirewallPage draft={activeDraft()} onChange={(next) => setDraft(next)} />
-                </Match>
-                <Match when={tab() === "qos_conntrack"}>
-                  <ConntrackQosPage
-                    draft={activeDraft()}
-                    entries={conntrack() ?? []}
-                    onRefresh={() => void refetchConntrack()}
-                    onChange={(next) => setDraft(next)}
-                  />
-                </Match>
-                <Match when={tab() === "clients"}>
-                  <ClientsWgPage
-                    draft={activeDraft()}
-                    clients={clients() ?? []}
-                    onRefreshClients={() => void refetchClients()}
-                    onChange={(next) => setDraft(next)}
-                  />
-                </Match>
-                <Match when={tab() === "extensions"}>
-                  <ExtensionsPage
-                    draft={activeDraft()}
-                    onEnableContainers={() => {
-                      const next = structuredClone(activeDraft());
-                      next.containers.enabled = true;
-                      setDraft(next);
-                    }}
-                  />
-                </Match>
-                <Match when={tab() === "ota"}>
-                  <OtaPage
-                    draft={activeDraft()}
-                    otaStatus={otaStatus()}
-                    onChange={(next) => setDraft(next)}
-                    onRefreshOta={() => void refetchOta()}
-                  />
-                </Match>
-                <Match when={tab() === "diagnostics"}>
-                  <DiagnosticsPage
-                    hardware={hardwareHealth()}
-                    onRefreshHardware={() => void refetchHardware()}
-                  />
-                </Match>
-              </Switch>
-            </main>
-
-            <MobileNav tab={tab()} onSelectTab={setTab} />
+                    />
+                  </Match>
+                  <Match when={tab() === "ota"}>
+                    <OtaPage
+                      draft={activeDraft()}
+                      otaStatus={otaStatus()}
+                      onChange={(next) => setDraft(next)}
+                      onRefreshOta={() => void refetchOta()}
+                    />
+                  </Match>
+                  <Match when={tab() === "diagnostics"}>
+                    <DiagnosticsPage
+                      hardware={hardwareHealth()}
+                      onRefreshHardware={() => void refetchHardware()}
+                    />
+                  </Match>
+                </Switch>
+              </main>
+            </div>
 
             <CommitConfirmModal
               pending={status()?.pending}

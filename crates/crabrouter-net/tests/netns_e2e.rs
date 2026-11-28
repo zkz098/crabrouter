@@ -346,7 +346,16 @@ async fn netns_veth_vlan_ipv6_pd_and_load_balance_e2e() {
         return;
     }
 
-    let (_wan1, _wan2, lan) = setup_veth_topology();
+    let (wan1, wan2, lan) = setup_veth_topology();
+    // Simulate an upstream internet target reachable via both WAN1 and WAN2 in LoadBalance mode
+    ns_exec(
+        wan1.pid,
+        &["ip", "addr", "add", "192.0.2.1/32", "dev", "lo"],
+    );
+    ns_exec(
+        wan2.pid,
+        &["ip", "addr", "add", "192.0.2.1/32", "dev", "lo"],
+    );
     let mut cfg = build_multi_wan_test_config();
     cfg.multi_wan.mode = MultiWanMode::LoadBalance;
     cfg.wans[0].weight = 2;
@@ -381,8 +390,8 @@ async fn netns_veth_vlan_ipv6_pd_and_load_balance_e2e() {
     let addr_str = String::from_utf8_lossy(&addr_out.stdout);
     assert!(addr_str.contains("2001:db8:abcd:1::1/64"));
 
-    // Verify LoadBalance mode forwards LAN traffic cleanly
-    ns_exec(lan.pid, &["ping", "-c", "2", "-W", "2", "198.51.100.1"]);
+    // Verify LoadBalance mode forwards LAN traffic cleanly via either WAN
+    ns_exec(lan.pid, &["ping", "-c", "2", "-W", "2", "192.0.2.1"]);
 }
 
 #[tokio::test]

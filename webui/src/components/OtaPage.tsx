@@ -7,6 +7,7 @@ import {
   uploadOtaImage,
 } from "../api";
 import { t } from "../i18n";
+import { GuideBanner, PageHeader } from "./ui/ArgonPrimitives";
 import type { OtaCommandResult } from "../types/OtaCommandResult";
 import type { OtaStatus } from "../types/OtaStatus";
 import type { RouterConfig } from "../types/RouterConfig";
@@ -95,7 +96,14 @@ export function OtaPage(props: Props) {
   }
 
   return (
-    <div class="space-y-5 sm:space-y-6 animate-view-enter">
+    <div class="space-y-5 animate-view-enter">
+      <PageHeader title={t("navOta")} subtitle={t("descOta")} />
+      <GuideBanner
+        title={t("otaGuideTitle")}
+        description={t("otaGuideDesc")}
+        variant="info"
+        dismissible
+      />
       {/* A/B Slot & Boot Assessment Cards */}
       <section class="grid gap-4 md:grid-cols-3">
         <div class={`${SECTION_CLS} animate-card-enter`}>

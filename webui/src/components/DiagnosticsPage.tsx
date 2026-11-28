@@ -11,6 +11,7 @@ import {
   runTraceroute,
 } from "../api";
 import { t } from "../i18n";
+import { GuideBanner, PageHeader, SubTabs } from "./ui/ArgonPrimitives";
 import type { DiagCommandResult } from "../types/DiagCommandResult";
 import type { HardwareHealthSnapshot } from "../types/HardwareHealthSnapshot";
 import type { HealthSeverity } from "../types/HealthSeverity";
@@ -53,6 +54,7 @@ function severityLabel(s: HealthSeverity): string {
 }
 
 export function DiagnosticsPage(props: Props) {
+  const [diagTab, setDiagTab] = createSignal<"net" | "hw" | "tty">("net");
   const [pingHost, setPingHost] = createSignal("1.1.1.1");
   const [pingCount, setPingCount] = createSignal(4);
   const [traceHost, setTraceHost] = createSignal("1.1.1.1");
@@ -208,412 +210,439 @@ export function DiagnosticsPage(props: Props) {
   };
 
   return (
-    <div class="space-y-5 sm:space-y-6 animate-view-enter">
-      {/* Section 1: Hardware Health Monitor */}
-      <section class={SECTION_CLS}>
-        <div class="mb-3.5 flex flex-wrap items-center justify-between gap-2">
-          <div class="flex items-center gap-2.5">
-            <h2 class="text-sm font-medium text-[#171717] dark:text-[#ededed]">
-              {t("diagHwTitle")}
-            </h2>
-            <Show when={props.hardware}>
-              {(hw) => (
-                <span class={severityBadgeClass(hw().overall_severity)}>
-                  {severityLabel(hw().overall_severity)}
-                </span>
-              )}
-            </Show>
-          </div>
-          <button type="button" onClick={() => props.onRefreshHardware()} class={BTN_OUTLINE}>
-            {t("diagHwRefresh")}
-          </button>
-        </div>
+    <div class="space-y-5 animate-view-enter">
+      <PageHeader title={t("navDiagnostics")} subtitle={t("descDiagnostics")} />
+      <GuideBanner
+        title={t("diagGuideTitle")}
+        description={t("diagGuideDesc")}
+        variant="info"
+        dismissible
+      />
+      <SubTabs
+        active={diagTab()}
+        onChange={setDiagTab}
+        items={[
+          { key: "net", label: t("diagSubTabNet"), icon: "i-ri-pulse-line" },
+          { key: "hw", label: t("diagSubTabHw"), icon: "i-ri-cpu-line" },
+          { key: "tty", label: t("diagSubTabTty"), icon: "i-ri-terminal-box-line" },
+        ]}
+      />
 
-        <Show when={(props.hardware?.alerts.length ?? 0) > 0}>
-          <div class="mb-4 space-y-2">
-            <For each={props.hardware?.alerts}>
-              {(alert) => (
-                <div
-                  class={`flex items-center justify-between rounded-xl border px-3.5 py-2 text-xs ${
-                    alert.severity === "critical"
-                      ? "border-rose-500/25 bg-rose-500/10 text-rose-700 dark:text-rose-300"
-                      : "border-amber-500/25 bg-amber-500/10 text-amber-700 dark:text-amber-300"
+      <Show when={diagTab() === "hw"}>
+        {/* Section 1: Hardware Health Monitor */}
+        <section class={SECTION_CLS}>
+          <div class="mb-3.5 flex flex-wrap items-center justify-between gap-2">
+            <div class="flex items-center gap-2.5">
+              <h2 class="text-sm font-medium text-[#171717] dark:text-[#ededed]">
+                {t("diagHwTitle")}
+              </h2>
+              <Show when={props.hardware}>
+                {(hw) => (
+                  <span class={severityBadgeClass(hw().overall_severity)}>
+                    {severityLabel(hw().overall_severity)}
+                  </span>
+                )}
+              </Show>
+            </div>
+            <button type="button" onClick={() => props.onRefreshHardware()} class={BTN_OUTLINE}>
+              {t("diagHwRefresh")}
+            </button>
+          </div>
+
+          <Show when={(props.hardware?.alerts.length ?? 0) > 0}>
+            <div class="mb-4 space-y-2">
+              <For each={props.hardware?.alerts}>
+                {(alert) => (
+                  <div
+                    class={`flex items-center justify-between rounded-xl border px-3.5 py-2 text-xs ${
+                      alert.severity === "critical"
+                        ? "border-rose-500/25 bg-rose-500/10 text-rose-700 dark:text-rose-300"
+                        : "border-amber-500/25 bg-amber-500/10 text-amber-700 dark:text-amber-300"
+                    }`}
+                  >
+                    <div>
+                      <span class="font-mono font-semibold">[{alert.source}]</span>{" "}
+                      <span>{alert.message}</span>
+                    </div>
+                    <span class={severityBadgeClass(alert.severity)}>
+                      {alert.severity.toUpperCase()}
+                    </span>
+                  </div>
+                )}
+              </For>
+            </div>
+          </Show>
+
+          <div class="grid gap-4 md:grid-cols-2">
+            {/* Thermal Sensors */}
+            <div class="rounded-xl border border-[#eaeaea] dark:border-[#262626] bg-[#fafafa] dark:bg-[#111111] p-3.5">
+              <div class="mb-2.5 text-xs font-medium text-[#666666] dark:text-[#a1a1aa]">
+                {t("diagThermalTitle")}
+              </div>
+              <Show
+                when={(props.hardware?.sensors.length ?? 0) > 0}
+                fallback={
+                  <p class="text-xs text-[#8f8f8f] dark:text-[#71717a]">{t("diagNoThermal")}</p>
+                }
+              >
+                <div class="grid gap-2 sm:grid-cols-2">
+                  <For each={props.hardware?.sensors}>
+                    {(s) => (
+                      <div class="rounded-lg border border-[#eaeaea] dark:border-[#262626] bg-white dark:bg-[#0a0a0a] p-2.5 text-xs">
+                        <div class="flex items-center justify-between">
+                          <span class="font-medium text-[#171717] dark:text-[#ededed]">
+                            {s.label}
+                          </span>
+                          <span class={severityBadgeClass(s.severity)}>
+                            {s.temp_celsius.toFixed(1)}°C
+                          </span>
+                        </div>
+                        <div class="mt-1 flex items-center justify-between font-mono text-[11px] text-[#666666] dark:text-[#a1a1aa]">
+                          <span>{s.chip}</span>
+                          <span>
+                            {s.high_celsius
+                              ? `${t("diagThermalHigh")}:${s.high_celsius.toFixed(0)}°C `
+                              : ""}
+                            {s.crit_celsius
+                              ? `${t("diagThermalCrit")}:${s.crit_celsius.toFixed(0)}°C`
+                              : ""}
+                          </span>
+                        </div>
+                      </div>
+                    )}
+                  </For>
+                </div>
+              </Show>
+            </div>
+
+            {/* NVMe / SMART SSD Health */}
+            <div class="rounded-xl border border-[#eaeaea] dark:border-[#262626] bg-[#fafafa] dark:bg-[#111111] p-3.5">
+              <div class="mb-2.5 text-xs font-medium text-[#666666] dark:text-[#a1a1aa]">
+                {t("diagSmartTitle")}
+              </div>
+              <Show
+                when={(props.hardware?.disks.length ?? 0) > 0}
+                fallback={
+                  <p class="text-xs text-[#8f8f8f] dark:text-[#71717a]">{t("diagNoSmart")}</p>
+                }
+              >
+                <div class="space-y-2.5">
+                  <For each={props.hardware?.disks}>
+                    {(disk) => (
+                      <div class="rounded-lg border border-[#eaeaea] dark:border-[#262626] bg-white dark:bg-[#0a0a0a] p-3 text-xs">
+                        <div class="flex flex-wrap items-center justify-between gap-2">
+                          <div>
+                            <span class="font-mono font-semibold text-[#0070f3] dark:text-sky-400">
+                              {disk.device}
+                            </span>
+                            <span class="ml-2 text-[#171717] dark:text-[#ededed]">
+                              {disk.model}
+                            </span>
+                            <span class="ml-1.5 rounded border border-[#eaeaea] dark:border-[#262626] bg-[#fafafa] dark:bg-[#111111] px-1.5 py-0.5 font-mono text-[10px] text-[#666666] dark:text-[#a1a1aa]">
+                              {disk.protocol}
+                            </span>
+                          </div>
+                          <span class={severityBadgeClass(disk.severity)}>
+                            {disk.passed ? "SMART PASSED" : "SMART FAILED"}
+                          </span>
+                        </div>
+
+                        <div class="mt-2 grid grid-cols-2 gap-1.5 font-mono text-[11px] text-[#666666] dark:text-[#a1a1aa] sm:grid-cols-3">
+                          <div>
+                            {t("diagSmartTemp")}:{" "}
+                            <span class="text-[#171717] dark:text-[#ededed]">
+                              {disk.temperature_celsius !== null
+                                ? `${disk.temperature_celsius.toFixed(1)}°C`
+                                : "-"}
+                            </span>
+                          </div>
+                          <div>
+                            {t("diagSmartWear")}:{" "}
+                            <span class="text-sky-600 dark:text-sky-400">
+                              {disk.percentage_used !== null ? `${disk.percentage_used}%` : "-"}
+                            </span>
+                          </div>
+                          <div>
+                            {t("diagSmartSpare")}:{" "}
+                            <span class="text-emerald-600 dark:text-emerald-400">
+                              {disk.available_spare_pct !== null
+                                ? `${disk.available_spare_pct}%`
+                                : "-"}
+                            </span>
+                          </div>
+                          <div>
+                            {t("diagSmartPowerOn")}:{" "}
+                            <span class="text-[#171717] dark:text-[#ededed]">
+                              {disk.power_on_hours !== null ? `${disk.power_on_hours}h` : "-"}
+                            </span>
+                          </div>
+                          <div>
+                            {t("diagSmartUnsafe")}:{" "}
+                            <span class="text-[#171717] dark:text-[#ededed]">
+                              {disk.unsafe_shutdowns ?? "-"}
+                            </span>
+                          </div>
+                          <div>
+                            {t("diagSmartErrors")}:{" "}
+                            <span
+                              class={
+                                (disk.media_errors ?? 0) > 0
+                                  ? "text-rose-600 dark:text-rose-400"
+                                  : "text-[#171717] dark:text-[#ededed]"
+                              }
+                            >
+                              {disk.media_errors ?? 0}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </For>
+                </div>
+              </Show>
+            </div>
+          </div>
+        </section>
+      </Show>
+
+      <Show when={diagTab() === "tty"}>
+        {/* Section 2: Interactive Web Terminal */}
+        <section class={SECTION_CLS}>
+          <div class="mb-3.5 flex flex-wrap items-center justify-between gap-2">
+            <div class="flex items-center gap-2">
+              <h2 class="text-sm font-medium text-[#171717] dark:text-[#ededed]">
+                {t("diagPtyTitle")}
+              </h2>
+              <span
+                class={`rounded-full border px-2 py-0.5 text-[11px] font-medium ${
+                  ptyConnected()
+                    ? "border-emerald-500/20 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400"
+                    : "border-zinc-500/20 bg-zinc-500/10 text-zinc-600 dark:text-zinc-400"
+                }`}
+              >
+                {ptyConnected() ? t("diagPtyConnected") : t("diagPtyDisconnected")}
+              </span>
+            </div>
+            <button type="button" onClick={reconnectTerminal} class={BTN_OUTLINE}>
+              {t("diagPtyReconnect")}
+            </button>
+          </div>
+          <div
+            ref={(el) => {
+              termContainerRef = el;
+            }}
+            class="overflow-hidden rounded-xl border border-[#eaeaea] dark:border-[#262626] bg-[#0a0a0a] p-2.5"
+          />
+        </section>
+      </Show>
+
+      <Show when={diagTab() === "net"}>
+        {/* Section 3: Network Diagnostic Tools */}
+        <section class="grid gap-4 md:grid-cols-3">
+          <div class={SECTION_CLS}>
+            <h3 class="text-sm font-medium text-[#171717] dark:text-[#ededed]">
+              {t("diagPingTitle")}
+            </h3>
+            <div class="mt-3 space-y-2.5 text-xs">
+              <input
+                type="text"
+                value={pingHost()}
+                onInput={(e) => setPingHost(e.currentTarget.value)}
+                placeholder={t("diagHostPlaceholder")}
+                class={INPUT_CLS}
+              />
+              <div class="flex items-center gap-2">
+                <input
+                  type="number"
+                  min={1}
+                  max={10}
+                  value={pingCount()}
+                  onInput={(e) => setPingCount(Number(e.currentTarget.value) || 4)}
+                  class="w-20 rounded-lg border border-[#eaeaea] dark:border-[#262626] bg-[#fafafa] dark:bg-[#000000] px-2.5 py-1.5 font-mono text-xs text-[#171717] dark:text-[#ededed] outline-none focus:border-[#171717] dark:focus:border-[#ededed]"
+                />
+                <button
+                  type="button"
+                  disabled={running()}
+                  onClick={() =>
+                    void execDiag(() => runPing({ host: pingHost(), count: pingCount() }))
+                  }
+                  class={`flex-1 ${BTN_PRIMARY}`}
+                >
+                  {t("diagRunPing")}
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div class={SECTION_CLS}>
+            <h3 class="text-sm font-medium text-[#171717] dark:text-[#ededed]">
+              {t("diagTraceTitle")}
+            </h3>
+            <div class="mt-3 space-y-2.5 text-xs">
+              <input
+                type="text"
+                value={traceHost()}
+                onInput={(e) => setTraceHost(e.currentTarget.value)}
+                placeholder={t("diagHostPlaceholder")}
+                class={INPUT_CLS}
+              />
+              <button
+                type="button"
+                disabled={running()}
+                onClick={() => void execDiag(() => runTraceroute({ host: traceHost() }))}
+                class={`w-full ${BTN_PRIMARY}`}
+              >
+                {t("diagRunTrace")}
+              </button>
+            </div>
+          </div>
+
+          <div class={SECTION_CLS}>
+            <h3 class="text-sm font-medium text-[#171717] dark:text-[#ededed]">
+              {t("diagIperfTitle")}
+            </h3>
+            <div class="mt-3 space-y-2.5 text-xs">
+              <div class="flex gap-2">
+                <input
+                  type="text"
+                  value={iperfServer()}
+                  onInput={(e) => setIperfServer(e.currentTarget.value)}
+                  placeholder={t("diagIperfServerPlaceholder")}
+                  class={`flex-1 ${INPUT_CLS}`}
+                />
+                <input
+                  type="number"
+                  value={iperfPort()}
+                  onInput={(e) => setIperfPort(Number(e.currentTarget.value) || 5201)}
+                  class="w-20 rounded-lg border border-[#eaeaea] dark:border-[#262626] bg-[#fafafa] dark:bg-[#000000] px-2.5 py-1.5 font-mono text-xs text-[#171717] dark:text-[#ededed] outline-none focus:border-[#171717] dark:focus:border-[#ededed]"
+                />
+              </div>
+              <div class="flex items-center justify-between gap-2">
+                <label class="flex items-center gap-1.5 text-[#171717] dark:text-[#ededed]">
+                  <input
+                    type="checkbox"
+                    checked={iperfRev()}
+                    onChange={(e) => setIperfRev(e.currentTarget.checked)}
+                  />
+                  {t("diagIperfReverse")}
+                </label>
+                <input
+                  type="number"
+                  min={1}
+                  max={30}
+                  value={iperfDur()}
+                  onInput={(e) => setIperfDur(Number(e.currentTarget.value) || 5)}
+                  class="w-16 rounded-lg border border-[#eaeaea] dark:border-[#262626] bg-[#fafafa] dark:bg-[#000000] px-2 py-1 font-mono text-xs text-[#171717] dark:text-[#ededed] outline-none focus:border-[#171717] dark:focus:border-[#ededed]"
+                />
+                <button
+                  type="button"
+                  disabled={running()}
+                  onClick={() =>
+                    void execDiag(() =>
+                      runIperf3({
+                        server: iperfServer(),
+                        port: iperfPort(),
+                        duration_secs: iperfDur(),
+                        reverse: iperfRev(),
+                      }),
+                    )
+                  }
+                  class={BTN_PRIMARY}
+                >
+                  {t("diagRunIperf")}
+                </button>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <Show when={diagResult()}>
+          {(res) => (
+            <section class={SECTION_CLS}>
+              <div class="mb-2.5 flex items-center justify-between text-xs">
+                <span class="font-mono text-[#171717] dark:text-[#ededed]">$ {res().command}</span>
+                <span
+                  class={`rounded-full border px-2 py-0.5 font-mono text-[11px] font-medium ${
+                    res().ok
+                      ? "border-emerald-500/20 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400"
+                      : "border-rose-500/20 bg-rose-500/10 text-rose-700 dark:text-rose-400"
                   }`}
                 >
-                  <div>
-                    <span class="font-mono font-semibold">[{alert.source}]</span>{" "}
-                    <span>{alert.message}</span>
-                  </div>
-                  <span class={severityBadgeClass(alert.severity)}>
-                    {alert.severity.toUpperCase()}
+                  exit {res().exit_code ?? "err"}
+                </span>
+              </div>
+              <pre class="max-h-72 overflow-auto rounded-xl border border-[#eaeaea] dark:border-[#262626] bg-[#fafafa] dark:bg-[#000000] p-3.5 font-mono text-xs text-[#171717] dark:text-[#ededed]">
+                {res().output}
+              </pre>
+            </section>
+          )}
+        </Show>
+      </Show>
+
+      <Show when={diagTab() === "tty"}>
+        {/* Live WebSocket Log Stream */}
+        <section class={SECTION_CLS}>
+          <div class="mb-3.5 flex flex-wrap items-center justify-between gap-2">
+            <div class="flex items-center gap-2">
+              <h2 class="text-sm font-medium text-[#171717] dark:text-[#ededed]">
+                {t("diagLogsTitle")}
+              </h2>
+              <span
+                class={`rounded-full border px-2 py-0.5 text-[11px] font-medium ${
+                  wsConnected()
+                    ? "border-emerald-500/20 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400"
+                    : "border-zinc-500/20 bg-zinc-500/10 text-zinc-600 dark:text-zinc-400"
+                }`}
+              >
+                {wsConnected() ? t("diagWsConnected") : t("diagWsDisconnected")}
+              </span>
+            </div>
+            <div class="flex items-center gap-2 text-xs">
+              <select
+                value={levelFilter()}
+                onChange={(e) => setLevelFilter(e.currentTarget.value)}
+                class="rounded-lg border border-[#eaeaea] dark:border-[#262626] bg-[#fafafa] dark:bg-[#000000] px-2.5 py-1.5 text-xs text-[#171717] dark:text-[#ededed] outline-none"
+              >
+                <option value="ALL">{t("diagAllLevels")}</option>
+                <option value="INFO">INFO</option>
+                <option value="WARN">WARN</option>
+                <option value="ERROR">ERROR</option>
+              </select>
+              <button type="button" onClick={() => setPaused((p) => !p)} class={BTN_OUTLINE}>
+                {paused() ? t("diagResume") : t("diagPause")}
+              </button>
+              <button type="button" onClick={() => setLogs([])} class={BTN_OUTLINE}>
+                {t("diagClear")}
+              </button>
+            </div>
+          </div>
+
+          <div class="max-h-96 space-y-1 overflow-auto rounded-xl border border-[#eaeaea] dark:border-[#262626] bg-[#fafafa] dark:bg-[#000000] p-3.5 font-mono text-xs">
+            <For each={filteredLogs()}>
+              {(log) => (
+                <div class="flex gap-2 leading-relaxed">
+                  <span class="shrink-0 text-[#8f8f8f] dark:text-[#71717a]">
+                    {log.timestamp.slice(11, 19)}
                   </span>
+                  <span
+                    class={`shrink-0 ${
+                      log.level === "ERROR"
+                        ? "text-rose-600 dark:text-rose-400"
+                        : log.level === "WARN"
+                          ? "text-amber-600 dark:text-amber-400"
+                          : "text-sky-600 dark:text-sky-400"
+                    }`}
+                  >
+                    [{log.level}]
+                  </span>
+                  <span class="shrink-0 text-[#666666] dark:text-[#a1a1aa]">{log.target}:</span>
+                  <span class="break-all text-[#171717] dark:text-[#ededed]">{log.message}</span>
                 </div>
               )}
             </For>
           </div>
-        </Show>
-
-        <div class="grid gap-4 md:grid-cols-2">
-          {/* Thermal Sensors */}
-          <div class="rounded-xl border border-[#eaeaea] dark:border-[#262626] bg-[#fafafa] dark:bg-[#111111] p-3.5">
-            <div class="mb-2.5 text-xs font-medium text-[#666666] dark:text-[#a1a1aa]">
-              {t("diagThermalTitle")}
-            </div>
-            <Show
-              when={(props.hardware?.sensors.length ?? 0) > 0}
-              fallback={
-                <p class="text-xs text-[#8f8f8f] dark:text-[#71717a]">{t("diagNoThermal")}</p>
-              }
-            >
-              <div class="grid gap-2 sm:grid-cols-2">
-                <For each={props.hardware?.sensors}>
-                  {(s) => (
-                    <div class="rounded-lg border border-[#eaeaea] dark:border-[#262626] bg-white dark:bg-[#0a0a0a] p-2.5 text-xs">
-                      <div class="flex items-center justify-between">
-                        <span class="font-medium text-[#171717] dark:text-[#ededed]">
-                          {s.label}
-                        </span>
-                        <span class={severityBadgeClass(s.severity)}>
-                          {s.temp_celsius.toFixed(1)}°C
-                        </span>
-                      </div>
-                      <div class="mt-1 flex items-center justify-between font-mono text-[11px] text-[#666666] dark:text-[#a1a1aa]">
-                        <span>{s.chip}</span>
-                        <span>
-                          {s.high_celsius
-                            ? `${t("diagThermalHigh")}:${s.high_celsius.toFixed(0)}°C `
-                            : ""}
-                          {s.crit_celsius
-                            ? `${t("diagThermalCrit")}:${s.crit_celsius.toFixed(0)}°C`
-                            : ""}
-                        </span>
-                      </div>
-                    </div>
-                  )}
-                </For>
-              </div>
-            </Show>
-          </div>
-
-          {/* NVMe / SMART SSD Health */}
-          <div class="rounded-xl border border-[#eaeaea] dark:border-[#262626] bg-[#fafafa] dark:bg-[#111111] p-3.5">
-            <div class="mb-2.5 text-xs font-medium text-[#666666] dark:text-[#a1a1aa]">
-              {t("diagSmartTitle")}
-            </div>
-            <Show
-              when={(props.hardware?.disks.length ?? 0) > 0}
-              fallback={
-                <p class="text-xs text-[#8f8f8f] dark:text-[#71717a]">{t("diagNoSmart")}</p>
-              }
-            >
-              <div class="space-y-2.5">
-                <For each={props.hardware?.disks}>
-                  {(disk) => (
-                    <div class="rounded-lg border border-[#eaeaea] dark:border-[#262626] bg-white dark:bg-[#0a0a0a] p-3 text-xs">
-                      <div class="flex flex-wrap items-center justify-between gap-2">
-                        <div>
-                          <span class="font-mono font-semibold text-[#0070f3] dark:text-sky-400">
-                            {disk.device}
-                          </span>
-                          <span class="ml-2 text-[#171717] dark:text-[#ededed]">{disk.model}</span>
-                          <span class="ml-1.5 rounded border border-[#eaeaea] dark:border-[#262626] bg-[#fafafa] dark:bg-[#111111] px-1.5 py-0.5 font-mono text-[10px] text-[#666666] dark:text-[#a1a1aa]">
-                            {disk.protocol}
-                          </span>
-                        </div>
-                        <span class={severityBadgeClass(disk.severity)}>
-                          {disk.passed ? "SMART PASSED" : "SMART FAILED"}
-                        </span>
-                      </div>
-
-                      <div class="mt-2 grid grid-cols-2 gap-1.5 font-mono text-[11px] text-[#666666] dark:text-[#a1a1aa] sm:grid-cols-3">
-                        <div>
-                          {t("diagSmartTemp")}:{" "}
-                          <span class="text-[#171717] dark:text-[#ededed]">
-                            {disk.temperature_celsius !== null
-                              ? `${disk.temperature_celsius.toFixed(1)}°C`
-                              : "-"}
-                          </span>
-                        </div>
-                        <div>
-                          {t("diagSmartWear")}:{" "}
-                          <span class="text-sky-600 dark:text-sky-400">
-                            {disk.percentage_used !== null ? `${disk.percentage_used}%` : "-"}
-                          </span>
-                        </div>
-                        <div>
-                          {t("diagSmartSpare")}:{" "}
-                          <span class="text-emerald-600 dark:text-emerald-400">
-                            {disk.available_spare_pct !== null
-                              ? `${disk.available_spare_pct}%`
-                              : "-"}
-                          </span>
-                        </div>
-                        <div>
-                          {t("diagSmartPowerOn")}:{" "}
-                          <span class="text-[#171717] dark:text-[#ededed]">
-                            {disk.power_on_hours !== null ? `${disk.power_on_hours}h` : "-"}
-                          </span>
-                        </div>
-                        <div>
-                          {t("diagSmartUnsafe")}:{" "}
-                          <span class="text-[#171717] dark:text-[#ededed]">
-                            {disk.unsafe_shutdowns ?? "-"}
-                          </span>
-                        </div>
-                        <div>
-                          {t("diagSmartErrors")}:{" "}
-                          <span
-                            class={
-                              (disk.media_errors ?? 0) > 0
-                                ? "text-rose-600 dark:text-rose-400"
-                                : "text-[#171717] dark:text-[#ededed]"
-                            }
-                          >
-                            {disk.media_errors ?? 0}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                </For>
-              </div>
-            </Show>
-          </div>
-        </div>
-      </section>
-
-      {/* Section 2: Interactive Web Terminal */}
-      <section class={SECTION_CLS}>
-        <div class="mb-3.5 flex flex-wrap items-center justify-between gap-2">
-          <div class="flex items-center gap-2">
-            <h2 class="text-sm font-medium text-[#171717] dark:text-[#ededed]">
-              {t("diagPtyTitle")}
-            </h2>
-            <span
-              class={`rounded-full border px-2 py-0.5 text-[11px] font-medium ${
-                ptyConnected()
-                  ? "border-emerald-500/20 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400"
-                  : "border-zinc-500/20 bg-zinc-500/10 text-zinc-600 dark:text-zinc-400"
-              }`}
-            >
-              {ptyConnected() ? t("diagPtyConnected") : t("diagPtyDisconnected")}
-            </span>
-          </div>
-          <button type="button" onClick={reconnectTerminal} class={BTN_OUTLINE}>
-            {t("diagPtyReconnect")}
-          </button>
-        </div>
-        <div
-          ref={(el) => {
-            termContainerRef = el;
-          }}
-          class="overflow-hidden rounded-xl border border-[#eaeaea] dark:border-[#262626] bg-[#0a0a0a] p-2.5"
-        />
-      </section>
-
-      {/* Section 3: Network Diagnostic Tools */}
-      <section class="grid gap-4 md:grid-cols-3">
-        <div class={SECTION_CLS}>
-          <h3 class="text-sm font-medium text-[#171717] dark:text-[#ededed]">
-            {t("diagPingTitle")}
-          </h3>
-          <div class="mt-3 space-y-2.5 text-xs">
-            <input
-              type="text"
-              value={pingHost()}
-              onInput={(e) => setPingHost(e.currentTarget.value)}
-              placeholder={t("diagHostPlaceholder")}
-              class={INPUT_CLS}
-            />
-            <div class="flex items-center gap-2">
-              <input
-                type="number"
-                min={1}
-                max={10}
-                value={pingCount()}
-                onInput={(e) => setPingCount(Number(e.currentTarget.value) || 4)}
-                class="w-20 rounded-lg border border-[#eaeaea] dark:border-[#262626] bg-[#fafafa] dark:bg-[#000000] px-2.5 py-1.5 font-mono text-xs text-[#171717] dark:text-[#ededed] outline-none focus:border-[#171717] dark:focus:border-[#ededed]"
-              />
-              <button
-                type="button"
-                disabled={running()}
-                onClick={() =>
-                  void execDiag(() => runPing({ host: pingHost(), count: pingCount() }))
-                }
-                class={`flex-1 ${BTN_PRIMARY}`}
-              >
-                {t("diagRunPing")}
-              </button>
-            </div>
-          </div>
-        </div>
-
-        <div class={SECTION_CLS}>
-          <h3 class="text-sm font-medium text-[#171717] dark:text-[#ededed]">
-            {t("diagTraceTitle")}
-          </h3>
-          <div class="mt-3 space-y-2.5 text-xs">
-            <input
-              type="text"
-              value={traceHost()}
-              onInput={(e) => setTraceHost(e.currentTarget.value)}
-              placeholder={t("diagHostPlaceholder")}
-              class={INPUT_CLS}
-            />
-            <button
-              type="button"
-              disabled={running()}
-              onClick={() => void execDiag(() => runTraceroute({ host: traceHost() }))}
-              class={`w-full ${BTN_PRIMARY}`}
-            >
-              {t("diagRunTrace")}
-            </button>
-          </div>
-        </div>
-
-        <div class={SECTION_CLS}>
-          <h3 class="text-sm font-medium text-[#171717] dark:text-[#ededed]">
-            {t("diagIperfTitle")}
-          </h3>
-          <div class="mt-3 space-y-2.5 text-xs">
-            <div class="flex gap-2">
-              <input
-                type="text"
-                value={iperfServer()}
-                onInput={(e) => setIperfServer(e.currentTarget.value)}
-                placeholder={t("diagIperfServerPlaceholder")}
-                class={`flex-1 ${INPUT_CLS}`}
-              />
-              <input
-                type="number"
-                value={iperfPort()}
-                onInput={(e) => setIperfPort(Number(e.currentTarget.value) || 5201)}
-                class="w-20 rounded-lg border border-[#eaeaea] dark:border-[#262626] bg-[#fafafa] dark:bg-[#000000] px-2.5 py-1.5 font-mono text-xs text-[#171717] dark:text-[#ededed] outline-none focus:border-[#171717] dark:focus:border-[#ededed]"
-              />
-            </div>
-            <div class="flex items-center justify-between gap-2">
-              <label class="flex items-center gap-1.5 text-[#171717] dark:text-[#ededed]">
-                <input
-                  type="checkbox"
-                  checked={iperfRev()}
-                  onChange={(e) => setIperfRev(e.currentTarget.checked)}
-                />
-                {t("diagIperfReverse")}
-              </label>
-              <input
-                type="number"
-                min={1}
-                max={30}
-                value={iperfDur()}
-                onInput={(e) => setIperfDur(Number(e.currentTarget.value) || 5)}
-                class="w-16 rounded-lg border border-[#eaeaea] dark:border-[#262626] bg-[#fafafa] dark:bg-[#000000] px-2 py-1 font-mono text-xs text-[#171717] dark:text-[#ededed] outline-none focus:border-[#171717] dark:focus:border-[#ededed]"
-              />
-              <button
-                type="button"
-                disabled={running()}
-                onClick={() =>
-                  void execDiag(() =>
-                    runIperf3({
-                      server: iperfServer(),
-                      port: iperfPort(),
-                      duration_secs: iperfDur(),
-                      reverse: iperfRev(),
-                    }),
-                  )
-                }
-                class={BTN_PRIMARY}
-              >
-                {t("diagRunIperf")}
-              </button>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <Show when={diagResult()}>
-        {(res) => (
-          <section class={SECTION_CLS}>
-            <div class="mb-2.5 flex items-center justify-between text-xs">
-              <span class="font-mono text-[#171717] dark:text-[#ededed]">$ {res().command}</span>
-              <span
-                class={`rounded-full border px-2 py-0.5 font-mono text-[11px] font-medium ${
-                  res().ok
-                    ? "border-emerald-500/20 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400"
-                    : "border-rose-500/20 bg-rose-500/10 text-rose-700 dark:text-rose-400"
-                }`}
-              >
-                exit {res().exit_code ?? "err"}
-              </span>
-            </div>
-            <pre class="max-h-72 overflow-auto rounded-xl border border-[#eaeaea] dark:border-[#262626] bg-[#fafafa] dark:bg-[#000000] p-3.5 font-mono text-xs text-[#171717] dark:text-[#ededed]">
-              {res().output}
-            </pre>
-          </section>
-        )}
+        </section>
       </Show>
-
-      {/* Live WebSocket Log Stream */}
-      <section class={SECTION_CLS}>
-        <div class="mb-3.5 flex flex-wrap items-center justify-between gap-2">
-          <div class="flex items-center gap-2">
-            <h2 class="text-sm font-medium text-[#171717] dark:text-[#ededed]">
-              {t("diagLogsTitle")}
-            </h2>
-            <span
-              class={`rounded-full border px-2 py-0.5 text-[11px] font-medium ${
-                wsConnected()
-                  ? "border-emerald-500/20 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400"
-                  : "border-zinc-500/20 bg-zinc-500/10 text-zinc-600 dark:text-zinc-400"
-              }`}
-            >
-              {wsConnected() ? t("diagWsConnected") : t("diagWsDisconnected")}
-            </span>
-          </div>
-          <div class="flex items-center gap-2 text-xs">
-            <select
-              value={levelFilter()}
-              onChange={(e) => setLevelFilter(e.currentTarget.value)}
-              class="rounded-lg border border-[#eaeaea] dark:border-[#262626] bg-[#fafafa] dark:bg-[#000000] px-2.5 py-1.5 text-xs text-[#171717] dark:text-[#ededed] outline-none"
-            >
-              <option value="ALL">{t("diagAllLevels")}</option>
-              <option value="INFO">INFO</option>
-              <option value="WARN">WARN</option>
-              <option value="ERROR">ERROR</option>
-            </select>
-            <button type="button" onClick={() => setPaused((p) => !p)} class={BTN_OUTLINE}>
-              {paused() ? t("diagResume") : t("diagPause")}
-            </button>
-            <button type="button" onClick={() => setLogs([])} class={BTN_OUTLINE}>
-              {t("diagClear")}
-            </button>
-          </div>
-        </div>
-
-        <div class="max-h-96 space-y-1 overflow-auto rounded-xl border border-[#eaeaea] dark:border-[#262626] bg-[#fafafa] dark:bg-[#000000] p-3.5 font-mono text-xs">
-          <For each={filteredLogs()}>
-            {(log) => (
-              <div class="flex gap-2 leading-relaxed">
-                <span class="shrink-0 text-[#8f8f8f] dark:text-[#71717a]">
-                  {log.timestamp.slice(11, 19)}
-                </span>
-                <span
-                  class={`shrink-0 ${
-                    log.level === "ERROR"
-                      ? "text-rose-600 dark:text-rose-400"
-                      : log.level === "WARN"
-                        ? "text-amber-600 dark:text-amber-400"
-                        : "text-sky-600 dark:text-sky-400"
-                  }`}
-                >
-                  [{log.level}]
-                </span>
-                <span class="shrink-0 text-[#666666] dark:text-[#a1a1aa]">{log.target}:</span>
-                <span class="break-all text-[#171717] dark:text-[#ededed]">{log.message}</span>
-              </div>
-            )}
-          </For>
-        </div>
-      </section>
     </div>
   );
 }
