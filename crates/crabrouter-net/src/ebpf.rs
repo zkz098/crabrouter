@@ -739,4 +739,17 @@ mod tests {
         let xdp_snap = engine.snapshot(&cfg).await;
         assert_eq!(xdp_snap.xdp_attached_interfaces, vec!["eth0"]);
     }
+
+    #[test]
+    fn embedded_ebpf_bytecode_parses_when_present() {
+        if EBPF_BYTECODE.is_empty() {
+            return;
+        }
+        if let Err(err) = Ebpf::load(EBPF_BYTECODE) {
+            assert!(
+                !matches!(err, aya::EbpfError::ParseError(_)),
+                "Ebpf::load ELF parse failed: {err}"
+            );
+        }
+    }
 }

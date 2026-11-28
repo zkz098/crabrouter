@@ -305,7 +305,7 @@ static __always_inline int try_fast_fwd_v6(struct __sk_buff *skb)
     return bpf_redirect(fib.ifindex, 0);
 }
 
-SEC("tc")
+SEC("classifier")
 int crabrouter_tcx_ingress(struct __sk_buff *skb)
 {
     void *data = (void *)(long)skb->data;
@@ -358,7 +358,7 @@ int crabrouter_tcx_ingress(struct __sk_buff *skb)
     return TC_ACT_OK;
 }
 
-SEC("tc")
+SEC("classifier")
 int crabrouter_tcx_egress(struct __sk_buff *skb)
 {
     void *data = (void *)(long)skb->data;
