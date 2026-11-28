@@ -92,10 +92,16 @@ install -m 0755 "$REPO_ROOT/target/release/crabrouter-cli" "$EXTRA_BIN/crabctl"
 cp "$IMAGE_DIR"/mkosi.repart/*.conf "$REPART_DST/"
 sed -i -E '/^(CopyFiles|ExcludeFiles)=|^Format=squashfs$|^Compression(Level)?=/d' "$REPART_DST/"*.conf
 
-if [[ -d "${CRABDNS_DIR:-$HOME/projects/crabdns}" ]]; then
+if [[ "${SKIP_CRABDNS:-0}" != "1" ]]; then
   bash "$IMAGE_DIR/scripts/bundle-crabdns.sh"
 else
-  echo "warn: crabdns repo not found; skipping crabdns binary staging"
+  echo "info: SKIP_CRABDNS=1; skipping crabdns binary staging"
+fi
+
+if [[ "${SKIP_UDPXY:-0}" != "1" ]]; then
+  bash "$IMAGE_DIR/scripts/bundle-udpxy.sh"
+else
+  echo "info: SKIP_UDPXY=1; skipping udpxy binary staging"
 fi
 
 if ! command -v mkosi >/dev/null 2>&1; then

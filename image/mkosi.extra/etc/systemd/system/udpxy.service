@@ -2,12 +2,12 @@
 Description=CrabRouter udpxy IPTV multicast-to-HTTP relay
 After=network-online.target crabrouterd.service
 Wants=network-online.target
-ConditionFileIsExecutable=/usr/bin/udpxy
+ConditionFileIsExecutable=/usr/local/bin/udpxy
 
 [Service]
 Type=simple
 EnvironmentFile=-/run/crabrouter/udpxy.env
-ExecStart=/usr/bin/udpxy -T $UDPXY_OPTS
+ExecStart=/usr/local/bin/udpxy -T $UDPXY_OPTS
 Restart=on-failure
 RestartSec=3
 

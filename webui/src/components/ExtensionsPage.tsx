@@ -20,6 +20,7 @@ import { GuideBanner, PageHeader } from "./ui/ArgonPrimitives";
 interface Props {
   draft: RouterConfig;
   onEnableContainers: () => void;
+  onUpdateRegistryMirrors: (mirrors: string[]) => void;
 }
 
 const CARD_CLS =
@@ -43,8 +44,19 @@ export function ExtensionsPage(props: Props) {
 
   const [activeApp, setActiveApp] = createSignal<AppCatalogEntry | null>(null);
   const [settingsMap, setSettingsMap] = createSignal<Record<string, string>>({});
+  const [mirrorInput, setMirrorInput] = createSignal(
+    props.draft.containers.registry_mirrors.join(", "),
+  );
   const [busyMsg, setBusyMsg] = createSignal<string | null>(null);
   const [errorMsg, setErrorMsg] = createSignal<string | null>(null);
+
+  const CN_MIRROR_PRESETS = ["docker.1ms.run", "docker.xuanyuan.me", "mirror.ccs.tencentyun.com"];
+
+  function applyMirrorList(mirrors: string[]) {
+    const cleaned = mirrors.map((item) => item.trim()).filter((item) => item.length > 0);
+    setMirrorInput(cleaned.join(", "));
+    props.onUpdateRegistryMirrors(cleaned);
+  }
 
   function openInstallForm(entry: AppCatalogEntry) {
     const defaults: Record<string, string> = {};
@@ -176,6 +188,42 @@ export function ExtensionsPage(props: Props) {
               启用容器运行时
             </button>
           </Show>
+        </div>
+
+        <div class="rounded-xl border border-[#eaeaea] dark:border-[#262626] bg-[#fafafa] dark:bg-[#111111] p-3 text-xs space-y-2">
+          <div class="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <span class="font-medium text-[#171717] dark:text-[#ededed]">
+                Docker 镜像加速 (Registry Mirrors)
+              </span>
+              <span class="ml-2 text-[#666666] dark:text-[#a1a1aa]">
+                国内网络拉取 Docker Hub 镜像超时时可配置加速源（修改后请点击顶部“提交更改”生效）
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={() => applyMirrorList(CN_MIRROR_PRESETS)}
+              class={BTN_OUTLINE}
+            >
+              一键填入国内加速预设
+            </button>
+          </div>
+          <div class="flex flex-col sm:flex-row gap-2">
+            <input
+              type="text"
+              value={mirrorInput()}
+              onInput={(e) => setMirrorInput(e.currentTarget.value)}
+              placeholder="多个加速地址以逗号分隔，如 docker.1ms.run, docker.xuanyuan.me"
+              class="flex-1 rounded-lg border border-[#eaeaea] dark:border-[#262626] bg-white dark:bg-[#0a0a0a] px-3 py-1.5 font-mono text-xs text-[#171717] dark:text-[#ededed] outline-none"
+            />
+            <button
+              type="button"
+              onClick={() => applyMirrorList(mirrorInput().split(","))}
+              class={BTN_OUTLINE}
+            >
+              应用到草稿
+            </button>
+          </div>
         </div>
 
         <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">

@@ -99,13 +99,55 @@ pub fn app_container_name(app_id: &str) -> String {
 /// Returns the curated built-in catalog of containerized soft-router applications.
 pub fn builtin_app_catalog() -> Vec<AppCatalogEntry> {
     vec![
-        app_samba(),
+        app_mihomo(),
+        app_adguardhome(),
         app_tailscale(),
         app_zerotier(),
-        app_adguardhome(),
+        app_samba(),
         app_alist(),
         app_homeassistant(),
     ]
+}
+
+fn app_mihomo() -> AppCatalogEntry {
+    AppCatalogEntry {
+        id: "mihomo".to_string(),
+        name: "Mihomo (Clash Meta) 代理网关".to_string(),
+        category: AppCategory::Networking,
+        summary: "高性能多协议代理与分流网关，支持 TUN/TProxy 透明代理、GeoIP/GeoSite 规则与 Web 面板管理".to_string(),
+        image: "docker.io/metacubex/mihomo:latest".to_string(),
+        network_mode: "host".to_string(),
+        ports: Vec::new(),
+        volumes: vec![mount_spec(
+            "/var/lib/crabrouter/volumes/apps/mihomo/config",
+            "/root/.config/mihomo",
+            false,
+        )],
+        env_template: vec!["TZ=Asia/Shanghai".to_string()],
+        cmd: Vec::new(),
+        privileged: true,
+        fields: vec![
+            field(
+                "web_port",
+                "外部控制面板端口",
+                AppFieldType::Port,
+                "9090",
+                "9090",
+                true,
+                "Mihomo RESTful API 与 Web 控制面板监听端口",
+            ),
+            field(
+                "secret",
+                "API 访问密钥",
+                AppFieldType::Password,
+                "",
+                "留空或输入访问密钥",
+                false,
+                "用于保护外部控制接口的 Bearer Secret（建议设置）",
+            ),
+        ],
+        web_port: Some(9090),
+    }
 }
 
 fn app_samba() -> AppCatalogEntry {

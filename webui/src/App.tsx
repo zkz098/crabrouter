@@ -396,6 +396,11 @@ export default function App() {
                         next.containers.enabled = true;
                         setDraft(next);
                       }}
+                      onUpdateRegistryMirrors={(mirrors) => {
+                        const next = structuredClone(activeDraft());
+                        next.containers.registry_mirrors = mirrors;
+                        setDraft(next);
+                      }}
                     />
                   </Match>
                   <Match when={tab() === "ota"}>

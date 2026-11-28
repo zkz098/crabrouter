@@ -44,14 +44,23 @@ pub fn render_registries_conf(cfg: &RouterConfig) -> String {
     if !cfg.containers.registry_mirrors.is_empty() {
         out.push_str("\n[[registry]]\nprefix = \"docker.io\"\nlocation = \"docker.io\"\n");
         for mirror in &cfg.containers.registry_mirrors {
-            let trimmed = mirror.trim();
-            if trimmed.is_empty() {
+            let normalized = normalize_mirror_location(mirror);
+            if normalized.is_empty() {
                 continue;
             }
-            let _ = writeln!(out, "\n[[registry.mirror]]\nlocation = \"{trimmed}\"");
+            let _ = writeln!(out, "\n[[registry.mirror]]\nlocation = \"{normalized}\"");
         }
     }
     out
+}
+
+fn normalize_mirror_location(raw: &str) -> &str {
+    let trimmed = raw.trim();
+    let without_scheme = trimmed
+        .strip_prefix("https://")
+        .or_else(|| trimmed.strip_prefix("http://"))
+        .unwrap_or(trimmed);
+    without_scheme.trim_end_matches('/')
 }
 
 pub fn render_containers_slice(cfg: &RouterConfig) -> String {
@@ -142,6 +151,11 @@ mod tests {
 
         let registries_conf = render_registries_conf(&cfg);
         assert!(registries_conf.contains("mirror.ccs.tencentyun.com"));
+
+        cfg.containers.registry_mirrors = vec!["https://docker.1ms.run/".to_string()];
+        let normalized_conf = render_registries_conf(&cfg);
+        assert!(normalized_conf.contains("location = \"docker.1ms.run\""));
+        assert!(!normalized_conf.contains("https://"));
 
         let slice = render_containers_slice(&cfg);
         assert!(slice.contains("MemoryMax=2048M"));
