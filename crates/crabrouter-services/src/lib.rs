@@ -5,6 +5,7 @@ pub mod containers;
 pub mod crabdns;
 pub mod crowdsec;
 pub mod ddns;
+pub mod ddns_domestic;
 pub mod dnsmasq;
 pub mod iptv;
 pub mod ipv6_relay;

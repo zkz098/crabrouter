@@ -67,6 +67,10 @@ pub struct WanConfig {
     /// Optional `PPPoE` LCP echo failure threshold before redialing (default 3).
     #[serde(default)]
     pub pppoe_lcp_failure: Option<u8>,
+    /// Optional parent physical/VLAN interface for single-line multi-dial (`macvlan` bridge mode).
+    /// When set, `device` is created as a `macvlan` virtual interface on top of `macvlan_parent`.
+    #[serde(default)]
+    pub macvlan_parent: Option<String>,
 }
 
 /// IPv6 provisioning mode for a LAN interface.
@@ -506,6 +510,18 @@ pub enum DdnsProvider {
     Cloudflare,
     DynDns2,
     Webhook,
+    Aliyun,
+    Dnspod,
+    HuaweiCloud,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default, TS)]
+#[serde(rename_all = "snake_case")]
+#[ts(export)]
+pub enum DdnsIpVersion {
+    #[default]
+    Ipv4,
+    Ipv6,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
@@ -515,6 +531,8 @@ pub struct DdnsConfig {
     pub enabled: bool,
     #[serde(default)]
     pub provider: DdnsProvider,
+    #[serde(default)]
+    pub ip_version: DdnsIpVersion,
     #[serde(default)]
     pub domain: String,
     #[serde(default)]
@@ -538,6 +556,7 @@ impl Default for DdnsConfig {
         Self {
             enabled: false,
             provider: DdnsProvider::default(),
+            ip_version: DdnsIpVersion::default(),
             domain: String::new(),
             wan_name: None,
             username: None,
@@ -563,6 +582,17 @@ impl DdnsConfig {
         if self.interval_secs < 30 {
             return Err(ModelError::Validation(
                 "ddns.interval_secs must be >= 30".to_string(),
+            ));
+        }
+        if matches!(
+            self.provider,
+            DdnsProvider::Aliyun | DdnsProvider::Dnspod | DdnsProvider::HuaweiCloud
+        ) && (self.username.as_deref().is_none_or(|s| s.trim().is_empty())
+            || self.token.as_deref().is_none_or(|s| s.trim().is_empty()))
+        {
+            return Err(ModelError::Validation(
+                "domestic DDNS providers require both AccessKey/SecretId (username) and Secret (token)"
+                    .to_string(),
             ));
         }
         Ok(())
@@ -591,6 +621,9 @@ pub enum AcmeChallengeType {
     #[default]
     Http01,
     DnsCloudflare,
+    DnsAliyun,
+    DnsDnspod,
+    DnsHuaweiCloud,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]

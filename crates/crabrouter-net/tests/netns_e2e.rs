@@ -125,6 +125,7 @@ fn build_multi_wan_test_config() -> RouterConfig {
             modem_cidr: None,
             pppoe_lcp_interval: None,
             pppoe_lcp_failure: None,
+            macvlan_parent: None,
         },
         WanConfig {
             name: "wan2".to_string(),
@@ -146,6 +147,7 @@ fn build_multi_wan_test_config() -> RouterConfig {
             modem_cidr: None,
             pppoe_lcp_interval: None,
             pppoe_lcp_failure: None,
+            macvlan_parent: None,
         },
     ];
     for zone in &mut cfg.firewall.zones {

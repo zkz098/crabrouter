@@ -71,8 +71,14 @@ pub struct PortForwardRule {
     pub proto: TransportProto,
     pub src_zone: String,
     pub external_port: u16,
+    /// Optional inclusive end port for external port-range forwarding (`external_port-external_port_end`).
+    #[serde(default)]
+    pub external_port_end: Option<u16>,
     pub dest_ip: String,
     pub internal_port: u16,
+    /// Optional inclusive end port for internal destination range (`internal_port-internal_port_end`).
+    #[serde(default)]
+    pub internal_port_end: Option<u16>,
     /// Enable NAT loopback (hairpin NAT) for LAN clients accessing the public IP.
     #[serde(default = "default_true")]
     pub reflection: bool,
@@ -184,15 +190,7 @@ impl FirewallConfig {
         }
 
         for fwd in &self.port_forwards {
-            if fwd.external_port == 0 || fwd.internal_port == 0 {
-                return Err(ModelError::Validation(format!(
-                    "port forward '{}' ports must be non-zero",
-                    fwd.name
-                )));
-            }
-            fwd.dest_ip.parse::<IpAddr>().map_err(|e| {
-                ModelError::Validation(format!("port forward '{}' invalid dest_ip: {e}", fwd.name))
-            })?;
+            validate_port_forward(fwd)?;
         }
 
         if self.ipv6_nat_mode == Ipv6NatMode::Nptv6 {
@@ -203,6 +201,53 @@ impl FirewallConfig {
         }
         Ok(())
     }
+}
+
+fn validate_port_forward(fwd: &PortForwardRule) -> Result<()> {
+    if fwd.external_port == 0 || fwd.internal_port == 0 {
+        return Err(ModelError::Validation(format!(
+            "port forward '{}' ports must be non-zero",
+            fwd.name
+        )));
+    }
+    if let Some(ext_end) = fwd.external_port_end {
+        if ext_end < fwd.external_port {
+            return Err(ModelError::Validation(format!(
+                "port forward '{}' external_port_end ({ext_end}) must be >= external_port ({})",
+                fwd.name, fwd.external_port
+            )));
+        }
+        if fwd.internal_port_end.is_none() {
+            let span = u32::from(ext_end - fwd.external_port);
+            if u32::from(fwd.internal_port) + span > 65_535 {
+                return Err(ModelError::Validation(format!(
+                    "port forward '{}' shifted internal port range exceeds 65535",
+                    fwd.name
+                )));
+            }
+        }
+    }
+    if let Some(int_end) = fwd.internal_port_end {
+        if int_end < fwd.internal_port {
+            return Err(ModelError::Validation(format!(
+                "port forward '{}' internal_port_end ({int_end}) must be >= internal_port ({})",
+                fwd.name, fwd.internal_port
+            )));
+        }
+        if let Some(ext_end) = fwd.external_port_end
+            && int_end != fwd.internal_port
+            && (ext_end - fwd.external_port) != (int_end - fwd.internal_port)
+        {
+            return Err(ModelError::Validation(format!(
+                "port forward '{}' external and internal port range widths must match",
+                fwd.name
+            )));
+        }
+    }
+    fwd.dest_ip.parse::<IpAddr>().map_err(|e| {
+        ModelError::Validation(format!("port forward '{}' invalid dest_ip: {e}", fwd.name))
+    })?;
+    Ok(())
 }
 
 /// Parses an IPv6 suffix/bitwise mask expression `<ipv6_addr>/<ipv6_mask>`

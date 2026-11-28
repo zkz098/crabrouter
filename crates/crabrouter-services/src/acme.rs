@@ -126,6 +126,18 @@ pub fn build_certbot_args(cfg: &RouterConfig) -> Vec<String> {
         AcmeChallengeType::DnsCloudflare => {
             args.push("--dns-cloudflare".to_string());
         }
+        AcmeChallengeType::DnsAliyun => {
+            args.push("--authenticator".to_string());
+            args.push("dns-aliyun".to_string());
+        }
+        AcmeChallengeType::DnsDnspod => {
+            args.push("--authenticator".to_string());
+            args.push("dns-dnspod".to_string());
+        }
+        AcmeChallengeType::DnsHuaweiCloud => {
+            args.push("--authenticator".to_string());
+            args.push("dns-huaweicloud".to_string());
+        }
     }
     args
 }

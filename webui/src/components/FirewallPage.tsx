@@ -81,6 +81,22 @@ export function FirewallPage(props: Props) {
     props.onChange(next);
   }
 
+  function formatPortRange(start: number, end: number | null): string {
+    return end && end > start ? `${start}-${end}` : String(start);
+  }
+
+  function parsePortRange(raw: string): { start: number; end: number | null } {
+    const trimmed = raw.trim();
+    const parts = trimmed.split("-");
+    if (parts.length === 2) {
+      const start = Math.max(1, Math.min(65535, Number(parts[0]) || 1));
+      const end = Math.max(start, Math.min(65535, Number(parts[1]) || start));
+      return { start, end: end > start ? end : null };
+    }
+    const start = Math.max(1, Math.min(65535, Number(trimmed) || 1));
+    return { start, end: null };
+  }
+
   function addPortForward() {
     const next = structuredClone(props.draft);
     next.firewall.port_forwards.push({
@@ -89,8 +105,10 @@ export function FirewallPage(props: Props) {
       proto: "tcp",
       src_zone: "wan",
       external_port: 8443,
+      external_port_end: null,
       dest_ip: "192.168.10.50",
       internal_port: 443,
+      internal_port_end: null,
       reflection: true,
     });
     props.onChange(next);
@@ -522,12 +540,14 @@ export function FirewallPage(props: Props) {
                   <For each={zoneNames()}>{(z) => <option value={z}>{z}</option>}</For>
                 </select>
                 <input
-                  type="number"
-                  value={fwd.external_port}
-                  onInput={(e) => {
+                  type="text"
+                  placeholder="8443 或 8000-8100"
+                  value={formatPortRange(fwd.external_port, fwd.external_port_end)}
+                  onChange={(e) => {
                     const next = structuredClone(props.draft);
-                    next.firewall.port_forwards[idx()].external_port =
-                      Number(e.currentTarget.value) || 1;
+                    const { start, end } = parsePortRange(e.currentTarget.value);
+                    next.firewall.port_forwards[idx()].external_port = start;
+                    next.firewall.port_forwards[idx()].external_port_end = end;
                     props.onChange(next);
                   }}
                   class={`${INPUT_CLS} font-mono`}
@@ -543,12 +563,14 @@ export function FirewallPage(props: Props) {
                   class={`${INPUT_CLS} font-mono`}
                 />
                 <input
-                  type="number"
-                  value={fwd.internal_port}
-                  onInput={(e) => {
+                  type="text"
+                  placeholder="443 或 8000-8100"
+                  value={formatPortRange(fwd.internal_port, fwd.internal_port_end)}
+                  onChange={(e) => {
                     const next = structuredClone(props.draft);
-                    next.firewall.port_forwards[idx()].internal_port =
-                      Number(e.currentTarget.value) || 1;
+                    const { start, end } = parsePortRange(e.currentTarget.value);
+                    next.firewall.port_forwards[idx()].internal_port = start;
+                    next.firewall.port_forwards[idx()].internal_port_end = end;
                     props.onChange(next);
                   }}
                   class={`${INPUT_CLS} font-mono`}

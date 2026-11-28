@@ -77,6 +77,8 @@ async fn apply_link_diff(handle: &Handle, plan: &NetworkDiffPlan) -> Result<Hash
             .map_err(|e| NetError::Apply(format!("delete vlan link {vlan_idx} failed: {e}")))?;
     }
 
+    super::macvlan::apply_macvlan_delete(handle, plan).await?;
+
     for port in &plan.bridge_ports_to_detach {
         handle
             .link()
@@ -148,6 +150,8 @@ async fn apply_link_diff(handle: &Handle, plan: &NetworkDiffPlan) -> Result<Hash
     if !plan.vlans_to_create.is_empty() {
         name_to_index = refresh_name_to_index(handle).await?;
     }
+
+    super::macvlan::apply_macvlan_create(handle, plan, &mut name_to_index).await?;
 
     apply_mac_overrides(handle, plan, &name_to_index).await;
 

@@ -72,8 +72,22 @@ fn renders_nat_loopback_upnp_and_ipv6_relay_rules() {
         proto: TransportProto::Tcp,
         src_zone: "wan".to_string(),
         external_port: 8443,
+        external_port_end: None,
         dest_ip: "192.168.10.20".to_string(),
         internal_port: 443,
+        internal_port_end: None,
+        reflection: true,
+    });
+    cfg.firewall.port_forwards.push(PortForwardRule {
+        name: "game-range".to_string(),
+        enabled: true,
+        proto: TransportProto::TcpUdp,
+        src_zone: "wan".to_string(),
+        external_port: 8000,
+        external_port_end: Some(8010),
+        dest_ip: "192.168.10.30".to_string(),
+        internal_port: 9000,
+        internal_port_end: None,
         reflection: true,
     });
     let nft = render_nftables_ruleset(&cfg);
@@ -84,6 +98,15 @@ fn renders_nat_loopback_upnp_and_ipv6_relay_rules() {
     ));
     assert!(nft.contains(
         "meta nfproto ipv4 ct status dnat oifname \"br-lan\" ip saddr 192.168.10.0/24 ip daddr 192.168.10.20 tcp dport 443 masquerade comment \"hairpin:web-srv\""
+    ));
+    assert!(
+        nft.contains("tcp dport 8000-8010 dnat to 192.168.10.30:9000-9010 comment \"game-range\"")
+    );
+    assert!(
+        nft.contains("udp dport 8000-8010 dnat to 192.168.10.30:9000-9010 comment \"game-range\"")
+    );
+    assert!(nft.contains(
+        "meta nfproto ipv4 ct status dnat oifname \"br-lan\" ip saddr 192.168.10.0/24 ip daddr 192.168.10.30 tcp dport 9000-9010 masquerade comment \"hairpin:game-range\""
     ));
 }
 

@@ -585,11 +585,12 @@ fn write_prerouting_chain(out: &mut String, cfg: &RouterConfig) {
         }
         let ifaces = format_iface_set(&zone.interfaces);
         let protos = port_forward_protos(rule.proto);
+        let (ext_expr, int_expr) = format_port_forward_ranges(rule);
         for proto in &protos {
             let _ = writeln!(
                 out,
-                "        iifname {ifaces} {proto} dport {} dnat to {}:{} comment \"{}\"",
-                rule.external_port, rule.dest_ip, rule.internal_port, rule.name
+                "        iifname {ifaces} {proto} dport {ext_expr} dnat to {}:{int_expr} comment \"{}\"",
+                rule.dest_ip, rule.name
             );
         }
         if cfg.firewall.nat_loopback
@@ -602,8 +603,8 @@ fn write_prerouting_chain(out: &mut String, cfg: &RouterConfig) {
             for proto in &protos {
                 let _ = writeln!(
                     out,
-                    "        iifname {lan_set} ip daddr != {router_ip_set} fib daddr type local {proto} dport {} dnat to {}:{} comment \"hairpin:{}\"",
-                    rule.external_port, rule.dest_ip, rule.internal_port, rule.name
+                    "        iifname {lan_set} ip daddr != {router_ip_set} fib daddr type local {proto} dport {ext_expr} dnat to {}:{int_expr} comment \"hairpin:{}\"",
+                    rule.dest_ip, rule.name
                 );
             }
         }
@@ -643,14 +644,34 @@ fn write_hairpin_postrouting(out: &mut String, cfg: &RouterConfig) {
         if !rule.enabled || !rule.reflection {
             continue;
         }
+        let (_, int_expr) = format_port_forward_ranges(rule);
         for proto in port_forward_protos(rule.proto) {
             let _ = writeln!(
                 out,
-                "        meta nfproto ipv4 ct status dnat oifname {lan_set} ip saddr {net_set} ip daddr {} {proto} dport {} masquerade comment \"hairpin:{}\"",
-                rule.dest_ip, rule.internal_port, rule.name
+                "        meta nfproto ipv4 ct status dnat oifname {lan_set} ip saddr {net_set} ip daddr {} {proto} dport {int_expr} masquerade comment \"hairpin:{}\"",
+                rule.dest_ip, rule.name
             );
         }
     }
+}
+
+fn format_port_forward_ranges(rule: &crabrouter_model::PortForwardRule) -> (String, String) {
+    let ext_expr = match rule.external_port_end {
+        Some(end) if end > rule.external_port => format!("{}-{end}", rule.external_port),
+        _ => rule.external_port.to_string(),
+    };
+    let int_end = match (rule.external_port_end, rule.internal_port_end) {
+        (_, Some(end)) if end > rule.internal_port => Some(end),
+        (Some(ext_end), None) if ext_end > rule.external_port => {
+            rule.internal_port.checked_add(ext_end - rule.external_port)
+        }
+        _ => None,
+    };
+    let int_expr = match int_end {
+        Some(end) => format!("{}-{end}", rule.internal_port),
+        None => rule.internal_port.to_string(),
+    };
+    (ext_expr, int_expr)
 }
 
 fn port_forward_protos(proto: TransportProto) -> Vec<&'static str> {

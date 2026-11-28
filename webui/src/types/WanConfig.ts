@@ -18,4 +18,9 @@ pppoe_lcp_interval: number | null,
 /**
  * Optional `PPPoE` LCP echo failure threshold before redialing (default 3).
  */
-pppoe_lcp_failure: number | null, };
+pppoe_lcp_failure: number | null, 
+/**
+ * Optional parent physical/VLAN interface for single-line multi-dial (`macvlan` bridge mode).
+ * When set, `device` is created as a `macvlan` virtual interface on top of `macvlan_parent`.
+ */
+macvlan_parent: string | null, };

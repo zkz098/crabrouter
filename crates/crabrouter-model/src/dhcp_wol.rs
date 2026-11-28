@@ -113,3 +113,41 @@ pub fn validate_wol_mac(mac: &str) -> Result<String> {
     }
     Ok(normalized)
 }
+
+pub(crate) fn validate_wan_modem_cidr(wan_name: &str, modem_cidr: Option<&str>) -> Result<()> {
+    let Some(modem_cidr) = modem_cidr.map(str::trim).filter(|s| !s.is_empty()) else {
+        return Ok(());
+    };
+    let net: ipnet::IpNet = modem_cidr.parse().map_err(|e| {
+        ModelError::Validation(format!(
+            "WAN '{wan_name}' invalid modem_cidr '{modem_cidr}': {e}"
+        ))
+    })?;
+    if !matches!(net, ipnet::IpNet::V4(_)) {
+        return Err(ModelError::Validation(format!(
+            "WAN '{wan_name}' modem_cidr '{modem_cidr}' must be an IPv4 CIDR"
+        )));
+    }
+    Ok(())
+}
+
+pub(crate) fn validate_wan_macvlan(
+    wan_name: &str,
+    device: &str,
+    macvlan_parent: Option<&str>,
+) -> Result<()> {
+    let Some(parent) = macvlan_parent.map(str::trim).filter(|s| !s.is_empty()) else {
+        return Ok(());
+    };
+    if parent == device.trim() {
+        return Err(ModelError::Validation(format!(
+            "WAN '{wan_name}' macvlan_parent '{parent}' cannot equal device"
+        )));
+    }
+    if device.trim().len() > 15 {
+        return Err(ModelError::Validation(format!(
+            "WAN '{wan_name}' macvlan device '{device}' exceeds Linux 15-char interface limit"
+        )));
+    }
+    Ok(())
+}

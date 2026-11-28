@@ -542,6 +542,7 @@ mod tests {
             modem_cidr: None,
             pppoe_lcp_interval: None,
             pppoe_lcp_failure: None,
+            macvlan_parent: None,
         }
     }
 

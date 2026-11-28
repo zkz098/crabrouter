@@ -42,9 +42,9 @@ pub use firewall::{
 pub use multicast::{IptvConfig, MdnsConfig};
 pub use network::{
     AcmeChallengeType, AcmeConfig, CakeDiffserv, ConntrackEntry, ConntrackKillRequest, DdnsConfig,
-    DdnsProvider, DdnsRuntimeStatus, DhcpLeaseEntry, DhcpStaticLease, DiskHealthReport,
-    HardwareAlert, HardwareHealthSnapshot, HealthSeverity, HostInterfaceSnapshot, InterfacePin,
-    InterfaceRole, Ipv6LanMode, Ipv6PdSlice, LanConfig, MultiWanConfig, MultiWanMode,
+    DdnsIpVersion, DdnsProvider, DdnsRuntimeStatus, DhcpLeaseEntry, DhcpStaticLease,
+    DiskHealthReport, HardwareAlert, HardwareHealthSnapshot, HealthSeverity, HostInterfaceSnapshot,
+    InterfacePin, InterfaceRole, Ipv6LanMode, Ipv6PdSlice, LanConfig, MultiWanConfig, MultiWanMode,
     MultiWanRuntimeStatus, PolicyRuleConfig, ProbeProtocol, QdiscAlgo, QosConfig,
     QosInterfaceConfig, StaticRouteConfig, ThermalSensorReading, TlsRuntimeStatus, VlanConfig,
     WanConfig, WanHealthState, WanProbeResult, WanProto, WanRuntimeState, wan_fwmark, wan_table_id,

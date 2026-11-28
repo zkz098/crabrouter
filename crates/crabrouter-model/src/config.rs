@@ -8,7 +8,10 @@ use ts_rs::TS;
 use crate::bond::{BondConfig, validate_bonds};
 use crate::container::ContainerConfig;
 use crate::crowdsec::CrowdSecConfig;
-use crate::dhcp_wol::{CustomHostEntry, validate_custom_hosts, validate_dhcp_custom_options};
+use crate::dhcp_wol::{
+    CustomHostEntry, validate_custom_hosts, validate_dhcp_custom_options, validate_wan_macvlan,
+    validate_wan_modem_cidr,
+};
 use crate::ebpf::EbpfConfig;
 use crate::error::{ModelError, Result};
 use crate::firewall::FirewallConfig;
@@ -301,7 +304,8 @@ impl RouterConfig {
                     wan.name
                 )));
             }
-            validate_wan_modem_cidr(wan)?;
+            validate_wan_modem_cidr(&wan.name, wan.modem_cidr.as_deref())?;
+            validate_wan_macvlan(&wan.name, &wan.device, wan.macvlan_parent.as_deref())?;
             match wan.proto {
                 WanProto::Static => {
                     let cidr = wan.static_cidr.as_deref().ok_or_else(|| {
@@ -639,30 +643,6 @@ impl RouterConfig {
     }
 }
 
-fn validate_wan_modem_cidr(wan: &WanConfig) -> Result<()> {
-    let Some(modem_cidr) = wan
-        .modem_cidr
-        .as_deref()
-        .map(str::trim)
-        .filter(|s| !s.is_empty())
-    else {
-        return Ok(());
-    };
-    let net: IpNet = modem_cidr.parse().map_err(|e| {
-        ModelError::Validation(format!(
-            "WAN '{}' invalid modem_cidr '{modem_cidr}': {e}",
-            wan.name
-        ))
-    })?;
-    if !matches!(net, IpNet::V4(_)) {
-        return Err(ModelError::Validation(format!(
-            "WAN '{}' modem_cidr '{modem_cidr}' must be an IPv4 CIDR",
-            wan.name
-        )));
-    }
-    Ok(())
-}
-
 pub fn is_valid_mac(mac: &str) -> bool {
     let parts: Vec<&str> = mac.split(':').collect();
     parts.len() == 6
@@ -755,6 +735,7 @@ fn default_wans() -> Vec<WanConfig> {
         modem_cidr: None,
         pppoe_lcp_interval: None,
         pppoe_lcp_failure: None,
+        macvlan_parent: None,
     }]
 }
 

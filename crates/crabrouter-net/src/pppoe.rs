@@ -344,6 +344,7 @@ mod tests {
             modem_cidr: None,
             pppoe_lcp_interval: None,
             pppoe_lcp_failure: None,
+            macvlan_parent: None,
         };
         let peer = render_pppd_peer(&wan);
         assert!(peer.contains("plugin rp-pppoe.so"));

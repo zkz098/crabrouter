@@ -97,6 +97,7 @@ export function SetupWizard(props: Props) {
       modem_cidr: null,
       pppoe_lcp_interval: null,
       pppoe_lcp_failure: null,
+      macvlan_parent: null,
     };
 
     const lan: LanConfig = {

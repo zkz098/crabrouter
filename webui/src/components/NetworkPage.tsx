@@ -18,6 +18,7 @@ import type { BondLacpRate } from "../types/BondLacpRate";
 import type { BondMode } from "../types/BondMode";
 import type { BondXmitHashPolicy } from "../types/BondXmitHashPolicy";
 import type { DdnsConfig } from "../types/DdnsConfig";
+import type { DdnsIpVersion } from "../types/DdnsIpVersion";
 import type { DdnsProvider } from "../types/DdnsProvider";
 import type { EbpfConfig } from "../types/EbpfConfig";
 import type { HostInterfaceSnapshot } from "../types/HostInterfaceSnapshot";
@@ -215,6 +216,7 @@ export function NetworkPage(props: Props) {
       modem_cidr: null,
       pppoe_lcp_interval: null,
       pppoe_lcp_failure: null,
+      macvlan_parent: null,
     });
     props.onChange(next);
   }
@@ -583,6 +585,21 @@ export function NetworkPage(props: Props) {
                         onInput={(e) => {
                           const val = e.currentTarget.value.trim();
                           updateWan(idx(), { mac_override: val === "" ? null : val });
+                        }}
+                        class="mt-1 w-full rounded-lg border border-[#eaeaea] dark:border-[#262626] bg-white dark:bg-[#000000] text-[#171717] dark:text-[#ededed] outline-none focus:border-[#171717] dark:focus:border-[#ededed] px-2.5 py-1.5 font-mono text-xs"
+                      />
+                    </label>
+                    <label class="block text-xs">
+                      <span class="text-[#666666] dark:text-[#a1a1aa]">
+                        单线多拨父接口 (macvlan, 可选)
+                      </span>
+                      <input
+                        type="text"
+                        placeholder="留空直连物理口；多拨填如 eth0"
+                        value={wan.macvlan_parent ?? ""}
+                        onInput={(e) => {
+                          const val = e.currentTarget.value.trim();
+                          updateWan(idx(), { macvlan_parent: val === "" ? null : val });
                         }}
                         class="mt-1 w-full rounded-lg border border-[#eaeaea] dark:border-[#262626] bg-white dark:bg-[#000000] text-[#171717] dark:text-[#ededed] outline-none focus:border-[#171717] dark:focus:border-[#ededed] px-2.5 py-1.5 font-mono text-xs"
                       />
@@ -1254,8 +1271,19 @@ export function NetworkPage(props: Props) {
                 class="rounded border border-[#eaeaea] dark:border-[#262626] bg-white dark:bg-[#000000] text-[#171717] dark:text-[#ededed] outline-none focus:border-[#171717] dark:focus:border-[#ededed] px-2 py-1 text-xs"
               >
                 <option value="cloudflare">Cloudflare</option>
+                <option value="aliyun">阿里云 (AliDNS)</option>
+                <option value="dnspod">腾讯云 (DNSPod)</option>
+                <option value="huawei_cloud">华为云 (HuaweiCloud)</option>
                 <option value="dyn_dns2">DynDNS2</option>
                 <option value="webhook">Webhook</option>
+              </select>
+              <select
+                value={props.draft.ddns.ip_version}
+                onChange={(e) => updateDdns({ ip_version: e.currentTarget.value as DdnsIpVersion })}
+                class="rounded border border-[#eaeaea] dark:border-[#262626] bg-white dark:bg-[#000000] text-[#171717] dark:text-[#ededed] outline-none focus:border-[#171717] dark:focus:border-[#ededed] px-2 py-1 text-xs"
+              >
+                <option value="ipv4">IPv4 (A 记录)</option>
+                <option value="ipv6">IPv6 (AAAA 记录)</option>
               </select>
               <input
                 type="text"
@@ -1266,6 +1294,13 @@ export function NetworkPage(props: Props) {
               />
               <input
                 type="text"
+                value={props.draft.ddns.username ?? ""}
+                placeholder="AccessKey ID / SecretId / 用户名"
+                onInput={(e) => updateDdns({ username: e.currentTarget.value || null })}
+                class="rounded border border-[#eaeaea] dark:border-[#262626] bg-white dark:bg-[#000000] text-[#171717] dark:text-[#ededed] outline-none focus:border-[#171717] dark:focus:border-[#ededed] px-2 py-1 font-mono text-xs"
+              />
+              <input
+                type="password"
                 value={props.draft.ddns.token ?? ""}
                 placeholder={t("netTokenPlaceholder")}
                 onInput={(e) => updateDdns({ token: e.currentTarget.value || null })}
@@ -1274,7 +1309,7 @@ export function NetworkPage(props: Props) {
               <input
                 type="text"
                 value={props.draft.ddns.zone_id ?? ""}
-                placeholder="Zone ID (Cloudflare)"
+                placeholder="Zone ID (Cloudflare/华为云) 或根域名"
                 onInput={(e) => updateDdns({ zone_id: e.currentTarget.value || null })}
                 class="rounded border border-[#eaeaea] dark:border-[#262626] bg-white dark:bg-[#000000] text-[#171717] dark:text-[#ededed] outline-none focus:border-[#171717] dark:focus:border-[#ededed] px-2 py-1 font-mono text-xs"
               />
@@ -1328,6 +1363,9 @@ export function NetworkPage(props: Props) {
               >
                 <option value="http01">HTTP-01 (Standalone)</option>
                 <option value="dns_cloudflare">DNS-01 (Cloudflare)</option>
+                <option value="dns_aliyun">DNS-01 (阿里云)</option>
+                <option value="dns_dnspod">DNS-01 (腾讯云 DNSPod)</option>
+                <option value="dns_huawei_cloud">DNS-01 (华为云)</option>
               </select>
               <input
                 type="number"
