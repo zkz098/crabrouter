@@ -86,6 +86,7 @@ impl EbpfEngine {
             guard.bpf = Some(loaded);
         }
 
+        let prev_attached = guard.attached_ifaces.clone();
         let Some(bpf) = guard.bpf.as_mut() else {
             return Ok(());
         };
@@ -93,6 +94,10 @@ impl EbpfEngine {
         let mut attached = Vec::new();
         let mut last_err = None;
         for iface in &target_ifaces {
+            if prev_attached.contains(iface) {
+                attached.push(iface.clone());
+                continue;
+            }
             if let Err(err) = attach_tc_pair(bpf, iface) {
                 let msg = format!("eBPF tc attach on '{iface}' failed: {err}");
                 last_err = Some(msg);
