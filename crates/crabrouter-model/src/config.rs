@@ -367,6 +367,12 @@ impl RouterConfig {
                     lan.bridge
                 )));
             }
+            if lan.ports.iter().any(|p| p.trim() == lan.bridge.trim()) {
+                return Err(ModelError::Validation(format!(
+                    "LAN '{}' ports cannot include its own bridge '{}'",
+                    lan.name, lan.bridge
+                )));
+            }
             let net: IpNet = lan.cidr.parse().map_err(|e| {
                 ModelError::Validation(format!("LAN '{}' invalid cidr: {e}", lan.name))
             })?;

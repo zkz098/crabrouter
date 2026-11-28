@@ -222,7 +222,7 @@ pub async fn query_ota_status(ota_dir: &Path, source_url: &str, dry_run: bool) -
         query_bless_boot_status().await
     };
 
-    let sysupdate_available = !dry_run && which_exists("systemd-sysupdate").await;
+    let sysupdate_available = !dry_run && resolve_sysupdate_bin().await.is_some();
     let staged_images = list_staged_images(ota_dir);
 
     OtaStatus {
@@ -260,6 +260,21 @@ async fn query_bless_boot_status() -> String {
     }
 }
 
+async fn resolve_sysupdate_bin() -> Option<String> {
+    for candidate in [
+        "/usr/lib/systemd/systemd-sysupdate",
+        "/lib/systemd/systemd-sysupdate",
+    ] {
+        if Path::new(candidate).is_file() {
+            return Some(candidate.to_string());
+        }
+    }
+    if which_exists("systemd-sysupdate").await {
+        return Some("systemd-sysupdate".to_string());
+    }
+    None
+}
+
 async fn which_exists(bin: &str) -> bool {
     let mut cmd = Command::new("which");
     cmd.arg(bin);
@@ -293,7 +308,13 @@ pub async fn check_ota_updates(
         });
     }
 
-    let mut cmd = Command::new("systemd-sysupdate");
+    let bin = resolve_sysupdate_bin().await.ok_or_else(|| {
+        ServiceError::Orchestration(
+            "systemd-sysupdate binary not found (checked /usr/lib/systemd/systemd-sysupdate and PATH)"
+                .to_string(),
+        )
+    })?;
+    let mut cmd = Command::new(&bin);
     cmd.arg("list");
     let out = crate::cmd::run_output_with_timeout(
         &mut cmd,
@@ -364,7 +385,13 @@ pub async fn apply_ota_update(
     fs::write(sysupdate_dir.join("10-root.transfer"), transfer_root)?;
     fs::write(sysupdate_dir.join("20-uki.transfer"), transfer_uki)?;
 
-    let mut cmd = Command::new("systemd-sysupdate");
+    let bin = resolve_sysupdate_bin().await.ok_or_else(|| {
+        ServiceError::Orchestration(
+            "systemd-sysupdate binary not found (checked /usr/lib/systemd/systemd-sysupdate and PATH)"
+                .to_string(),
+        )
+    })?;
+    let mut cmd = Command::new(&bin);
     cmd.arg("update");
     if !verify_signature {
         cmd.arg("--verify=no");

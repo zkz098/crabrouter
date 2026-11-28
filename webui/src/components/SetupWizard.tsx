@@ -27,8 +27,21 @@ export function SetupWizard(props: Props) {
   const [hostname, setHostname] = createSignal(props.defaultConfig.system.hostname);
   const [timezone, setTimezone] = createSignal(props.defaultConfig.system.timezone);
 
+  const isSelectableNic = (name: string) =>
+    name !== (defaultLan?.bridge ?? "br-lan") &&
+    !name.startsWith("br-") &&
+    !name.startsWith("podman") &&
+    !name.startsWith("docker") &&
+    !name.startsWith("wg") &&
+    name !== "lo";
+
+  const selectableInterfaces = () => {
+    const names = props.interfaces.map((i) => i.name).filter(isSelectableNic);
+    return names.length > 0 ? names : ["eth0", "eth1", "eth2", "eth3"];
+  };
+
   const [wanDevice, setWanDevice] = createSignal(
-    props.interfaces[0]?.name ?? defaultWan?.device ?? "eth0",
+    selectableInterfaces()[0] ?? defaultWan?.device ?? "eth0",
   );
   const [wanProto, setWanProto] = createSignal<WanProto>(defaultWan?.proto ?? "dhcp");
   const [pppoeUser, setPppoeUser] = createSignal("");
@@ -37,8 +50,8 @@ export function SetupWizard(props: Props) {
   const [gateway, setGateway] = createSignal("192.168.1.1");
 
   const [lanPorts, setLanPorts] = createSignal<string[]>(
-    props.interfaces.length > 1
-      ? props.interfaces.slice(1).map((i) => i.name)
+    selectableInterfaces().length > 1
+      ? selectableInterfaces().slice(1)
       : (defaultLan?.ports ?? ["eth1", "eth2"]),
   );
   const [lanCidr, setLanCidr] = createSignal(defaultLan?.cidr ?? "192.168.10.1/24");
@@ -47,10 +60,7 @@ export function SetupWizard(props: Props) {
   const [submitting, setSubmitting] = createSignal(false);
   const [err, setErr] = createSignal<string | null>(null);
 
-  const availableNames = () => {
-    const names = props.interfaces.map((i) => i.name);
-    return names.length > 0 ? names : ["eth0", "eth1", "eth2", "eth3"];
-  };
+  const availableNames = () => selectableInterfaces();
 
   function toggleLanPort(name: string) {
     if (name === wanDevice()) {
