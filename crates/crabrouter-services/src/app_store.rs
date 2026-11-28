@@ -7,11 +7,26 @@ use crate::containers::{ContainerAction, ContainerBackend};
 use crate::{Result, ServiceError};
 
 /// Lists all installed App Store containers by matching `crabrouter-app-*` container names.
+///
+/// Returns an empty list when the container runtime is disabled or its socket is
+/// temporarily unreachable so that the Extensions page can still render cleanly.
 pub async fn list_installed_apps(
     backend: &dyn ContainerBackend,
     cfg: &ContainerConfig,
 ) -> Result<Vec<InstalledApp>> {
-    let containers = backend.list_containers(cfg, true).await?;
+    if !cfg.enabled {
+        return Ok(Vec::new());
+    }
+    let containers = match backend.list_containers(cfg, true).await {
+        Ok(list) => list,
+        Err(err) => {
+            tracing::warn!(
+                error = %err,
+                "container backend unavailable while listing installed apps; returning empty list"
+            );
+            return Ok(Vec::new());
+        }
+    };
     let catalog = builtin_app_catalog();
     let mut out = Vec::new();
     for c in containers {
@@ -129,5 +144,31 @@ mod tests {
             .await
             .expect("uninstall app");
         assert!(rm.ok);
+    }
+
+    #[tokio::test]
+    async fn list_installed_apps_returns_empty_when_disabled_or_socket_unavailable() {
+        use crate::containers::socket::SocketContainerBackend;
+
+        let backend = SocketContainerBackend;
+        let disabled_cfg = ContainerConfig {
+            enabled: false,
+            socket_path: "/nonexistent/podman.sock".to_string(),
+            ..ContainerConfig::default()
+        };
+        let apps = list_installed_apps(&backend, &disabled_cfg)
+            .await
+            .expect("disabled runtime should return empty list");
+        assert_eq!(apps.len(), 0);
+
+        let enabled_missing_sock = ContainerConfig {
+            enabled: true,
+            socket_path: "/nonexistent/podman.sock".to_string(),
+            ..ContainerConfig::default()
+        };
+        let apps = list_installed_apps(&backend, &enabled_missing_sock)
+            .await
+            .expect("unavailable socket should degrade to empty list");
+        assert_eq!(apps.len(), 0);
     }
 }

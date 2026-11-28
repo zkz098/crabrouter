@@ -31,7 +31,14 @@ const BTN_OUTLINE =
 
 export function ExtensionsPage(props: Props) {
   const [catalog] = createResource(getAppCatalog);
-  const [installed, { refetch: refetchInstalled }] = createResource(getInstalledApps);
+  const [installed, { refetch: refetchInstalled }] = createResource(async () => {
+    try {
+      return await getInstalledApps();
+    } catch (err) {
+      setErrorMsg(err instanceof Error ? err.message : String(err));
+      return [];
+    }
+  });
   const [sysext, { refetch: refetchSysext }] = createResource(getSysextStatus);
 
   const [activeApp, setActiveApp] = createSignal<AppCatalogEntry | null>(null);
